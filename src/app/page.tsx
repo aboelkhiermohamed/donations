@@ -158,7 +158,7 @@ export default function PublicDonationPage() {
   };
 
   // Fetch payment accounts from DB settings
-  const { data: dbSettings } = useQuery({
+  const { data: dbSettings, isLoading: isSettingsLoading } = useQuery({
     queryKey: ['publicSettings'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -188,7 +188,7 @@ export default function PublicDonationPage() {
     : `${INSTAPAY_ADDRESS}@instapay`;
 
   // 1. Fetch Campaign Details
-  const { data: campaign, error: campaignError } = useQuery<Campaign>({
+  const { data: campaign, isLoading: isCampaignLoading, error: campaignError } = useQuery<Campaign>({
     queryKey: ['campaign'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -475,6 +475,55 @@ export default function PublicDonationPage() {
   // InstaPay QR Code Generation details
   const instapayQRUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&color=020617&bgcolor=f8fafc&data=instapay://payment?address=${encodeURIComponent(displayInstapayAddress)}%26amount=${amount}`;
 
+  if (!isMounted || isCampaignLoading || isSettingsLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-50 flex flex-col font-sans" dir={dir}>
+        {/* Navbar skeleton */}
+        <header className="w-full max-w-7xl mx-auto px-4 md:px-8 py-6 flex items-center justify-between z-10">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center animate-pulse" />
+            <div className="h-6 w-32 bg-slate-900 rounded animate-pulse" />
+          </div>
+          <div className="h-10 w-24 bg-slate-900 rounded-lg animate-pulse" />
+        </header>
+
+        {/* Main Grid skeleton */}
+        <main className="flex-1 w-full max-w-7xl mx-auto px-4 md:px-8 space-y-12">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+            
+            {/* Left column skeleton */}
+            <div className="lg:col-span-8 space-y-6">
+              <div className="space-y-3">
+                <div className="h-4 w-40 bg-slate-900 rounded-full animate-pulse" />
+                <div className="h-10 w-3/4 bg-slate-900 rounded animate-pulse" />
+                <div className="h-4 w-48 bg-slate-900 rounded animate-pulse" />
+              </div>
+              <div className="w-full h-64 md:h-[400px] bg-slate-900 rounded-2xl animate-pulse" />
+              <div className="h-32 bg-slate-900/50 rounded-2xl animate-pulse" />
+            </div>
+
+            {/* Right column skeleton */}
+            <div className="lg:col-span-4 space-y-6">
+              <div className="bg-slate-900/30 border border-slate-900 rounded-2xl p-6 space-y-6">
+                <div className="space-y-3">
+                  <div className="h-4 w-20 bg-slate-900 rounded animate-pulse" />
+                  <div className="h-8 w-36 bg-slate-900 rounded animate-pulse" />
+                  <div className="h-2.5 w-full bg-slate-900 rounded-full animate-pulse" />
+                </div>
+                <div className="space-y-3 pt-4 border-t border-slate-900">
+                  <div className="h-4 w-full bg-slate-900 rounded animate-pulse" />
+                  <div className="h-4 w-full bg-slate-900 rounded animate-pulse" />
+                </div>
+                <div className="h-12 w-full bg-slate-900 rounded-xl animate-pulse" />
+              </div>
+            </div>
+
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen relative pb-16 flex flex-col font-sans" dir={dir}>
       {/* Background Orbs */}
@@ -529,97 +578,130 @@ export default function PublicDonationPage() {
             <span>Failed to load campaign settings: {campaignError.message || JSON.stringify(campaignError)}</span>
           </div>
         )}
-        <div className="bg-slate-900/30 border border-slate-800/60 rounded-2xl p-6 md:p-8 flex flex-col lg:flex-row gap-8 items-center lg:items-stretch relative">
+        {/* Campaign Main Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           
-          {/* Cover image container */}
-          <div className="w-full lg:w-[420px] h-64 md:h-[300px] rounded-xl overflow-hidden relative border border-slate-800 flex-shrink-0">
-            <img 
-              src={activeCampaign.cover_image || "/campaign_cover.png"} 
-              alt={displayCampaignName}
-              className="w-full h-full object-cover"
-              onError={(e) => {
-                e.currentTarget.style.display = 'none';
-                const parent = e.currentTarget.parentElement;
-                if (parent) {
-                  const div = document.createElement('div');
-                  div.className = "w-full h-full bg-gradient-to-tr from-slate-900 to-slate-950 flex flex-col items-center justify-center p-6 text-center";
-                  div.innerHTML = `<span class="text-slate-400 text-sm font-semibold">${displayCampaignName}</span>`;
-                  parent.appendChild(div);
-                }
-              }}
-            />
-          </div>
-
-          {/* Campaign details */}
-          <div className="flex-1 flex flex-col justify-between space-y-6">
+          {/* LEFT COLUMN: Campaign Content (col-span-8) */}
+          <div className="lg:col-span-8 space-y-6">
+            
+            {/* Title & Organizer Info */}
             <div className="space-y-3">
-              {/* Organizer label - clean, not a badge overlaying the image */}
-              <div className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">
-                {language === 'ar' ? 'حملة تبرع معتمدة بتنظيم:' : 'Verified campaign organized by:'} {displayOrganizer}
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                <span>{language === 'ar' ? 'حملة تبرع معتمدة وموثقة' : 'Verified Donation Campaign'}</span>
               </div>
               
-              <h1 className="text-2xl md:text-3xl font-bold text-white tracking-tight leading-tight">
+              <h1 className="text-2xl md:text-4xl font-extrabold text-white tracking-tight leading-tight">
                 {displayCampaignName}
               </h1>
               
-              <p className="text-slate-400 text-sm leading-relaxed font-normal">
+              <div className="text-xs text-slate-400 font-medium">
+                {language === 'ar' ? 'بإشراف وتنظيم:' : 'Organized by:'} <span className="text-white font-bold">{displayOrganizer}</span>
+              </div>
+            </div>
+
+            {/* Cover Image */}
+            <div className="w-full h-64 md:h-[400px] rounded-2xl overflow-hidden border border-slate-900 shadow-md">
+              <img 
+                src={activeCampaign.cover_image || "/campaign_cover.png"} 
+                alt={displayCampaignName}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                  const parent = e.currentTarget.parentElement;
+                  if (parent) {
+                    const div = document.createElement('div');
+                    div.className = "w-full h-full bg-gradient-to-tr from-slate-900 to-slate-950 flex flex-col items-center justify-center p-6 text-center";
+                    div.innerHTML = `<span class="text-slate-400 text-sm font-semibold">${displayCampaignName}</span>`;
+                    parent.appendChild(div);
+                  }
+                }}
+              />
+            </div>
+
+            {/* Description Card */}
+            <div className="bg-slate-900/10 border border-slate-900/60 p-6 rounded-2xl space-y-4">
+              <h3 className="text-white font-bold text-base border-b border-slate-800 pb-2">
+                {language === 'ar' ? 'عن الحملة وغايتها' : 'About the Campaign'}
+              </h3>
+              <p className="text-slate-300 text-[14.5px] leading-relaxed whitespace-pre-wrap font-normal">
                 {displayCampaignDesc}
               </p>
             </div>
 
-            {/* Campaign Progress - clean, trustable layout */}
-            <div className="space-y-4 pt-4 border-t border-slate-800/60">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div>
-                  <span className="text-slate-500 text-[11px] font-semibold block uppercase tracking-wider">{t('collected')}</span>
-                  <span className="text-xl font-bold text-emerald-400 mt-0.5 block">
-                    {collectedVal.toLocaleString()} <span className="text-xs font-semibold text-slate-500">{t('egp')}</span>
-                  </span>
-                </div>
-                
-                <div className="border-s border-slate-800/80 ps-4">
-                  <span className="text-slate-500 text-[11px] font-semibold block uppercase tracking-wider">{t('target')}</span>
-                  <span className="text-xl font-bold text-white mt-0.5 block">
-                    {targetVal.toLocaleString()} <span className="text-xs font-semibold text-slate-500">{t('egp')}</span>
-                  </span>
-                </div>
-
-                <div className="border-s border-slate-800/80 ps-4">
-                  <span className="text-slate-500 text-[11px] font-semibold block uppercase tracking-wider">{language === 'ar' ? 'المتبقي' : 'Remaining'}</span>
-                  <span className="text-lg font-semibold text-slate-300 mt-0.5 block">
-                    {remainingVal.toLocaleString()} <span className="text-xs font-semibold text-slate-500">{t('egp')}</span>
-                  </span>
-                </div>
-
-                <div className="border-s border-slate-800/80 ps-4 text-end">
-                  <span className="text-slate-500 text-[11px] font-semibold block uppercase tracking-wider">{language === 'ar' ? 'النسبة' : 'Progress'}</span>
-                  <span className="text-lg font-bold text-white mt-0.5 block">
-                    {percentVal}%
-                  </span>
-                </div>
-              </div>
-
-              {/* Progress bar */}
-              <div className="space-y-1.5">
-                <div className="w-full h-2.5 bg-slate-900 rounded-full overflow-hidden border border-slate-800 relative">
-                  <div 
-                    className="h-full bg-emerald-500 rounded-full"
-                    style={{ width: `${percentVal}%` }}
-                  />
-                </div>
-                
-                <div className="flex justify-between text-[11px] font-medium text-slate-500">
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                    {percentVal}% {t('progress')}
-                  </span>
-                  <span>
-                    {language === 'ar' ? 'مستمر حتى تحقيق الهدف' : 'Ongoing until goal met'}
-                  </span>
-                </div>
-              </div>
-            </div>
           </div>
+
+          {/* RIGHT COLUMN: Sticky Progress Widget (col-span-4) */}
+          <div className="lg:col-span-4 lg:sticky lg:top-6 space-y-6">
+            
+            <div className="bg-slate-900/30 border border-slate-800/60 rounded-2xl p-6 space-y-6 shadow-xl">
+              
+              {/* Collected and Progress */}
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <span className="text-slate-500 text-[11px] font-bold block uppercase tracking-wider">{t('collected')}</span>
+                  <span className="text-3xl font-black text-emerald-400 flex items-baseline gap-1.5">
+                    {collectedVal.toLocaleString()}
+                    <span className="text-sm font-bold text-slate-400">{t('egp')}</span>
+                  </span>
+                </div>
+
+                {/* Progress bar */}
+                <div className="space-y-1">
+                  <div className="w-full h-2.5 bg-slate-950 rounded-full overflow-hidden border border-slate-900 relative">
+                    <div 
+                      className="h-full bg-emerald-500 rounded-full"
+                      style={{ width: `${percentVal}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-[11px] font-semibold text-slate-400 pt-1">
+                    <span>{percentVal}% {t('progress')}</span>
+                    <span>{language === 'ar' ? 'مستمر حتى تحقيق الهدف' : 'Ongoing'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Stats key-value list */}
+              <div className="space-y-3 pt-4 border-t border-slate-800/60 text-xs text-slate-300">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500 font-semibold">{t('target')}</span>
+                  <span className="font-bold text-white">{targetVal.toLocaleString()} {t('egp')}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500 font-semibold">{language === 'ar' ? 'المتبقي لتحقيق الهدف' : 'Remaining to goal'}</span>
+                  <span className="font-bold text-slate-200">{remainingVal.toLocaleString()} {t('egp')}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500 font-semibold">{language === 'ar' ? 'عدد التبرعات المعتمدة' : 'Total donations'}</span>
+                  <span className="font-bold text-white">{stats?.approvedCount ?? 0}</span>
+                </div>
+              </div>
+
+              {/* Call-to-action Button */}
+              <button
+                onClick={() => {
+                  const formElement = document.querySelector('form');
+                  if (formElement) {
+                    formElement.scrollIntoView({ behavior: 'smooth' });
+                  }
+                }}
+                className="w-full py-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:brightness-105 active:scale-[0.98] transition-all text-slate-950 font-black text-center text-sm shadow-lg shadow-emerald-500/10 cursor-pointer"
+              >
+                {language === 'ar' ? 'تبرع الآن للحملة' : 'Donate to Campaign'}
+              </button>
+
+              {/* Safety/Trust Badge */}
+              <div className="flex items-center justify-center gap-2 text-[10px] text-slate-500 font-medium">
+                <svg className="w-3.5 h-3.5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                </svg>
+                <span>{language === 'ar' ? 'جميع التحويلات آمنة وتتم مراجعتها تلقائياً' : 'All transfers are secure and auto-matched'}</span>
+              </div>
+
+            </div>
+
+          </div>
+
         </div>
 
         {/* RECENT DONORS MARQUEE */}
