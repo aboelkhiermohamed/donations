@@ -529,120 +529,93 @@ export default function PublicDonationPage() {
             <span>Failed to load campaign settings: {campaignError.message || JSON.stringify(campaignError)}</span>
           </div>
         )}
-        <div className="relative rounded-3xl overflow-hidden border border-slate-900 bg-slate-950/40 backdrop-blur-md shadow-2xl transition-all duration-300 hover:border-emerald-500/20 hover:shadow-emerald-500/5 group">
-          {/* Subtle Ambient Background Gradient Orbs */}
-          <div className="absolute top-0 right-0 w-80 h-80 bg-emerald-500/10 rounded-full blur-[100px] pointer-events-none -z-10 group-hover:bg-emerald-500/15 transition-all duration-500" />
-          <div className="absolute bottom-0 left-0 w-80 h-80 bg-teal-500/5 rounded-full blur-[100px] pointer-events-none -z-10" />
+        <div className="bg-slate-900/30 border border-slate-800/60 rounded-2xl p-6 md:p-8 flex flex-col lg:flex-row gap-8 items-center lg:items-stretch relative">
           
-          <div className="p-6 md:p-8 flex flex-col lg:flex-row gap-8 lg:items-stretch">
-            {/* Cover image container */}
-            <div className="w-full lg:w-[460px] h-72 md:h-[340px] rounded-2xl overflow-hidden relative border border-slate-800 flex-shrink-0 group/img shadow-lg">
-              <img 
-                src={activeCampaign.cover_image || "/campaign_cover.png"} 
-                alt={displayCampaignName}
-                className="w-full h-full object-cover group-hover/img:scale-105 transition-transform duration-700 ease-out"
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none';
-                  const parent = e.currentTarget.parentElement;
-                  if (parent) {
-                    const div = document.createElement('div');
-                    div.className = "w-full h-full bg-gradient-to-tr from-emerald-950 via-slate-900 to-teal-950 flex flex-col items-center justify-center p-6 text-center";
-                    div.innerHTML = `<span class="text-emerald-400 text-lg font-bold">Gaza Relief & Medical Aid</span>`;
-                    parent.appendChild(div);
-                  }
-                }}
-              />
-              {/* Overlay Gradient */}
-              <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent opacity-90" />
-              
-              {/* Floating Verified Campaign Badge */}
-              <div className="absolute top-4 left-4 flex items-center gap-1.5 bg-slate-950/85 backdrop-blur-md border border-slate-800 px-3 py-1.5 rounded-full text-[10px] font-bold text-emerald-400 shadow-md">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_#10b981]" />
-                <span>{language === 'ar' ? 'حملة تبرع نشطة' : 'Active Campaign'}</span>
-              </div>
+          {/* Cover image container */}
+          <div className="w-full lg:w-[420px] h-64 md:h-[300px] rounded-xl overflow-hidden relative border border-slate-800 flex-shrink-0">
+            <img 
+              src={activeCampaign.cover_image || "/campaign_cover.png"} 
+              alt={displayCampaignName}
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+                const parent = e.currentTarget.parentElement;
+                if (parent) {
+                  const div = document.createElement('div');
+                  div.className = "w-full h-full bg-gradient-to-tr from-slate-900 to-slate-950 flex flex-col items-center justify-center p-6 text-center";
+                  div.innerHTML = `<span class="text-slate-400 text-sm font-semibold">${displayCampaignName}</span>`;
+                  parent.appendChild(div);
+                }
+              }}
+            />
+          </div>
 
-              {/* Floating Organizer Badge */}
-              <div className="absolute bottom-4 right-4 left-4">
-                <div className="inline-flex items-center gap-2 bg-emerald-500/10 backdrop-blur-md border border-emerald-500/20 px-3.5 py-2 rounded-xl text-xs font-bold text-emerald-300">
-                  <Heart className="w-3.5 h-3.5 fill-emerald-400 text-emerald-400" />
-                  <span>{displayOrganizer}</span>
-                </div>
+          {/* Campaign details */}
+          <div className="flex-1 flex flex-col justify-between space-y-6">
+            <div className="space-y-3">
+              {/* Organizer label - clean, not a badge overlaying the image */}
+              <div className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">
+                {language === 'ar' ? 'حملة تبرع معتمدة بتنظيم:' : 'Verified campaign organized by:'} {displayOrganizer}
               </div>
+              
+              <h1 className="text-2xl md:text-3xl font-bold text-white tracking-tight leading-tight">
+                {displayCampaignName}
+              </h1>
+              
+              <p className="text-slate-400 text-sm leading-relaxed font-normal">
+                {displayCampaignDesc}
+              </p>
             </div>
 
-            {/* Campaign details */}
-            <div className="flex-1 flex flex-col justify-between space-y-6 lg:py-1">
-              <div className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400 bg-emerald-950/40 border border-emerald-900/30 px-2.5 py-1 rounded-md">
-                    {language === 'ar' ? 'المستشفى الجامعي' : 'University Hospital'}
+            {/* Campaign Progress - clean, trustable layout */}
+            <div className="space-y-4 pt-4 border-t border-slate-800/60">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <span className="text-slate-500 text-[11px] font-semibold block uppercase tracking-wider">{t('collected')}</span>
+                  <span className="text-xl font-bold text-emerald-400 mt-0.5 block">
+                    {collectedVal.toLocaleString()} <span className="text-xs font-semibold text-slate-500">{t('egp')}</span>
                   </span>
                 </div>
                 
-                <h1 className="text-2xl md:text-4xl font-black text-white leading-tight tracking-tight hover:text-emerald-300 transition-colors">
-                  {displayCampaignName}
-                </h1>
-                
-                <p className="text-slate-400 leading-relaxed text-sm md:text-[14.5px] font-medium">
-                  {displayCampaignDesc}
-                </p>
-              </div>
-
-              {/* Campaign Progress Visual */}
-              <div className="space-y-4 bg-slate-900/30 border border-slate-900 p-5 rounded-2xl relative overflow-hidden backdrop-blur-sm">
-                <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-xl pointer-events-none" />
-                
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-2">
-                  <div className="space-y-1">
-                    <span className="text-slate-500 text-[10px] font-bold block uppercase tracking-wider">{t('collected')}</span>
-                    <span className="text-xl md:text-2xl font-black text-emerald-400 flex items-baseline gap-1">
-                      {collectedVal.toLocaleString()}
-                      <span className="text-[11px] font-bold text-slate-400">{t('egp')}</span>
-                    </span>
-                  </div>
-                  
-                  <div className="space-y-1 border-s border-slate-800/80 ps-4">
-                    <span className="text-slate-500 text-[10px] font-bold block uppercase tracking-wider">{t('target')}</span>
-                    <span className="text-lg md:text-xl font-bold text-white flex items-baseline gap-1">
-                      {targetVal.toLocaleString()}
-                      <span className="text-[10px] font-semibold text-slate-400">{t('egp')}</span>
-                    </span>
-                  </div>
-
-                  <div className="space-y-1 border-s border-slate-800/80 ps-4 col-span-1">
-                    <span className="text-slate-500 text-[10px] font-bold block uppercase tracking-wider">{language === 'ar' ? 'المتبقي' : 'Remaining'}</span>
-                    <span className="text-lg font-bold text-slate-300 flex items-baseline gap-1">
-                      {remainingVal.toLocaleString()}
-                      <span className="text-[10px] font-semibold text-slate-400">{t('egp')}</span>
-                    </span>
-                  </div>
-
-                  <div className="space-y-1 border-s border-slate-800/80 ps-4 text-end">
-                    <span className="text-slate-500 text-[10px] font-bold block uppercase tracking-wider">{language === 'ar' ? 'النسبة' : 'Progress'}</span>
-                    <span className="text-xl font-black bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-teal-300">
-                      {percentVal}%
-                    </span>
-                  </div>
+                <div className="border-s border-slate-800/80 ps-4">
+                  <span className="text-slate-500 text-[11px] font-semibold block uppercase tracking-wider">{t('target')}</span>
+                  <span className="text-xl font-bold text-white mt-0.5 block">
+                    {targetVal.toLocaleString()} <span className="text-xs font-semibold text-slate-500">{t('egp')}</span>
+                  </span>
                 </div>
 
-                {/* Progress bar */}
-                <div className="space-y-2">
-                  <div className="w-full h-3 bg-slate-950 rounded-full overflow-hidden border border-slate-900 relative">
-                    <div 
-                      className="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-500 rounded-full shadow-[0_0_12px_#10b981] progress-animated transition-all duration-1000 ease-out"
-                      style={{ width: `${percentVal}%` }}
-                    />
-                  </div>
-                  
-                  <div className="flex justify-between text-[11px] font-semibold text-slate-400">
-                    <span className="flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                      {percentVal}% {t('progress')}
-                    </span>
-                    <span>
-                      {language === 'ar' ? 'مستمر حتى تحقيق الهدف' : 'Ongoing until goal met'}
-                    </span>
-                  </div>
+                <div className="border-s border-slate-800/80 ps-4">
+                  <span className="text-slate-500 text-[11px] font-semibold block uppercase tracking-wider">{language === 'ar' ? 'المتبقي' : 'Remaining'}</span>
+                  <span className="text-lg font-semibold text-slate-300 mt-0.5 block">
+                    {remainingVal.toLocaleString()} <span className="text-xs font-semibold text-slate-500">{t('egp')}</span>
+                  </span>
+                </div>
+
+                <div className="border-s border-slate-800/80 ps-4 text-end">
+                  <span className="text-slate-500 text-[11px] font-semibold block uppercase tracking-wider">{language === 'ar' ? 'النسبة' : 'Progress'}</span>
+                  <span className="text-lg font-bold text-white mt-0.5 block">
+                    {percentVal}%
+                  </span>
+                </div>
+              </div>
+
+              {/* Progress bar */}
+              <div className="space-y-1.5">
+                <div className="w-full h-2.5 bg-slate-900 rounded-full overflow-hidden border border-slate-800 relative">
+                  <div 
+                    className="h-full bg-emerald-500 rounded-full"
+                    style={{ width: `${percentVal}%` }}
+                  />
+                </div>
+                
+                <div className="flex justify-between text-[11px] font-medium text-slate-500">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    {percentVal}% {t('progress')}
+                  </span>
+                  <span>
+                    {language === 'ar' ? 'مستمر حتى تحقيق الهدف' : 'Ongoing until goal met'}
+                  </span>
                 </div>
               </div>
             </div>
