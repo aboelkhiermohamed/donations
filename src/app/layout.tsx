@@ -19,7 +19,7 @@ const outfit = Outfit({
 });
 
 export const metadata: Metadata = {
-  title: 'Safe Donation Platform | منصة التبرع الآمنة',
+  title: 'donations 9th Batch | منصة التبرع للدفعة التاسعة',
   description: 'A trusted, premium donation campaign system in Egypt with real-time transparency and automatic SMS payment matching (Vodafone Cash & InstaPay).',
 };
 
