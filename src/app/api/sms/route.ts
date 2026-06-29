@@ -197,6 +197,7 @@ export async function POST(req: NextRequest) {
         amount: parsedSMS.amount,
         payment_method: parsedSMS.payment_method,
         sender_phone: parsedSMS.sender_phone,
+        sender_name: parsedSMS.sender_name,
         transaction_ref: parsedSMS.transaction_ref,
         receiver_digits: parsedSMS.receiver_digits,
         received_at: parsedSMS.received_at,

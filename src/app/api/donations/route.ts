@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
     // 3. Query unmatched transactions for potential matching
     const { data: unmatchedTxs, error: txsError } = await supabaseAdmin
       .from('incoming_transactions')
-      .select('id, amount, payment_method, sender_phone, transaction_ref, receiver_digits, received_at')
+      .select('id, amount, payment_method, sender_phone, sender_name, transaction_ref, receiver_digits, received_at')
       .eq('status', 'unmatched')
       .eq('amount', amount)
       .eq('payment_method', paymentMethod)
@@ -116,6 +116,7 @@ export async function POST(req: NextRequest) {
         amount: Number(donation.amount),
         payment_method: donation.payment_method,
         donor_phone: phone,
+        donor_name: name,
         transaction_ref: donation.transaction_ref,
         last_4_digits: donation.last_4_digits,
         created_at: donation.created_at,

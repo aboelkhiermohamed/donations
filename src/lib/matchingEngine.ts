@@ -6,11 +6,43 @@ export interface MatchResult {
   reason: string;
 }
 
+function isNameMatch(name1: string, name2: string): boolean {
+  if (!name1 || !name2) return false;
+  const normalize = (name: string) => 
+    name.toLowerCase()
+      .replace(/[^a-z0-9\u0600-\u06FF\s]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  const n1 = normalize(name1);
+  const n2 = normalize(name2);
+  
+  if (n1 === n2) return true;
+  
+  // Substring match
+  if (n1.length > 5 && n2.length > 5 && (n1.includes(n2) || n2.includes(n1))) return true;
+  
+  // Word overlaps
+  const words1 = n1.split(' ').filter(w => w.length > 2);
+  const words2 = n2.split(' ').filter(w => w.length > 2);
+  
+  if (words1.length > 0 && words2.length > 0) {
+    let matchesCount = 0;
+    for (const w1 of words1) {
+      if (words2.includes(w1)) matchesCount++;
+    }
+    if (matchesCount >= 2) return true;
+  }
+  
+  return false;
+}
+
 export function findMatch(
   tx: {
     amount: number;
     payment_method: string;
     sender_phone?: string;
+    sender_name?: string;
     transaction_ref?: string;
     receiver_digits?: string;
     received_at: string;
@@ -57,12 +89,24 @@ export function findMatch(
       continue;
     }
 
-    // Priority 4: Amount Match + Last 4 Digits Match (95% confidence)
+    // Priority 5: Amount Match + Name Match (100% confidence)
+    if (tx.sender_name && donation.donor?.name && 
+        isNameMatch(tx.sender_name, donation.donor.name)) {
+      matches.push({
+        donationId: donation.id,
+        confidence: 100,
+        priority: 5,
+        reason: `Matched donor name (${donation.donor.name}) and amount (${donation.amount} EGP)`,
+      });
+      continue;
+    }
+
+    // Priority 4: Amount Match + Last 4 Digits Match (100% confidence)
     if (tx.receiver_digits && donation.last_4_digits && 
         tx.receiver_digits.trim() === donation.last_4_digits.trim()) {
       matches.push({
         donationId: donation.id,
-        confidence: 95,
+        confidence: 100,
         priority: 4,
         reason: `Matched last 4 digits of sender account (${tx.receiver_digits})`,
       });
@@ -128,6 +172,7 @@ export function findMatchForDonation(
     amount: number;
     payment_method: string;
     donor_phone: string;
+    donor_name?: string;
     transaction_ref?: string | null;
     last_4_digits?: string | null;
     created_at: string;
@@ -137,6 +182,7 @@ export function findMatchForDonation(
     amount: number;
     payment_method: string;
     sender_phone?: string | null;
+    sender_name?: string | null;
     transaction_ref?: string | null;
     receiver_digits?: string | null;
     received_at: string;
@@ -182,12 +228,24 @@ export function findMatchForDonation(
       continue;
     }
 
-    // Priority 4: Amount Match + Last 4 Digits Match (95% confidence)
+    // Priority 5: Amount Match + Name Match (100% confidence)
+    if (tx.sender_name && donation.donor_name && 
+        isNameMatch(tx.sender_name, donation.donor_name)) {
+      matches.push({
+        transactionId: tx.id,
+        confidence: 100,
+        priority: 5,
+        reason: `Matched donor name (${donation.donor_name}) and amount (${donation.amount} EGP)`,
+      });
+      continue;
+    }
+
+    // Priority 4: Amount Match + Last 4 Digits Match (100% confidence)
     if (tx.receiver_digits && donation.last_4_digits && 
         tx.receiver_digits.trim() === donation.last_4_digits.trim()) {
       matches.push({
         transactionId: tx.id,
-        confidence: 95,
+        confidence: 100,
         priority: 4,
         reason: `Matched last 4 digits of sender account (${tx.receiver_digits})`,
       });
