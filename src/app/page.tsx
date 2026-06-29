@@ -986,6 +986,78 @@ export default function PublicDonationPage() {
                   <p className="text-slate-400 text-sm leading-relaxed max-w-md mx-auto">
                     {t('success_desc')}
                   </p>
+
+                  {/* Real-time Tracking Status for the donation just submitted */}
+                  {trackedDonations.length > 0 && (
+                    <div className="mt-6 border-t border-slate-800/80 pt-6 text-start space-y-3 max-w-md mx-auto">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse glow-green" />
+                          <span>{language === 'ar' ? 'تتبع حالة تبرعك الحالي:' : 'Live Donation Tracking:'}</span>
+                        </h4>
+                        {lastTrackedUpdate && (
+                          <span className="text-[10px] text-slate-500 font-medium">
+                            {t('track_last_updated')}: {lastTrackedUpdate.toLocaleTimeString()}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="space-y-2.5 max-h-[220px] overflow-y-auto pr-1">
+                        {trackedDonations.map((d) => (
+                          <div key={d.id} className="p-3 bg-slate-950/60 border border-slate-900 rounded-xl text-xs space-y-2">
+                            <div className="flex justify-between items-center">
+                              <span className="font-bold text-white text-sm">{d.amount} {t('egp')}</span>
+                              <span className="text-slate-500 text-[10px]">
+                                {new Date(d.created_at).toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US')}
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-center text-[11px]">
+                              <span className="text-slate-400 font-semibold">
+                                {d.payment_method === 'vodafone_cash' ? (
+                                  <span className="inline-flex items-center gap-1 text-red-500 font-bold">
+                                    <img src="/vf_Logo.png" alt="Vodafone Cash" className="w-3.5 h-3.5 object-contain bg-white rounded-full p-0.5" />
+                                    <span>{t('vfc_label')}</span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-violet-400 font-bold">
+                                    <img src="/InstaPay_Logo.png" alt="InstaPay" className="w-3.5 h-3.5 object-contain bg-white rounded p-0.5" />
+                                    <span>{t('instapay_label')}</span>
+                                  </span>
+                                )}
+                              </span>
+                              
+                              {/* Badge Status */}
+                              {d.status === 'pending' && (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-900 border border-slate-800 text-slate-400 flex items-center gap-1 animate-pulse">
+                                  <Loader2 className="w-3 h-3 animate-spin text-emerald-450" />
+                                  <span>{t('track_status_pending')}</span>
+                                </span>
+                              )}
+                              {(d.status === 'auto_verified' || d.status === 'manual_verified') && (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950/60 border border-emerald-900/40 text-emerald-400 flex items-center gap-1">
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 fill-transparent" />
+                                  <span>{t('track_status_verified')}</span>
+                                </span>
+                              )}
+                              {d.status === 'rejected' && (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-950/30 border border-red-900/20 text-red-300 flex items-center gap-1">
+                                  <AlertCircle className="w-3 h-3 text-red-400" />
+                                  <span>{t('track_status_rejected')}</span>
+                                </span>
+                              )}
+                              {d.status === 'refunded' && (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-yellow-950/30 border border-yellow-900/20 text-yellow-300 flex items-center gap-1">
+                                  <AlertCircle className="w-3 h-3 text-yellow-400" />
+                                  <span>{t('track_status_refunded')}</span>
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <button
                     onClick={() => setSubmitSuccess(false)}
                     className="mt-6 px-6 py-2.5 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-sm font-semibold rounded-xl text-white transition-colors"
