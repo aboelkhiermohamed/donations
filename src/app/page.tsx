@@ -881,19 +881,19 @@ export default function PublicDonationPage() {
                   )}
 
                   {/* Phone Number Display with Copy */}
-                  <div className="w-full max-w-sm bg-slate-950/60 p-4 rounded-xl border border-slate-900 flex items-center justify-between gap-4">
-                    <div className="space-y-0.5 text-start">
-                      <span className="text-slate-500 text-[10px] uppercase tracking-wider font-semibold">
+                  <div className="w-full max-w-sm bg-slate-950/60 p-4 rounded-xl border border-slate-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-center sm:text-start">
+                    <div className="space-y-1">
+                      <span className="text-slate-500 text-[10px] uppercase tracking-wider font-semibold block">
                         {language === 'ar' ? 'رقم الهاتف (إنستاباي)' : 'InstaPay Phone Number'}
                       </span>
-                      <p className="text-xl font-black tracking-widest text-white font-mono select-all">
+                      <p className="text-xl font-black tracking-widest text-white font-mono select-all" dir="ltr">
                         {INSTAPAY_PHONE}
                       </p>
                     </div>
                     <button
                       type="button"
                       onClick={() => handleCopy(INSTAPAY_PHONE, 'instapay_phone')}
-                      className="flex items-center justify-center gap-1.5 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-sm font-semibold py-3 px-5 rounded-xl transition-all active:scale-95 text-slate-350 flex-shrink-0"
+                      className="flex items-center justify-center gap-1.5 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-sm font-semibold py-3 px-5 rounded-xl transition-all active:scale-95 text-slate-350 flex-shrink-0 w-full sm:w-auto"
                     >
                       {copiedType === 'instapay_phone' ? (
                         <>
@@ -910,19 +910,19 @@ export default function PublicDonationPage() {
                   </div>
 
                   {/* Address Display with Copy */}
-                  <div className="w-full max-w-sm bg-slate-950/60 p-4 rounded-xl border border-slate-900 flex items-center justify-between gap-4">
-                    <div className="space-y-0.5 text-start">
-                      <span className="text-slate-500 text-[10px] uppercase tracking-wider font-semibold">
+                  <div className="w-full max-w-sm bg-slate-950/60 p-4 rounded-xl border border-slate-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-center sm:text-start">
+                    <div className="space-y-1 w-full min-w-0">
+                      <span className="text-slate-500 text-[10px] uppercase tracking-wider font-semibold block">
                         {language === 'ar' ? 'عنوان الدفع (إنستاباي)' : 'InstaPay VPA Address'}
                       </span>
-                      <p className="text-base font-black text-white font-mono select-all truncate max-w-[180px] sm:max-w-none">
+                      <p className="text-sm sm:text-base font-black text-white font-mono select-all truncate max-w-full sm:max-w-none" dir="ltr">
                         {displayInstapayAddress}
                       </p>
                     </div>
                     <button
                       type="button"
                       onClick={() => handleCopy(displayInstapayAddress, 'instapay_address')}
-                      className="flex items-center justify-center gap-1.5 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-sm font-semibold py-3 px-5 rounded-xl transition-all active:scale-95 text-slate-350 flex-shrink-0"
+                      className="flex items-center justify-center gap-1.5 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-sm font-semibold py-3 px-5 rounded-xl transition-all active:scale-95 text-slate-350 flex-shrink-0 w-full sm:w-auto"
                     >
                       {copiedType === 'instapay_address' ? (
                         <>
