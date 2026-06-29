@@ -103,6 +103,11 @@ const translations: Record<Language, Record<string, string>> = {
     db_weekly_growth: "Donation Growth",
     db_verification_rate: "Verification Rate",
     db_recent_sms: "Real-time Incoming SMS Streams",
+    tab_campaign: "Campaign",
+    tab_donate: "Donate Now",
+    tab_ledger: "Ledger & Track",
+    open_instapay_app: "Open InstaPay App",
+    view_details: "Details",
   },
   ar: {
     // General
@@ -194,6 +199,11 @@ const translations: Record<Language, Record<string, string>> = {
     db_weekly_growth: "معدل نمو التبرعات",
     db_verification_rate: "معدل التحقق التلقائي الناجح",
     db_recent_sms: "بث الرسائل القصيرة المستلمة مباشرة",
+    tab_campaign: "الحملة",
+    tab_donate: "تبرع الآن",
+    tab_ledger: "التتبع والسجل",
+    open_instapay_app: "فتح تطبيق إنستاباي",
+    view_details: "تفاصيل",
   }
 };
 

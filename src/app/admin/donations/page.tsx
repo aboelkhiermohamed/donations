@@ -278,7 +278,8 @@ export default function AdminDonationsPage() {
         {/* DONATIONS TABLE LIST */}
         <div className="glass-panel rounded-2xl border border-slate-900 overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-start border-collapse">
+            {/* Desktop Table View */}
+            <table className="w-full text-start border-collapse hidden md:table">
               <thead>
                 <tr className="border-b border-slate-900 bg-slate-900/30 text-slate-400 text-xs font-bold">
                   <th className="px-6 py-4 text-start">{language === 'ar' ? 'المتبرع' : 'Donor'}</th>
@@ -359,6 +360,81 @@ export default function AdminDonationsPage() {
                 )}
               </tbody>
             </table>
+
+            {/* Mobile Card Feed Layout */}
+            <div className="block md:hidden divide-y divide-slate-900 bg-slate-950/20">
+              {isLoading ? (
+                <div className="text-center py-8 text-slate-500">
+                  <Loader2 className="w-6 h-6 animate-spin mx-auto text-emerald-400" />
+                </div>
+              ) : filteredDonations.length === 0 ? (
+                <div className="text-center py-8 text-slate-500 text-xs">
+                  {language === 'ar' ? 'لا توجد تبرعات مطابقة للبحث' : 'No matching donations found'}
+                </div>
+              ) : (
+                filteredDonations.map((d) => (
+                  <div key={d.id} className="p-4 space-y-3">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="font-semibold text-white text-sm">{d.donor?.name}</div>
+                        <div className="text-xs text-slate-500 mt-0.5">{d.donor?.phone}</div>
+                      </div>
+                      <div>{getStatusBadge(d.status)}</div>
+                    </div>
+
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-400 font-semibold">{language === 'ar' ? 'المبلغ' : 'Amount'}:</span>
+                      <span className="font-bold text-white">
+                        {d.amount} <span className="text-emerald-400">{t('egp')}</span>
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-400 font-semibold">{language === 'ar' ? 'طريقة التحويل' : 'Method'}:</span>
+                      <span>
+                        {d.payment_method === 'vodafone_cash' ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-red-500 font-bold bg-red-950/20 px-2.5 py-1 rounded-full border border-red-900/10">
+                            <img src="/vf_Logo.png" alt="Vodafone Cash" className="w-3.5 h-3.5 object-contain rounded-full bg-white p-0.5" />
+                            <span>فودافون كاش</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-violet-400 font-bold bg-violet-950/20 px-2.5 py-1 rounded-full border border-violet-900/10">
+                            <img src="/InstaPay_Logo.png" alt="InstaPay" className="w-3.5 h-3.5 object-contain rounded bg-white p-0.5" />
+                            <span>إنستاباي</span>
+                          </span>
+                        )}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-400 font-semibold">{language === 'ar' ? 'رقم العملية' : 'Ref#'}:</span>
+                      <span className="font-mono text-slate-350">{d.transaction_ref || '—'}</span>
+                    </div>
+
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-400 font-semibold">{language === 'ar' ? 'التاريخ' : 'Date'}:</span>
+                      <span className="text-slate-450">{new Date(d.created_at).toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US')}</span>
+                    </div>
+
+                    <div className="flex justify-between items-center pt-2 border-t border-slate-900/40">
+                      <span className="text-[10px] text-slate-500 uppercase">
+                        {d.verification_method ? `Verified via ${d.verification_method}` : 'Not verified'}
+                      </span>
+                      <button
+                        onClick={() => {
+                          setSelectedDonation(d);
+                          setIsDetailOpen(true);
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:bg-slate-800 text-xs font-semibold text-emerald-400 flex items-center gap-1 hover:text-white transition-colors"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>{language === 'ar' ? 'عرض التفاصيل' : 'View Details'}</span>
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
 

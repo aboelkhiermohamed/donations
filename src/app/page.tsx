@@ -66,6 +66,7 @@ export default function PublicDonationPage() {
   const [digits, setDigits] = useState('');
   const [notes, setNotes] = useState('');
   const [screenshot, setScreenshot] = useState<File | null>(null);
+  const [activeMobileTab, setActiveMobileTab] = useState<'campaign' | 'donate' | 'ledger'>('campaign');
   
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -571,7 +572,46 @@ export default function PublicDonationPage() {
       </header>
 
       {/* HERO / CAMPAIGN COVER SECTION */}
-      <main className="flex-1 w-full max-w-7xl mx-auto px-4 md:px-8 space-y-12">
+      <main className="flex-1 w-full max-w-7xl mx-auto px-4 md:px-8 space-y-8 md:space-y-12">
+        {/* Mobile Tab Segmented Navigation (Only visible on mobile/tablet) */}
+        {isMounted && (
+          <div className="lg:hidden w-full bg-slate-900/80 backdrop-blur-md p-1 rounded-xl border border-slate-800/60 sticky top-2 z-30 flex gap-1 shadow-lg">
+            <button
+              type="button"
+              onClick={() => setActiveMobileTab('campaign')}
+              className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-all text-center ${
+                activeMobileTab === 'campaign'
+                  ? 'bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 shadow-md font-extrabold'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              {t('tab_campaign')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveMobileTab('donate')}
+              className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-all text-center ${
+                activeMobileTab === 'donate'
+                  ? 'bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 shadow-md font-extrabold'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              {t('tab_donate')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveMobileTab('ledger')}
+              className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-all text-center ${
+                activeMobileTab === 'ledger'
+                  ? 'bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 shadow-md font-extrabold'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              {t('tab_ledger')}
+            </button>
+          </div>
+        )}
+
         {campaignError && (
           <div className="p-4 bg-red-950/20 border border-red-900/20 text-red-300 text-xs rounded-xl flex items-center gap-2">
             <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
@@ -579,7 +619,7 @@ export default function PublicDonationPage() {
           </div>
         )}
         {/* Campaign Main Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        <div className={`grid grid-cols-1 lg:grid-cols-12 gap-8 items-start ${activeMobileTab === 'campaign' ? 'block' : 'hidden lg:grid'}`}>
           
           {/* LEFT COLUMN: Campaign Content (col-span-8) */}
           <div className="lg:col-span-8 space-y-6">
@@ -705,7 +745,7 @@ export default function PublicDonationPage() {
         </div>
 
         {/* RECENT DONORS MARQUEE */}
-        <div className="w-full bg-slate-900/30 border border-slate-900 rounded-2xl overflow-hidden py-3 flex items-center relative">
+        <div className={`w-full bg-slate-900/30 border border-slate-900 rounded-2xl overflow-hidden py-3 flex items-center relative ${activeMobileTab !== 'donate' ? 'flex' : 'hidden lg:flex'}`}>
           <div className="absolute left-0 top-0 bottom-0 w-24 bg-gradient-to-r from-slate-950 to-transparent z-10 pointer-events-none" />
           <div className="absolute right-0 top-0 bottom-0 w-24 bg-gradient-to-l from-slate-950 to-transparent z-10 pointer-events-none" />
           
@@ -744,10 +784,10 @@ export default function PublicDonationPage() {
         </div>
 
         {/* BOTTOM SPLIT SECTION */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <div className={`grid grid-cols-1 lg:grid-cols-12 gap-8 ${activeMobileTab !== 'campaign' ? 'block' : 'hidden lg:grid'}`}>
           
           {/* LEFT: DONATION INSTRUCTIONS & FORM */}
-          <div className="lg:col-span-7 space-y-6">
+          <div className={`lg:col-span-7 space-y-6 ${activeMobileTab === 'donate' ? 'block' : 'hidden lg:block'}`}>
             
             {/* Payment Instructions Card */}
             <div className="glass-panel rounded-2xl p-6 space-y-6">
@@ -853,7 +893,7 @@ export default function PublicDonationPage() {
                     <button
                       type="button"
                       onClick={() => handleCopy(INSTAPAY_PHONE, 'instapay_phone')}
-                      className="flex items-center justify-center gap-1.5 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-xs font-semibold py-2.5 px-4 rounded-lg transition-all active:scale-95 text-slate-350 flex-shrink-0"
+                      className="flex items-center justify-center gap-1.5 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-sm font-semibold py-3 px-5 rounded-xl transition-all active:scale-95 text-slate-350 flex-shrink-0"
                     >
                       {copiedType === 'instapay_phone' ? (
                         <>
@@ -868,6 +908,44 @@ export default function PublicDonationPage() {
                       )}
                     </button>
                   </div>
+
+                  {/* Address Display with Copy */}
+                  <div className="w-full max-w-sm bg-slate-950/60 p-4 rounded-xl border border-slate-900 flex items-center justify-between gap-4">
+                    <div className="space-y-0.5 text-start">
+                      <span className="text-slate-500 text-[10px] uppercase tracking-wider font-semibold">
+                        {language === 'ar' ? 'عنوان الدفع (إنستاباي)' : 'InstaPay VPA Address'}
+                      </span>
+                      <p className="text-base font-black text-white font-mono select-all truncate max-w-[180px] sm:max-w-none">
+                        {displayInstapayAddress}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(displayInstapayAddress, 'instapay_address')}
+                      className="flex items-center justify-center gap-1.5 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-sm font-semibold py-3 px-5 rounded-xl transition-all active:scale-95 text-slate-350 flex-shrink-0"
+                    >
+                      {copiedType === 'instapay_address' ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                          <span className="text-emerald-400">{t('copied')}</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5 text-slate-400" />
+                          <span>{t('copy')}</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Open App Button on Mobile */}
+                  <a
+                    href="instapay://"
+                    className="lg:hidden w-full max-w-sm flex items-center justify-center gap-2 bg-slate-900 border border-slate-850 hover:bg-slate-800 text-white font-bold py-3.5 px-6 rounded-xl transition-all text-center text-sm cursor-pointer active:scale-[0.98]"
+                  >
+                    <span>{t('open_instapay_app')}</span>
+                    <span className="text-xs">⚡</span>
+                  </a>
 
                   {/* QR Code Container */}
                   <div className="w-full max-w-sm bg-slate-950/60 p-5 rounded-xl border border-slate-900 flex flex-col items-center text-center space-y-4">
@@ -1039,7 +1117,7 @@ export default function PublicDonationPage() {
           </div>
 
           {/* RIGHT: TRANSPARENCY LIVE METRICS */}
-          <div className="lg:col-span-5 space-y-6">
+          <div className={`lg:col-span-5 space-y-6 ${activeMobileTab === 'ledger' ? 'block' : 'hidden lg:block'}`}>
             <div className="glass-panel rounded-2xl p-6 space-y-6 relative overflow-hidden">
               <div className="absolute -top-12 -right-12 w-24 h-24 bg-teal-500/10 rounded-full blur-xl pointer-events-none" />
               
@@ -1270,7 +1348,7 @@ export default function PublicDonationPage() {
         </div>
 
         {/* VERIFIED DONOR REGISTRY LEDGER */}
-        <div className="glass-panel rounded-3xl p-6 md:p-8 space-y-6">
+        <div className={`glass-panel rounded-3xl p-6 md:p-8 space-y-6 ${activeMobileTab === 'ledger' ? 'block' : 'hidden lg:block'}`}>
           <div className="space-y-2">
             <h3 className="text-lg font-bold text-white flex items-center gap-2">
               <CheckCircle2 className="w-5 h-5 text-emerald-400" />
@@ -1284,7 +1362,8 @@ export default function PublicDonationPage() {
           </div>
 
           <div className="overflow-x-auto rounded-xl border border-slate-900 bg-slate-950/40 max-h-[350px] overflow-y-auto">
-            <table className="w-full text-start border-collapse">
+            {/* Desktop Table View */}
+            <table className="w-full text-start border-collapse hidden md:table">
               <thead>
                 <tr className="border-b border-slate-900 bg-slate-900/80 text-slate-400 text-xs font-bold sticky top-0 z-10">
                   <th className="px-6 py-3.5 text-start sticky top-0 bg-slate-950/90 backdrop-blur-sm z-10">{language === 'ar' ? 'المتبرع' : 'Donor Name'}</th>
@@ -1340,10 +1419,79 @@ export default function PublicDonationPage() {
                 )}
               </tbody>
             </table>
+
+            {/* Mobile Card List View */}
+            <div className="block md:hidden divide-y divide-slate-900/60 bg-slate-950/20">
+              {recentDonationsError ? (
+                <div className="text-center py-6 text-red-400 font-mono text-xs">
+                  Error: {(recentDonationsError as any).message || JSON.stringify(recentDonationsError)}
+                </div>
+              ) : recentDonations && recentDonations.length > 0 ? (
+                recentDonations.map((item) => (
+                  <div key={item.id} className="p-4 space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold text-white text-sm">
+                        {item.masked_name || t('anonymous')}
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-mono">
+                        {item.masked_phone || '—'}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-black text-emerald-400">
+                        {item.amount} {t('egp')}
+                      </span>
+                      <div>
+                        {item.payment_method === 'vodafone_cash' ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-red-500 font-bold bg-red-950/20 px-2.5 py-1 rounded-full border border-red-900/10">
+                            <img src="/vf_Logo.png" alt="Vodafone Cash" className="w-3.5 h-3.5 object-contain rounded-full bg-white p-0.5" />
+                            <span>فودافون كاش</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-violet-400 font-bold bg-violet-950/20 px-2.5 py-1 rounded-full border border-violet-900/10">
+                            <img src="/InstaPay_Logo.png" alt="InstaPay" className="w-3.5 h-3.5 object-contain rounded bg-white p-0.5" />
+                            <span>إنستاباي</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between items-center text-[10px] text-slate-500 pt-1.5 border-t border-slate-900/20">
+                      <span>{language === 'ar' ? 'تاريخ التوثيق:' : 'Verified at:'}</span>
+                      <span>
+                        {isMounted ? new Date(item.created_at).toLocaleString(language === 'ar' ? 'ar-EG' : 'en-US', { dateStyle: 'short', timeStyle: 'short' }) : '...'}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-8 text-xs text-slate-500">
+                  {language === 'ar' ? 'لا توجد تبرعات موثقة بعد.' : 'No verified donations found.'}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
       </main>
+
+      {/* Mobile Floating Action Button (FAB) */}
+      {isMounted && activeMobileTab === 'campaign' && (
+        <div className="lg:hidden fixed bottom-6 left-0 right-0 z-45 px-4 flex justify-center pointer-events-none animate-bounce-gentle">
+          <button
+            type="button"
+            onClick={() => {
+              setActiveMobileTab('donate');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            className="pointer-events-auto px-8 py-3.5 rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 font-black text-sm shadow-xl shadow-emerald-500/30 active:scale-95 transition-all flex items-center gap-2 border border-emerald-300/30 glow-green"
+          >
+            <Heart className="w-4 h-4 fill-slate-950" />
+            <span>{language === 'ar' ? 'تبرع الآن للحملة' : 'Donate to Campaign'}</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
