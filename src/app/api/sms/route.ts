@@ -26,18 +26,53 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized: Invalid API Key' }, { status: 401 });
     }
 
-    // 2. Body Validation
-    const body = await req.json();
-    const validation = smsRequestSchema.safeParse(body);
-    if (!validation.success) {
-      return NextResponse.json({ error: 'Invalid request body', details: validation.error.format() }, { status: 400 });
+    // 2. Body Validation & Resilient Parsing
+    let sender = '';
+    let message = '';
+    let receivedAt = '';
+
+    const contentType = req.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      try {
+        const body = await req.json();
+        const validation = smsRequestSchema.safeParse(body);
+        if (!validation.success) {
+          return NextResponse.json({ error: 'Invalid JSON request body', details: validation.error.format() }, { status: 400 });
+        }
+        sender = validation.data.sender;
+        message = validation.data.message;
+        receivedAt = validation.data.receivedAt;
+      } catch (jsonError: any) {
+        return NextResponse.json({ error: 'Malformed JSON payload. Ensure SMS variables do not break JSON syntax.', details: jsonError.message }, { status: 400 });
+      }
+    } else {
+      // Fallback for Form Data or URL-encoded payloads (e.g. from SMS Gateway custom configurations)
+      try {
+        const text = await req.text();
+        const params = new URLSearchParams(text);
+        sender = params.get('sender') || '';
+        message = params.get('message') || '';
+        receivedAt = params.get('receivedAt') || '';
+
+        if (!sender || !message) {
+          // Try standard FormData parsing
+          const formData = await req.formData();
+          sender = formData.get('sender') as string || '';
+          message = formData.get('message') as string || '';
+          receivedAt = formData.get('receivedAt') as string || '';
+        }
+      } catch (formError: any) {
+        return NextResponse.json({ error: 'Unsupported Content-Type and failed fallback parsing', details: formError.message }, { status: 400 });
+      }
     }
 
-    const { sender, message, receivedAt } = validation.data;
+    if (!sender || !message) {
+      return NextResponse.json({ error: 'Missing required fields: sender and message' }, { status: 400 });
+    }
 
     // Resilient timestamp parsing: if malformed or has unparsed placeholders, fallback to current server time
     let finalReceivedAt = receivedAt;
-    if (isNaN(Date.parse(receivedAt)) || receivedAt.includes('{')) {
+    if (!receivedAt || isNaN(Date.parse(receivedAt)) || receivedAt.includes('{')) {
       finalReceivedAt = new Date().toISOString();
     }
 
