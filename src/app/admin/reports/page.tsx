@@ -368,8 +368,8 @@ export default function AdminReportsPage() {
                 ) : (
                   items.map((d) => (
                     <tr key={d.id} className="print:bg-white">
-                      <td className="px-5 py-3 text-white print:text-slate-950 font-bold">{d.donor?.name}</td>
-                      <td className="px-5 py-3 font-mono text-slate-400 print:text-slate-600">{d.donor?.phone}</td>
+                      <td className="px-5 py-3 text-white print:text-slate-950 font-bold"><bdi>{d.donor?.name}</bdi></td>
+                      <td className="px-5 py-3 font-mono text-slate-400 print:text-slate-600"><span dir="ltr">{d.donor?.phone}</span></td>
                       <td className="px-5 py-3 font-bold text-white print:text-slate-900">{d.amount} EGP</td>
                       <td className="px-5 py-3 uppercase text-slate-400 print:text-slate-600 font-semibold">{d.payment_method.replace('_', ' ')}</td>
                       <td className="px-5 py-3 font-mono text-slate-400 print:text-slate-600">{d.transaction_ref || '—'}</td>

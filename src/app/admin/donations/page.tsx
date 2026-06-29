@@ -309,8 +309,10 @@ export default function AdminDonationsPage() {
                   filteredDonations.map((d) => (
                     <tr key={d.id} className="hover:bg-slate-900/10 transition-colors">
                       <td className="px-6 py-4">
-                        <div className="font-semibold text-white">{d.donor?.name}</div>
-                        <div className="text-xs text-slate-500 mt-0.5">{d.donor?.phone}</div>
+                        <div className="font-semibold text-white"><bdi>{d.donor?.name}</bdi></div>
+                        <div className="text-xs text-slate-500 mt-0.5">
+                          <span dir="ltr">{d.donor?.phone}</span>
+                        </div>
                       </td>
                       <td className="px-6 py-4 font-bold text-white">
                         {d.amount} <span className="text-xs text-emerald-400 font-bold">{t('egp')}</span>
@@ -376,8 +378,10 @@ export default function AdminDonationsPage() {
                   <div key={d.id} className="p-4 space-y-3">
                     <div className="flex justify-between items-start">
                       <div>
-                        <div className="font-semibold text-white text-sm">{d.donor?.name}</div>
-                        <div className="text-xs text-slate-500 mt-0.5">{d.donor?.phone}</div>
+                        <div className="font-semibold text-white text-sm"><bdi>{d.donor?.name}</bdi></div>
+                        <div className="text-xs text-slate-500 mt-0.5">
+                          <span dir="ltr">{d.donor?.phone}</span>
+                        </div>
                       </div>
                       <div>{getStatusBadge(d.status)}</div>
                     </div>
@@ -469,11 +473,11 @@ export default function AdminDonationsPage() {
                   <div className="bg-slate-950/40 p-4 rounded-xl border border-slate-900 space-y-3 text-xs">
                     <div className="flex justify-between">
                       <span className="text-slate-500 font-semibold">{language === 'ar' ? 'اسم المتبرع' : 'Donor Name'}</span>
-                      <span className="text-white font-bold">{selectedDonation.donor?.name}</span>
+                      <span className="text-white font-bold"><bdi>{selectedDonation.donor?.name}</bdi></span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500 font-semibold">{language === 'ar' ? 'رقم الهاتف' : 'Phone'}</span>
-                      <span className="text-white font-mono">{selectedDonation.donor?.phone}</span>
+                      <span className="text-white font-mono" dir="ltr">{selectedDonation.donor?.phone}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500 font-semibold">{language === 'ar' ? 'القيمة' : 'Amount'}</span>

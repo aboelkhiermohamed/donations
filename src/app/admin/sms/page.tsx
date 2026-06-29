@@ -548,8 +548,8 @@ export default function AdminSMSMonitorPage() {
                     pendingCandidates.map((candidate) => (
                       <div key={candidate.id} className="p-4 bg-slate-950 border border-slate-900 hover:border-emerald-500/20 rounded-2xl flex items-center justify-between gap-4 text-xs hover:bg-slate-900/20 transition-all">
                         <div className="space-y-1">
-                          <span className="font-extrabold text-white text-sm">{candidate.donor?.name}</span>
-                          <span className="text-slate-500 block font-mono">{candidate.donor?.phone}</span>
+                          <span className="font-extrabold text-white text-sm"><bdi>{candidate.donor?.name}</bdi></span>
+                          <span className="text-slate-500 block font-mono" dir="ltr">{candidate.donor?.phone}</span>
                           <span className="text-[10px] text-slate-500 block">
                             {language === 'ar' ? 'سجل في: ' : 'Submitted: '}{new Date(candidate.created_at).toLocaleString()}
                           </span>

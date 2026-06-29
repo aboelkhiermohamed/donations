@@ -761,9 +761,9 @@ export default function PublicDonationPage() {
                   <div key={item.id} className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full bg-emerald-400 glow-green" />
                     <span className="text-sm font-semibold text-slate-350">
-                      {item.masked_name || t('anonymous')}
+                      <bdi>{item.masked_name || t('anonymous')}</bdi>
                     </span>
-                    <span className="text-[10px] font-mono text-slate-500">
+                    <span className="text-[10px] font-mono text-slate-500" dir="ltr">
                       ({item.masked_phone})
                     </span>
                     <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 font-bold border border-emerald-900/40">
@@ -1384,10 +1384,10 @@ export default function PublicDonationPage() {
                   recentDonations.map((item) => (
                     <tr key={item.id} className="hover:bg-slate-900/10 transition-colors">
                       <td className="px-6 py-4 font-bold text-white">
-                        {item.masked_name || t('anonymous')}
+                        <bdi>{item.masked_name || t('anonymous')}</bdi>
                       </td>
                       <td className="px-6 py-4 font-mono text-slate-400">
-                        {item.masked_phone || '—'}
+                        <span dir="ltr">{item.masked_phone || '—'}</span>
                       </td>
                       <td className="px-6 py-4 font-black text-emerald-400 text-sm">
                         {item.amount} {t('egp')}
@@ -1431,9 +1431,9 @@ export default function PublicDonationPage() {
                   <div key={item.id} className="p-4 space-y-3">
                     <div className="flex justify-between items-center">
                       <span className="font-bold text-white text-sm">
-                        {item.masked_name || t('anonymous')}
+                        <bdi>{item.masked_name || t('anonymous')}</bdi>
                       </span>
-                      <span className="text-[10px] text-slate-500 font-mono">
+                      <span className="text-[10px] text-slate-500 font-mono" dir="ltr">
                         {item.masked_phone || '—'}
                       </span>
                     </div>
