@@ -525,28 +525,28 @@ export default function PublicDonationPage() {
   }
 
   return (
-    <div className="min-h-screen relative pb-16 flex flex-col font-sans" dir={dir}>
+    <div className="min-h-screen relative pb-16 flex flex-col font-sans overflow-x-hidden" dir={dir}>
       {/* Background Orbs */}
       <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-[120px] pointer-events-none -z-10" />
       <div className="absolute top-1/3 right-1/4 w-[400px] h-[400px] bg-teal-500/10 rounded-full blur-[100px] pointer-events-none -z-10" />
 
       {/* HEADER NAVBAR */}
-      <header className="w-full max-w-7xl mx-auto px-4 md:px-8 py-6 flex items-center justify-between z-10">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center shadow-lg shadow-emerald-500/20">
-            <Heart className="w-5 h-5 text-slate-950 fill-slate-950" />
+      <header className="w-full max-w-7xl mx-auto px-4 md:px-8 py-4 md:py-6 flex flex-row items-center justify-between z-10 gap-2">
+        <div className="flex items-center gap-1.5 md:gap-3">
+          <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg md:rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center shadow-lg shadow-emerald-500/20 flex-shrink-0">
+            <Heart className="w-4 h-4 md:w-5 md:h-5 text-slate-950 fill-slate-950" />
           </div>
-          <span className="text-xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">
+          <span className="text-base md:text-xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400 whitespace-nowrap">
             donations 9th Batch
           </span>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5 md:gap-3 flex-shrink-0">
           <button 
             onClick={toggleLanguage}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-900/60 border border-slate-800 text-sm font-semibold hover:bg-slate-800 transition-colors"
+            className="flex items-center gap-1.5 px-2 md:px-4 py-1.5 md:py-2 rounded-lg bg-slate-900/60 border border-slate-800 text-xs md:text-sm font-semibold hover:bg-slate-800 transition-colors"
           >
-            <Globe className="w-4 h-4 text-emerald-450" />
+            <Globe className="w-3.5 h-3.5 text-emerald-450" />
             <span>{language === 'ar' ? 'English' : 'العربية'}</span>
           </button>
 
@@ -554,14 +554,14 @@ export default function PublicDonationPage() {
             isLoggedIn ? (
               <Link 
                 href="/admin/dashboard"
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 text-sm font-extrabold shadow-md hover:brightness-105 transition-all"
+                className="flex items-center gap-1.5 px-2.5 md:px-4 py-1.5 md:py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 text-xs md:text-sm font-extrabold shadow-md hover:brightness-105 transition-all"
               >
                 <span>{language === 'ar' ? 'لوحة التحكم' : 'Dashboard'}</span>
               </Link>
             ) : (
               <Link 
                 href="/admin/login"
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-900/60 border border-slate-800 text-sm font-semibold hover:bg-slate-800 transition-colors text-slate-300"
+                className="flex items-center gap-1.5 px-2.5 md:px-4 py-1.5 md:py-2 rounded-lg bg-slate-900/60 border border-slate-800 text-xs md:text-sm font-semibold hover:bg-slate-800 transition-colors text-slate-300"
               >
                 <span>{language === 'ar' ? 'دخول المشرف' : 'Admin Login'}</span>
               </Link>
@@ -1283,15 +1283,15 @@ export default function PublicDonationPage() {
             </p>
           </div>
 
-          <div className="overflow-x-auto rounded-xl border border-slate-900 bg-slate-950/40">
+          <div className="overflow-x-auto rounded-xl border border-slate-900 bg-slate-950/40 max-h-[350px] overflow-y-auto">
             <table className="w-full text-start border-collapse">
               <thead>
-                <tr className="border-b border-slate-900 bg-slate-900/30 text-slate-400 text-xs font-bold">
-                  <th className="px-6 py-3.5 text-start">{language === 'ar' ? 'المتبرع' : 'Donor Name'}</th>
-                  <th className="px-6 py-3.5 text-start">{language === 'ar' ? 'رقم الهاتف' : 'Phone Number'}</th>
-                  <th className="px-6 py-3.5 text-start">{language === 'ar' ? 'المبلغ' : 'Amount'}</th>
-                  <th className="px-6 py-3.5 text-start">{language === 'ar' ? 'طريقة الدفع' : 'Payment Method'}</th>
-                  <th className="px-6 py-3.5 text-start">{language === 'ar' ? 'تاريخ التوثيق' : 'Verification Date'}</th>
+                <tr className="border-b border-slate-900 bg-slate-900/80 text-slate-400 text-xs font-bold sticky top-0 z-10">
+                  <th className="px-6 py-3.5 text-start sticky top-0 bg-slate-950/90 backdrop-blur-sm z-10">{language === 'ar' ? 'المتبرع' : 'Donor Name'}</th>
+                  <th className="px-6 py-3.5 text-start sticky top-0 bg-slate-950/90 backdrop-blur-sm z-10">{language === 'ar' ? 'رقم الهاتف' : 'Phone Number'}</th>
+                  <th className="px-6 py-3.5 text-start sticky top-0 bg-slate-950/90 backdrop-blur-sm z-10">{language === 'ar' ? 'المبلغ' : 'Amount'}</th>
+                  <th className="px-6 py-3.5 text-start sticky top-0 bg-slate-950/90 backdrop-blur-sm z-10">{language === 'ar' ? 'طريقة الدفع' : 'Payment Method'}</th>
+                  <th className="px-6 py-3.5 text-start sticky top-0 bg-slate-950/90 backdrop-blur-sm z-10">{language === 'ar' ? 'تاريخ التوثيق' : 'Verification Date'}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-900 text-xs text-slate-300">
