@@ -39,26 +39,28 @@ export default function AdminReportsPage() {
   const { data: donations, isLoading } = useQuery<Donation[]>({
     queryKey: ['reportDonations', reportRange, startDate, endDate],
     queryFn: async () => {
+      const now = new Date();
+      const endOfToday = new Date(now);
+      endOfToday.setHours(23, 59, 59, 999);
+
       let startStr = startDate;
-      let endStr = endDate;
+      let endStr = endOfToday.toISOString();
 
       // Handle preset ranges
-      const now = new Date();
       if (reportRange === 'daily') {
-        const start = new Date();
+        const start = new Date(now);
         start.setHours(0, 0, 0, 0);
         startStr = start.toISOString();
-        endStr = now.toISOString();
       } else if (reportRange === 'weekly') {
-        const start = new Date();
+        const start = new Date(now);
         start.setDate(now.getDate() - 7);
+        start.setHours(0, 0, 0, 0);
         startStr = start.toISOString();
-        endStr = now.toISOString();
       } else if (reportRange === 'monthly') {
-        const start = new Date();
+        const start = new Date(now);
         start.setDate(now.getDate() - 30);
+        start.setHours(0, 0, 0, 0);
         startStr = start.toISOString();
-        endStr = now.toISOString();
       } else {
         // Custom dates
         const start = new Date(startDate);
