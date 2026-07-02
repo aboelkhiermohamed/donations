@@ -57,7 +57,7 @@ export function parseSMS(sender: string, message: string, receivedAt: string): P
     // Expected Arabic message example:
     // تم استلام مبلغ 3400 جنيه من رقم 01009746581 المسجل بإسم Mohamed G Ghazy على رقم محفظتك 01015339426. رقم العملية: 019417068125
     const amountMatch = message.match(/تم استلام مبلغ\s+(\d+(?:\.\d+)?)\s*(?:جنيه|ج\.م|جم)/);
-    const phoneMatch = message.match(/من رقم\s+(\d+)/);
+    const phoneMatch = message.match(/من\s+(?:رقم\s+)?(\d+)/);
     const nameMatch = message.match(/المسجل بإسم\s+([\s\S]+?)\s+على/) || message.match(/بإسم\s+([\s\S]+?)\s+على/);
     const txMatch = message.match(/رقم العملية:?\s*(\d+)/) || message.match(/العملية:?\s*(\d+)/);
      
