@@ -2359,6 +2359,27 @@ export default function PublicDonationPage() {
                 ? 'نظام تبرعات آمن وتلقائي لدعم حملة الدفعة التاسعة طب كفر الشيخ لتوفير الأجهزة الطبية الحيوية لمستشفى كفر الشيخ الجامعي.'
                 : 'A secure, automated donation system supporting the 9th Batch Kafr El-Sheikh Medicine campaign to provide critical medical equipment to the University Hospital.'}
             </p>
+            {language === 'ar' ? (
+              <div className="pt-3 border-t border-slate-900/60 mt-3 space-y-1">
+                <p className="text-xs text-emerald-405 font-bold flex items-center gap-1.5">
+                  <span>🤍</span>
+                  <span>هذا النظام صدقة جارية عن والد د. محمد أبو الخير.</span>
+                </p>
+                <p className="text-[10.5px] text-slate-500 font-normal pr-5">
+                  نسألكم الفاتحة والدعاء له بالرحمة والمغفرة.
+                </p>
+              </div>
+            ) : (
+              <div className="pt-3 border-t border-slate-900/60 mt-3 space-y-1">
+                <p className="text-xs text-emerald-450 font-bold flex items-center gap-1.5">
+                  <span>🤍</span>
+                  <span>This system is an ongoing charity (Sadqa Jariyah) for the father of Dr. Mohamed Abouelkhier.</span>
+                </p>
+                <p className="text-[10px] text-slate-500 font-normal pl-5">
+                  Please pray for his mercy and forgiveness.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Quick Links */}
