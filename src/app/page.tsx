@@ -5,23 +5,24 @@ import { useLanguage } from '@/context/LanguageContext';
 import { supabase } from '@/lib/supabase';
 import { Campaign, PaymentMethod } from '@/types';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { 
-  Heart, 
-  Coins, 
-  Users, 
-  TrendingUp, 
-  Clock, 
-  Award, 
-  Copy, 
-  Check, 
-  Globe, 
+import {
+  Heart,
+  Coins,
+  Users,
+  TrendingUp,
+  Clock,
+  Award,
+  Copy,
+  Check,
+  Globe,
   Image as ImageIcon,
   CheckCircle2,
   AlertCircle,
   Search,
   Trash2,
   Loader2,
-  ExternalLink
+  ExternalLink,
+  Share2
 } from 'lucide-react';
 import canvasConfetti from 'canvas-confetti';
 import Link from 'next/link';
@@ -53,7 +54,7 @@ const MOCK_CAMPAIGN: Campaign = {
 export default function PublicDonationPage() {
   const { language, dir, toggleLanguage, t } = useLanguage();
   const queryClient = useQueryClient();
-  
+
   // State
   const [isMounted, setIsMounted] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -67,10 +68,15 @@ export default function PublicDonationPage() {
   const [notes, setNotes] = useState('');
   const [screenshot, setScreenshot] = useState<File | null>(null);
   const [activeMobileTab, setActiveMobileTab] = useState<'campaign' | 'donate' | 'ledger'>('campaign');
-  
+
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+
+  // Share Card State
+  const [shareImage, setShareImage] = useState<string | null>(null);
+  const [isGeneratingShare, setIsGeneratingShare] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
 
   // Tracking State
   const [trackedDonations, setTrackedDonations] = useState<any[]>([]);
@@ -90,14 +96,14 @@ export default function PublicDonationPage() {
       const res = await fetch(`/api/donations/status?ids=${ids.join(',')}`);
       if (!res.ok) throw new Error('Failed to fetch status');
       const data = await res.json();
-      
+
       // Check if any donation transitioned from pending to verified
       setTrackedDonations(prev => {
         if (prev.length > 0) {
           data.forEach((newDonation: any) => {
             const oldDonation = prev.find(p => p.id === newDonation.id);
-            if (oldDonation && oldDonation.status === 'pending' && 
-                (newDonation.status === 'auto_verified' || newDonation.status === 'manual_verified')) {
+            if (oldDonation && oldDonation.status === 'pending' &&
+              (newDonation.status === 'auto_verified' || newDonation.status === 'manual_verified')) {
               // Trigger confetti!
               canvasConfetti({
                 particleCount: 80,
@@ -129,10 +135,10 @@ export default function PublicDonationPage() {
       const res = await fetch(`/api/donations/status?phone=${encodeURIComponent(trackingPhone.trim())}`);
       if (!res.ok) throw new Error('Query failed');
       const data = await res.json();
-      
+
       setTrackedDonations(data);
       setLastTrackedUpdate(new Date());
-      
+
       if (data.length === 0) {
         setTrackingError(t('track_no_results'));
       } else {
@@ -167,11 +173,11 @@ export default function PublicDonationPage() {
         .select('*')
         .eq('key', 'payment_accounts')
         .maybeSingle();
-      
+
       if (error) throw error;
-      return data?.value || { 
-        vodafone_cash: '01015339426', 
-        vodafone_cash_2: '', 
+      return data?.value || {
+        vodafone_cash: '01015339426',
+        vodafone_cash_2: '',
         instapay_address: '01015339426@instapay',
         instapay_phone: '01015339426',
         instapay_payment_link: '',
@@ -199,7 +205,7 @@ export default function PublicDonationPage() {
         .select('*')
         .limit(1)
         .maybeSingle();
-      
+
       if (error) {
         console.error("Supabase campaign query error:", error);
         throw error;
@@ -226,10 +232,10 @@ export default function PublicDonationPage() {
 
       const totalReceived = approved.reduce((sum, d) => sum + Number(d.amount), 0);
       const pendingSum = pending.reduce((sum, d) => sum + Number(d.amount), 0);
-      
+
       const largest = approved.length > 0 ? Math.max(...approved.map(d => Number(d.amount))) : 0;
-      const latestTimestamp = approved.length > 0 
-        ? approved.reduce((max, d) => d.created_at > max ? d.created_at : max, approved[0].created_at) 
+      const latestTimestamp = approved.length > 0
+        ? approved.reduce((max, d) => d.created_at > max ? d.created_at : max, approved[0].created_at)
         : null;
 
       // Uniq donors
@@ -269,7 +275,7 @@ export default function PublicDonationPage() {
   // Mount state setup
   useEffect(() => {
     setIsMounted(true);
-    
+
     // Check initial session
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -297,7 +303,7 @@ export default function PublicDonationPage() {
   // Polling effect for pending tracked donations
   useEffect(() => {
     if (!isMounted) return;
-    
+
     // Check if we have any pending donations
     const hasPending = trackedDonations.some(d => d.status === 'pending');
     if (!hasPending) return;
@@ -337,11 +343,339 @@ export default function PublicDonationPage() {
     setTimeout(() => setCopiedType(null), 2000);
   };
 
+  // Generate a share card on a canvas
+  const generateShareCard = async () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1080;
+    canvas.height = 1080;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    // Background Gradient
+    const bgGrad = ctx.createRadialGradient(540, 540, 100, 540, 540, 800);
+    bgGrad.addColorStop(0, '#0f172a'); // slate-900
+    bgGrad.addColorStop(1, '#020617'); // slate-950
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, 1080, 1080);
+
+    // Glow Orbs
+    const trGrad = ctx.createRadialGradient(1080, 0, 50, 1080, 0, 500);
+    trGrad.addColorStop(0, 'rgba(16, 185, 129, 0.15)'); // emerald
+    trGrad.addColorStop(1, 'rgba(16, 185, 129, 0)');
+    ctx.fillStyle = trGrad;
+    ctx.beginPath();
+    ctx.arc(1080, 0, 500, 0, Math.PI * 2);
+    ctx.fill();
+
+    const blGrad = ctx.createRadialGradient(0, 1080, 50, 0, 1080, 500);
+    blGrad.addColorStop(0, 'rgba(45, 212, 191, 0.15)'); // teal
+    blGrad.addColorStop(1, 'rgba(45, 212, 191, 0)');
+    ctx.fillStyle = blGrad;
+    ctx.beginPath();
+    ctx.arc(0, 1080, 500, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Draw Rounded Logo box
+    const logoGrad = ctx.createLinearGradient(80, 80, 160, 160);
+    logoGrad.addColorStop(0, '#10b981');
+    logoGrad.addColorStop(1, '#2dd4bf');
+    ctx.fillStyle = logoGrad;
+    ctx.beginPath();
+    const r = 20;
+    const rx = 80, ry = 80, rw = 80, rh = 80;
+    ctx.moveTo(rx + r, ry);
+    ctx.lineTo(rx + rw - r, ry);
+    ctx.quadraticCurveTo(rx + rw, ry, rx + rw, ry + r);
+    ctx.lineTo(rx + rw, ry + rh - r);
+    ctx.quadraticCurveTo(rx + rw, ry + rh, rx + rw - r, ry + rh);
+    ctx.lineTo(rx + r, ry + rh);
+    ctx.quadraticCurveTo(rx, ry + rh, rx, ry + rh - r);
+    ctx.lineTo(rx, ry + r);
+    ctx.quadraticCurveTo(rx, ry, rx + r, ry);
+    ctx.closePath();
+    ctx.fill();
+
+    // Heart Emoji
+    ctx.font = '40px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('❤️', 120, 120);
+
+    // Platform title next to or aligned with logo
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 36px sans-serif';
+    ctx.textBaseline = 'middle';
+    if (language === 'ar') {
+      ctx.textAlign = 'right';
+      ctx.fillText('منصة تبرع الدفعة التاسعة', 1000, 120);
+    } else {
+      ctx.textAlign = 'left';
+      ctx.fillText('donations 9th Batch', 185, 120);
+    }
+
+    // Campaign Title wrap & draw
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 44px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+
+    const wrapText = (text: string, x: number, y: number, maxWidth: number, lineHeight: number) => {
+      const words = text.split(' ');
+      let line = '';
+      let currentY = y;
+      
+      for (let n = 0; n < words.length; n++) {
+        let testLine = line + words[n] + ' ';
+        let metrics = ctx.measureText(testLine);
+        let testWidth = metrics.width;
+        if (testWidth > maxWidth && n > 0) {
+          ctx.fillText(line, x, currentY);
+          line = words[n] + ' ';
+          currentY += lineHeight;
+        } else {
+          line = testLine;
+        }
+      }
+      ctx.fillText(line, x, currentY);
+      return currentY + lineHeight;
+    };
+
+    const displayTitle = language === 'ar' ? displayCampaignName : displayCampaignName;
+    const nextY = wrapText(displayTitle, 540, 230, 920, 65);
+
+    // Middle Glass card
+    const cardY = nextY + 30;
+    const cardH = 430;
+    
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.65)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+    ctx.lineWidth = 2;
+    
+    ctx.beginPath();
+    const cr = 30;
+    const cx = 80, cy = cardY, cw = 920, ch = cardH;
+    ctx.moveTo(cx + cr, cy);
+    ctx.lineTo(cx + cw - cr, cy);
+    ctx.quadraticCurveTo(cx + cw, cy, cx + cw, cy + cr);
+    ctx.lineTo(cx + cw, cy + ch - cr);
+    ctx.quadraticCurveTo(cx + cw, cy + ch, cx + cw - cr, cy + ch);
+    ctx.lineTo(cx + cr, cy + ch);
+    ctx.quadraticCurveTo(cx, cy + ch, cx, cy + ch - cr);
+    ctx.lineTo(cx, cy + cr);
+    ctx.quadraticCurveTo(cx, cy, cx + cr, cy);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Large Percentage Progress text
+    ctx.fillStyle = '#10b981';
+    ctx.font = '900 110px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText(`${percentVal}%`, 540, cardY + 50);
+
+    // Progress Subtitle
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = 'bold 26px sans-serif';
+    ctx.fillText(language === 'ar' ? 'نسبة إنجاز الحملة' : 'Campaign Progress Completed', 540, cardY + 175);
+
+    // Progress bar track
+    ctx.fillStyle = '#020617';
+    ctx.beginPath();
+    const br = 10;
+    const bx = 140, by = cardY + 235, bw = 800, bh = 20;
+    ctx.moveTo(bx + br, by);
+    ctx.lineTo(bx + bw - br, by);
+    ctx.quadraticCurveTo(bx + bw, by, bx + bw, by + br);
+    ctx.lineTo(bx + bw, by + bh - br);
+    ctx.quadraticCurveTo(bx + bw, by + bh, bx + bw - br, by + bh);
+    ctx.lineTo(bx + br, by + bh);
+    ctx.quadraticCurveTo(bx, by + bh, bx, by + bh - br);
+    ctx.lineTo(bx, by + br);
+    ctx.quadraticCurveTo(bx, by, bx + br, by);
+    ctx.closePath();
+    ctx.fill();
+
+    // Progress bar fill
+    const fillW = Math.min(800, Math.max(0, (percentVal / 100) * 800));
+    if (fillW > 0) {
+      const barGrad = ctx.createLinearGradient(140, 0, 940, 0);
+      barGrad.addColorStop(0, '#10b981');
+      barGrad.addColorStop(1, '#2dd4bf');
+      ctx.fillStyle = barGrad;
+      
+      ctx.beginPath();
+      ctx.moveTo(bx + br, by);
+      ctx.lineTo(bx + fillW - br, by);
+      ctx.quadraticCurveTo(bx + fillW, by, bx + fillW, by + br);
+      ctx.lineTo(bx + fillW, by + bh - br);
+      ctx.quadraticCurveTo(bx + fillW, by + bh, bx + fillW - br, by + bh);
+      ctx.lineTo(bx + br, by + bh);
+      ctx.quadraticCurveTo(bx, by + bh, bx, by + bh - br);
+      ctx.lineTo(bx, by + br);
+      ctx.quadraticCurveTo(bx, by, bx + br, by);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Stats Grid inside card
+    const statsY = cardY + 295;
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = 'bold 24px sans-serif';
+    
+    if (language === 'ar') {
+      ctx.textAlign = 'right';
+      ctx.fillText('المبلغ المجمع', 940, statsY);
+      ctx.textAlign = 'left';
+      ctx.fillText('المبلغ المستهدف', 140, statsY);
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '900 36px sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(`${collectedVal.toLocaleString()} ج.م`, 940, statsY + 45);
+      ctx.textAlign = 'left';
+      ctx.fillText(`${targetVal.toLocaleString()} ج.م`, 140, statsY + 45);
+    } else {
+      ctx.textAlign = 'left';
+      ctx.fillText('Collected Amount', 140, statsY);
+      ctx.textAlign = 'right';
+      ctx.fillText('Target Goal', 940, statsY);
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '900 36px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(`${collectedVal.toLocaleString()} EGP`, 140, statsY + 45);
+      ctx.textAlign = 'right';
+      ctx.fillText(`${targetVal.toLocaleString()} EGP`, 940, statsY + 45);
+    }
+
+    // Footer section (QR code & scan instructions)
+    const footerY = cardY + cardH + 40;
+
+    try {
+      const qrImg = new Image();
+      qrImg.crossOrigin = 'anonymous';
+      
+      const loadQR = new Promise((res, rej) => {
+        qrImg.onload = res;
+        qrImg.onerror = rej;
+      });
+
+      qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&color=020617&bgcolor=f8fafc&data=${encodeURIComponent(window.location.href)}`;
+      await loadQR;
+
+      ctx.fillStyle = '#f8fafc';
+      ctx.beginPath();
+      const qrr = 15;
+      const qx = 80, qy = footerY, qw = 170, qh = 170;
+      ctx.moveTo(qx + qrr, qy);
+      ctx.lineTo(qx + qw - qrr, qy);
+      ctx.quadraticCurveTo(qx + qw, qy, qx + qw, qy + qrr);
+      ctx.lineTo(qx + qw, qy + qh - qrr);
+      ctx.quadraticCurveTo(qx + qw, qy + qh, qx + qw - qrr, qy + qh);
+      ctx.lineTo(qx + qrr, qy + qh);
+      ctx.quadraticCurveTo(qx, qy + qh, qx, qy + qh - qrr);
+      ctx.lineTo(qx, qy + qrr);
+      ctx.quadraticCurveTo(qx, qy, qx + qrr, qy);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.drawImage(qrImg, 90, footerY + 10, 150, 150);
+    } catch (e) {
+      console.error("Canvas QR drawing failed", e);
+      ctx.fillStyle = 'rgba(255,255,255,0.05)';
+      ctx.beginPath();
+      const qrr = 15;
+      const qx = 80, qy = footerY, qw = 170, qh = 170;
+      ctx.moveTo(qx + qrr, qy);
+      ctx.lineTo(qx + qw - qrr, qy);
+      ctx.quadraticCurveTo(qx + qw, qy, qx + qw, qy + qrr);
+      ctx.lineTo(qx + qw, qy + qh - qrr);
+      ctx.quadraticCurveTo(qx + qw, qy + qh, qx + qw - qrr, qy + qh);
+      ctx.lineTo(qx + qrr, qy + qh);
+      ctx.quadraticCurveTo(qx, qy + qh, qx, qy + qh - qrr);
+      ctx.lineTo(qx, qy + qrr);
+      ctx.quadraticCurveTo(qx, qy, qx + qrr, qy);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 30px sans-serif';
+    ctx.textBaseline = 'middle';
+    
+    if (language === 'ar') {
+      ctx.textAlign = 'right';
+      ctx.fillText('مسح الرمز للتبرع والمشاركة في الثواب', 1000, footerY + 60);
+      ctx.fillStyle = '#10b981';
+      ctx.font = 'bold 22px sans-serif';
+      ctx.fillText(window.location.host, 1000, footerY + 110);
+    } else {
+      ctx.textAlign = 'left';
+      ctx.fillText('Scan QR to support the campaign & share', 280, footerY + 60);
+      ctx.fillStyle = '#10b981';
+      ctx.font = 'bold 22px sans-serif';
+      ctx.fillText(window.location.host, 280, footerY + 110);
+    }
+
+    return canvas.toDataURL('image/png');
+  };
+
+  const handleShareClick = async () => {
+    setIsGeneratingShare(true);
+    try {
+      const dataUrl = await generateShareCard();
+      if (dataUrl) {
+        setShareImage(dataUrl);
+        setShowShareModal(true);
+      }
+    } catch (e) {
+      console.error(e);
+      alert(language === 'ar' ? 'حدث خطأ أثناء توليد الصورة' : 'Error generating share card');
+    } finally {
+      setIsGeneratingShare(false);
+    }
+  };
+
+  const handleDownloadShareImage = () => {
+    if (!shareImage) return;
+    const a = document.createElement('a');
+    a.href = shareImage;
+    a.download = `donations-progress-${new Date().toISOString().split('T')[0]}.png`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  const handleNativeShare = async () => {
+    if (!shareImage) return;
+    try {
+      const response = await fetch(shareImage);
+      const blob = await response.blob();
+      const file = new File([blob], 'campaign-progress.png', { type: 'image/png' });
+      
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: language === 'ar' ? 'حملة الدفعة التاسعة طب كفر الشيخ' : '9th Batch Donations Campaign',
+          text: language === 'ar' ? 'ادعم معنا حملة توفير جهاز التنفس وجهاز ABG' : 'Support our ventilator & ABG campaign',
+        });
+      } else {
+        await navigator.clipboard.writeText(window.location.href);
+        alert(language === 'ar' ? 'تم نسخ رابط الحمله لمشاركتها!' : 'Campaign link copied to clipboard!');
+      }
+    } catch (e) {
+      console.error("Native share failed", e);
+      await navigator.clipboard.writeText(window.location.href);
+      alert(language === 'ar' ? 'تم نسخ رابط الحمله لمشاركتها!' : 'Campaign link copied to clipboard!');
+    }
+  };
+
   // Form Validation
   const validateForm = () => {
     const errors: Record<string, string> = {};
     if (!name.trim()) errors.name = language === 'ar' ? 'الاسم مطلوب' : 'Name is required';
-    
+
     const phoneRegex = /^01[0125]\d{8}$/;
     if (!phone.trim()) {
       errors.phone = language === 'ar' ? 'رقم الهاتف مطلوب' : 'Phone number is required';
@@ -428,7 +762,7 @@ export default function PublicDonationPage() {
       // Success sequence
       setIsSubmitting(false);
       setSubmitSuccess(true);
-      
+
       // Trigger canvas confetti
       canvasConfetti({
         particleCount: 120,
@@ -466,12 +800,12 @@ export default function PublicDonationPage() {
   const displayCampaignDesc = language === 'ar' ? activeCampaign.description_ar : activeCampaign.description;
   const displayOrganizer = language === 'ar' ? activeCampaign.organizer_ar : activeCampaign.organizer;
   const targetVal = Number(activeCampaign.target_amount ?? MOCK_CAMPAIGN.target_amount);
-  
+
   // Real-time values or fallback to MOCK
-  const collectedVal = stats 
-    ? stats.totalReceived 
+  const collectedVal = stats
+    ? stats.totalReceived
     : Number(activeCampaign.collected_amount);
-  
+
   const remainingVal = Math.max(0, targetVal - collectedVal);
   const percentVal = Math.min(100, Math.round((collectedVal / targetVal) * 100));
 
@@ -493,7 +827,7 @@ export default function PublicDonationPage() {
         {/* Main Grid skeleton */}
         <main className="flex-1 w-full max-w-7xl mx-auto px-4 md:px-8 space-y-12">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            
+
             {/* Left column skeleton */}
             <div className="lg:col-span-8 space-y-6">
               <div className="space-y-3">
@@ -545,7 +879,7 @@ export default function PublicDonationPage() {
         </div>
 
         <div className="flex items-center gap-1.5 md:gap-3 flex-shrink-0">
-          <button 
+          <button
             onClick={toggleLanguage}
             className="flex items-center gap-1.5 px-2 md:px-4 py-1.5 md:py-2 rounded-lg bg-slate-900/60 border border-slate-800 text-xs md:text-sm font-semibold hover:bg-slate-800 transition-colors"
           >
@@ -555,14 +889,14 @@ export default function PublicDonationPage() {
 
           {isMounted && (
             isLoggedIn ? (
-              <Link 
+              <Link
                 href="/admin/dashboard"
                 className="flex items-center gap-1.5 px-2.5 md:px-4 py-1.5 md:py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 text-xs md:text-sm font-extrabold shadow-md hover:brightness-105 transition-all"
               >
                 <span>{language === 'ar' ? 'لوحة التحكم' : 'Dashboard'}</span>
               </Link>
             ) : (
-              <Link 
+              <Link
                 href="/admin/login"
                 className="flex items-center gap-1.5 px-2.5 md:px-4 py-1.5 md:py-2 rounded-lg bg-slate-900/60 border border-slate-800 text-xs md:text-sm font-semibold hover:bg-slate-800 transition-colors text-slate-300"
               >
@@ -581,33 +915,30 @@ export default function PublicDonationPage() {
             <button
               type="button"
               onClick={() => setActiveMobileTab('campaign')}
-              className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-all text-center ${
-                activeMobileTab === 'campaign'
+              className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-all text-center ${activeMobileTab === 'campaign'
                   ? 'bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 shadow-md font-extrabold'
                   : 'text-slate-400 hover:text-white'
-              }`}
+                }`}
             >
               {t('tab_campaign')}
             </button>
             <button
               type="button"
               onClick={() => setActiveMobileTab('donate')}
-              className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-all text-center ${
-                activeMobileTab === 'donate'
+              className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-all text-center ${activeMobileTab === 'donate'
                   ? 'bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 shadow-md font-extrabold'
                   : 'text-slate-400 hover:text-white'
-              }`}
+                }`}
             >
               {t('tab_donate')}
             </button>
             <button
               type="button"
               onClick={() => setActiveMobileTab('ledger')}
-              className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-all text-center ${
-                activeMobileTab === 'ledger'
+              className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-all text-center ${activeMobileTab === 'ledger'
                   ? 'bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 shadow-md font-extrabold'
                   : 'text-slate-400 hover:text-white'
-              }`}
+                }`}
             >
               {t('tab_ledger')}
             </button>
@@ -622,21 +953,21 @@ export default function PublicDonationPage() {
         )}
         {/* Campaign Main Grid */}
         <div className={`grid grid-cols-1 lg:grid-cols-12 gap-8 items-start ${activeMobileTab === 'campaign' ? 'block' : 'hidden lg:grid'}`}>
-          
+
           {/* LEFT COLUMN: Campaign Content (col-span-8) */}
           <div className="lg:col-span-8 space-y-6">
-            
+
             {/* Title & Organizer Info */}
             <div className="space-y-3">
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                 <span>{language === 'ar' ? 'حملة تبرع معتمدة وموثقة' : 'Verified Donation Campaign'}</span>
               </div>
-              
+
               <h1 className="text-2xl md:text-4xl font-extrabold text-white tracking-tight leading-tight">
                 {displayCampaignName}
               </h1>
-              
+
               <div className="text-xs text-slate-400 font-medium">
                 {language === 'ar' ? 'بإشراف وتنظيم:' : 'Organized by:'} <span className="text-white font-bold">{displayOrganizer}</span>
               </div>
@@ -644,8 +975,8 @@ export default function PublicDonationPage() {
 
             {/* Cover Image */}
             <div className="w-full h-64 md:h-[400px] rounded-2xl overflow-hidden border border-slate-900 shadow-md">
-              <img 
-                src={activeCampaign.cover_image || "/campaign_cover.png"} 
+              <img
+                src={activeCampaign.cover_image || "/campaign_cover.png"}
                 alt={displayCampaignName}
                 className="w-full h-full object-cover"
                 onError={(e) => {
@@ -662,22 +993,87 @@ export default function PublicDonationPage() {
             </div>
 
             {/* Description Card */}
-            <div className="bg-slate-900/10 border border-slate-900/60 p-6 rounded-2xl space-y-4">
-              <h3 className="text-white font-bold text-base border-b border-slate-800 pb-2">
-                {language === 'ar' ? 'عن الحملة وغايتها' : 'About the Campaign'}
-              </h3>
-              <p className="text-slate-300 text-[14.5px] leading-relaxed whitespace-pre-wrap font-normal">
-                {displayCampaignDesc}
-              </p>
+            <div className="bg-slate-900/10 border border-slate-900/60 p-6 rounded-2xl space-y-6">
+              <div className="space-y-3">
+                <h3 className="text-white font-bold text-base border-b border-slate-800 pb-2 flex items-center gap-2">
+                  <Heart className="w-4 h-4 text-emerald-450 fill-emerald-450/20" />
+                  <span>{language === 'ar' ? 'عن الحملة وغايتها' : 'About the Campaign'}</span>
+                </h3>
+                <p className="text-slate-300 text-[14.5px] leading-relaxed whitespace-pre-wrap font-normal">
+                  {displayCampaignDesc}
+                </p>
+              </div>
+
+              {/* Target Equipment Cards */}
+              <div className="space-y-4 pt-2">
+                <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
+                  {language === 'ar' ? 'الأجهزة الطبية المستهدفة وتوزيع الدعم' : 'Target Medical Equipment'}
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  
+                  {/* Equipment 1: Ventilator */}
+                  <div className="glass-panel p-5 rounded-xl border border-slate-800/80 bg-slate-950/20 hover:border-slate-800 transition-all space-y-3 relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-xl pointer-events-none" />
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="w-9 h-9 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400">
+                        {/* Wind / Ventilator icon */}
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                        </svg>
+                      </div>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-950/40 border border-rose-900/30 text-rose-400">
+                        {language === 'ar' ? 'عاجل جداً' : 'Urgent'}
+                      </span>
+                    </div>
+                    <div>
+                      <h5 className="text-sm font-bold text-white">
+                        {language === 'ar' ? 'جهاز تنفس صناعي حديث' : 'Medical Ventilator'}
+                      </h5>
+                      <p className="text-slate-400 text-xs mt-1 leading-relaxed">
+                        {language === 'ar' 
+                          ? 'توفير جهاز تنفس صناعي كامل المواصفات لدعم مرضى الفشل التنفسي بالعناية المركزة.'
+                          : 'High-end ventilator to provide critical breathing support for ICU patients.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Equipment 2: ABG Analyzer */}
+                  <div className="glass-panel p-5 rounded-xl border border-slate-800/80 bg-slate-950/20 hover:border-slate-800 transition-all space-y-3 relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-teal-500/5 rounded-full blur-xl pointer-events-none" />
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="w-9 h-9 rounded-lg bg-teal-500/10 flex items-center justify-center text-teal-400">
+                        {/* Droplet / blood icon */}
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
+                        </svg>
+                      </div>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-teal-950/40 border border-teal-900/30 text-teal-450">
+                        {language === 'ar' ? 'مستهدف' : 'Targeted'}
+                      </span>
+                    </div>
+                    <div>
+                      <h5 className="text-sm font-bold text-white">
+                        {language === 'ar' ? 'جهاز تحليل غازات الدم (ABG)' : 'ABG Blood Gas Analyzer'}
+                      </h5>
+                      <p className="text-slate-400 text-xs mt-1 leading-relaxed">
+                        {language === 'ar' 
+                          ? 'جهاز متكامل لتحليل غازات الدم وضبط مستويات الأوكسجين والحموضة لمرضى الرعاية لحظياً.'
+                          : 'Essential blood gas analyzer for real-time patient pH and gas level monitoring.'}
+                      </p>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
             </div>
 
           </div>
 
           {/* RIGHT COLUMN: Sticky Progress Widget (col-span-4) */}
           <div className="lg:col-span-4 lg:sticky lg:top-6 space-y-6">
-            
+
             <div className="bg-slate-900/30 border border-slate-800/60 rounded-2xl p-6 space-y-6 shadow-xl">
-              
+
               {/* Collected and Progress */}
               <div className="space-y-3">
                 <div className="space-y-1">
@@ -691,7 +1087,7 @@ export default function PublicDonationPage() {
                 {/* Progress bar */}
                 <div className="space-y-1">
                   <div className="w-full h-2.5 bg-slate-950 rounded-full overflow-hidden border border-slate-900 relative">
-                    <div 
+                    <div
                       className="h-full bg-emerald-500 rounded-full"
                       style={{ width: `${percentVal}%` }}
                     />
@@ -720,20 +1116,42 @@ export default function PublicDonationPage() {
               </div>
 
               {/* Call-to-action Button */}
-              <button
-                onClick={() => {
-                  setActiveMobileTab('donate');
-                  setTimeout(() => {
-                    const formElement = document.querySelector('form');
-                    if (formElement) {
-                      formElement.scrollIntoView({ behavior: 'smooth' });
-                    }
-                  }, 100);
-                }}
-                className="w-full py-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:brightness-105 active:scale-[0.98] transition-all text-slate-950 font-black text-center text-sm shadow-lg shadow-emerald-500/10 cursor-pointer"
-              >
-                {language === 'ar' ? 'تبرع الآن للحملة' : 'Donate to Campaign'}
-              </button>
+              <div className="flex flex-col gap-2.5">
+                <button
+                  onClick={() => {
+                    setActiveMobileTab('donate');
+                    setTimeout(() => {
+                      const formElement = document.querySelector('form');
+                      if (formElement) {
+                        formElement.scrollIntoView({ behavior: 'smooth' });
+                      }
+                    }, 100);
+                  }}
+                  className="w-full py-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:brightness-105 active:scale-[0.98] transition-all text-slate-950 font-black text-center text-sm shadow-lg shadow-emerald-500/10 cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <Heart className="w-4 h-4 fill-slate-950" />
+                  <span>{language === 'ar' ? 'تبرع الآن للحملة' : 'Donate to Campaign'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleShareClick}
+                  disabled={isGeneratingShare}
+                  className="w-full py-3 rounded-xl bg-slate-900 border border-slate-800 hover:bg-slate-800 active:scale-[0.98] transition-all text-slate-300 font-bold text-center text-xs flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {isGeneratingShare ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>{language === 'ar' ? 'جاري توليد الصورة...' : 'Generating Image...'}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Share2 className="w-3.5 h-3.5 text-emerald-450" />
+                      <span>{language === 'ar' ? 'مشاركة تقدم الحملة (صورة)' : 'Share Campaign Progress (Image)'}</span>
+                    </>
+                  )}
+                </button>
+              </div>
 
               {/* Safety/Trust Badge */}
               <div className="flex items-center justify-center gap-2 text-[10px] text-slate-500 font-medium">
@@ -753,7 +1171,7 @@ export default function PublicDonationPage() {
         <div className={`w-full bg-slate-900/30 border border-slate-900 rounded-2xl overflow-hidden py-3 flex items-center relative ${activeMobileTab !== 'donate' ? 'flex' : 'hidden lg:flex'}`}>
           <div className="absolute left-0 top-0 bottom-0 w-24 bg-gradient-to-r from-slate-950 to-transparent z-10 pointer-events-none" />
           <div className="absolute right-0 top-0 bottom-0 w-24 bg-gradient-to-l from-slate-950 to-transparent z-10 pointer-events-none" />
-          
+
           <div className="flex-shrink-0 px-4 font-bold text-xs uppercase tracking-wider text-emerald-400 border-e border-slate-800 flex items-center gap-1.5 z-20">
             <Coins className="w-4 h-4" />
             {t('recent_donors_title')}
@@ -790,10 +1208,10 @@ export default function PublicDonationPage() {
 
         {/* BOTTOM SPLIT SECTION */}
         <div className={`grid grid-cols-1 lg:grid-cols-12 gap-8 ${activeMobileTab !== 'campaign' ? 'block' : 'hidden lg:grid'}`}>
-          
+
           {/* LEFT: DONATION INSTRUCTIONS & FORM */}
           <div className={`lg:col-span-7 space-y-6 ${activeMobileTab === 'donate' ? 'block' : 'hidden lg:block'}`}>
-            
+
             {/* Payment Instructions Card */}
             <div className="glass-panel rounded-2xl p-6 space-y-6">
               <div className="space-y-1">
@@ -808,22 +1226,20 @@ export default function PublicDonationPage() {
               <div className="grid grid-cols-2 gap-2 bg-slate-950/80 p-1 rounded-xl border border-slate-900">
                 <button
                   onClick={() => setPaymentMethod('vodafone_cash')}
-                  className={`py-3 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2.5 ${
-                    paymentMethod === 'vodafone_cash'
+                  className={`py-3 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2.5 ${paymentMethod === 'vodafone_cash'
                       ? 'bg-slate-900 border border-slate-800 text-red-550 shadow-md'
                       : 'text-slate-400 hover:text-white'
-                  }`}
+                    }`}
                 >
                   <img src="/vf_Logo.png" alt="Vodafone Cash" className="w-5 h-5 object-contain rounded-full bg-white p-0.5" />
                   {t('vfc_label')}
                 </button>
                 <button
                   onClick={() => setPaymentMethod('instapay')}
-                  className={`py-3 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2.5 ${
-                    paymentMethod === 'instapay'
+                  className={`py-3 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2.5 ${paymentMethod === 'instapay'
                       ? 'bg-slate-900 border border-slate-800 text-violet-400 shadow-md'
                       : 'text-slate-400 hover:text-white'
-                  }`}
+                    }`}
                 >
                   <img src="/InstaPay_Logo.png" alt="InstaPay" className="w-5 h-5 object-contain rounded bg-white p-0.5" />
                   {t('instapay_label')}
@@ -890,13 +1306,13 @@ export default function PublicDonationPage() {
               {/* InstaPay Details */}
               {paymentMethod === 'instapay' && (
                 <div className="space-y-6 bg-slate-950/20 p-5 rounded-2xl border border-slate-900 flex flex-col items-center">
-                  
+
                   {/* Top: InstaPay Logo */}
                   <div className="flex flex-col items-center space-y-2">
-                    <img 
-                      src="/InstaPay_Logo.png" 
-                      alt="InstaPay" 
-                      className="h-10 object-contain rounded bg-white px-2.5 py-1" 
+                    <img
+                      src="/InstaPay_Logo.png"
+                      alt="InstaPay"
+                      className="h-10 object-contain rounded bg-white px-2.5 py-1"
                     />
                     <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">
                       {language === 'ar' ? 'الدفع عبر تطبيق إنستاباي' : 'Pay via InstaPay App'}
@@ -986,9 +1402,9 @@ export default function PublicDonationPage() {
                   {/* QR Code Container */}
                   <div className="w-full max-w-sm bg-slate-950/60 p-5 rounded-xl border border-slate-900 flex flex-col items-center text-center space-y-4">
                     <div className="w-44 h-44 bg-white p-2.5 rounded-xl border border-slate-800 flex items-center justify-center overflow-hidden">
-                      <img 
-                        src={INSTAPAY_QR_URL || instapayQRUrl} 
-                        alt="InstaPay QR Code" 
+                      <img
+                        src={INSTAPAY_QR_URL || instapayQRUrl}
+                        alt="InstaPay QR Code"
                         className="w-full h-full object-contain"
                         onError={(e) => {
                           e.currentTarget.style.display = 'none';
@@ -998,8 +1414,8 @@ export default function PublicDonationPage() {
                     <div className="space-y-1">
                       <h4 className="text-white font-bold text-xs">{t('qr_title')}</h4>
                       <p className="text-slate-400 text-[10px] max-w-[250px] leading-relaxed mx-auto">
-                        {language === 'ar' 
-                          ? 'امسح الرمز ضوئياً عبر تطبيق إنستاباي لتجهيز معاملة التبرع مباشرة' 
+                        {language === 'ar'
+                          ? 'امسح الرمز ضوئياً عبر تطبيق إنستاباي لتجهيز معاملة التبرع مباشرة'
                           : 'Scan the QR code in the InstaPay app to set up your transaction.'}
                       </p>
                       <div className="inline-block mt-2 px-3 py-0.5 bg-emerald-950/40 border border-emerald-900/30 rounded-lg text-emerald-400 text-[10px] font-bold">
@@ -1061,7 +1477,7 @@ export default function PublicDonationPage() {
                                   </span>
                                 )}
                               </span>
-                              
+
                               {/* Badge Status */}
                               {d.status === 'pending' && (
                                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-900 border border-slate-800 text-slate-400 flex items-center gap-1 animate-pulse">
@@ -1112,8 +1528,8 @@ export default function PublicDonationPage() {
                     {/* Name */}
                     <div className="space-y-1.5">
                       <label className="text-slate-300 text-xs font-semibold">{t('field_name')}</label>
-                      <input 
-                        type="text" 
+                      <input
+                        type="text"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         className={`w-full glass-input px-4 py-3 rounded-xl text-sm ${formErrors.name ? 'border-red-500' : ''}`}
@@ -1125,8 +1541,8 @@ export default function PublicDonationPage() {
                     {/* Phone */}
                     <div className="space-y-1.5">
                       <label className="text-slate-300 text-xs font-semibold">{t('field_phone')}</label>
-                      <input 
-                        type="text" 
+                      <input
+                        type="text"
                         value={phone}
                         onChange={(e) => setPhone(e.target.value)}
                         className={`w-full glass-input px-4 py-3 rounded-xl text-sm ${formErrors.phone ? 'border-red-500' : ''}`}
@@ -1141,8 +1557,8 @@ export default function PublicDonationPage() {
                     {/* Amount */}
                     <div className="space-y-1.5">
                       <label className="text-slate-300 text-xs font-semibold">{t('field_amount')}</label>
-                      <input 
-                        type="number" 
+                      <input
+                        type="number"
                         value={amount}
                         onChange={(e) => setAmount(e.target.value)}
                         className={`w-full glass-input px-4 py-3 rounded-xl text-sm ${formErrors.amount ? 'border-red-500' : ''}`}
@@ -1155,8 +1571,8 @@ export default function PublicDonationPage() {
                     {/* Ref Number */}
                     <div className="space-y-1.5">
                       <label className="text-slate-300 text-xs font-semibold">{t('field_ref')}</label>
-                      <input 
-                        type="text" 
+                      <input
+                        type="text"
                         value={refNum}
                         onChange={(e) => setRefNum(e.target.value)}
                         className="w-full glass-input px-4 py-3 rounded-xl text-sm"
@@ -1170,8 +1586,8 @@ export default function PublicDonationPage() {
                     {/* Last 4 digits */}
                     <div className="space-y-1.5">
                       <label className="text-slate-300 text-xs font-semibold">{t('field_digits')}</label>
-                      <input 
-                        type="text" 
+                      <input
+                        type="text"
                         value={digits}
                         onChange={(e) => setDigits(e.target.value)}
                         maxLength={4}
@@ -1185,8 +1601,8 @@ export default function PublicDonationPage() {
                     <div className="space-y-1.5">
                       <label className="text-slate-300 text-xs font-semibold">{t('field_screenshot')}</label>
                       <div className="relative w-full h-[46px] rounded-xl glass-input border border-dashed border-slate-700 hover:border-emerald-500 flex items-center justify-center transition-colors overflow-hidden">
-                        <input 
-                          type="file" 
+                        <input
+                          type="file"
                           accept="image/*"
                           onChange={(e) => setScreenshot(e.target.files?.[0] || null)}
                           className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
@@ -1202,7 +1618,7 @@ export default function PublicDonationPage() {
                   {/* Notes */}
                   <div className="space-y-1.5">
                     <label className="text-slate-300 text-xs font-semibold">{t('field_notes')}</label>
-                    <textarea 
+                    <textarea
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
                       rows={2}
@@ -1228,7 +1644,7 @@ export default function PublicDonationPage() {
           <div className={`lg:col-span-5 space-y-6 ${activeMobileTab === 'ledger' ? 'block' : 'hidden lg:block'}`}>
             <div className="glass-panel rounded-2xl p-6 space-y-6 relative overflow-hidden">
               <div className="absolute -top-12 -right-12 w-24 h-24 bg-teal-500/10 rounded-full blur-xl pointer-events-none" />
-              
+
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-bold text-white flex items-center gap-2">
@@ -1245,7 +1661,7 @@ export default function PublicDonationPage() {
 
               {/* KPI stats Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                
+
                 {/* Stat block: total received */}
                 <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-900">
                   <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold">
@@ -1303,8 +1719,8 @@ export default function PublicDonationPage() {
                   <span className="text-slate-400 font-semibold">{t('stat_latest_donation')}</span>
                   <span className="text-white font-bold" dir="ltr">
                     {isMounted ? (
-                      stats?.latestTimestamp 
-                        ? new Date(stats.latestTimestamp).toLocaleTimeString(language === 'ar' ? 'ar-EG' : 'en-US', { hour: '2-digit', minute: '2-digit' }) 
+                      stats?.latestTimestamp
+                        ? new Date(stats.latestTimestamp).toLocaleTimeString(language === 'ar' ? 'ar-EG' : 'en-US', { hour: '2-digit', minute: '2-digit' })
                         : '—'
                     ) : (
                       '...'
@@ -1317,7 +1733,7 @@ export default function PublicDonationPage() {
             {/* TRACK YOUR DONATION CARD */}
             <div className="glass-panel rounded-2xl p-6 space-y-6 relative overflow-hidden">
               <div className="absolute -top-12 -left-12 w-24 h-24 bg-emerald-500/10 rounded-full blur-xl pointer-events-none" />
-              
+
               <div className="space-y-1">
                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
                   <Search className="w-5 h-5 text-emerald-400" />
@@ -1395,7 +1811,7 @@ export default function PublicDonationPage() {
                               </span>
                             )}
                           </span>
-                          
+
                           {/* Badge Status */}
                           {d.status === 'pending' && (
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-900 border border-slate-800 text-slate-400 flex items-center gap-1 animate-pulse">
@@ -1443,8 +1859,8 @@ export default function PublicDonationPage() {
                   {language === 'ar' ? 'كيف يعمل التحقق التلقائي؟' : 'How does Auto-Verification work?'}
                 </h4>
                 <p className="text-slate-400 text-xs leading-relaxed">
-                  {language === 'ar' 
-                    ? 'عند إرسال تبرعك، يقوم هاتف أندرويد متصل بنظامنا بالتقاط رسالة تأكيد الدفع القصيرة (SMS) التي تصل من محفظة فودافون كاش أو إشعار إنستاباي. يقوم محرك المطابقة لدينا بالربط بين التبرع والرسالة تلقائياً خلال ثوانٍ، وتأكيد العملية فوراً دون تدخل بشري.' 
+                  {language === 'ar'
+                    ? 'عند إرسال تبرعك، يقوم هاتف أندرويد متصل بنظامنا بالتقاط رسالة تأكيد الدفع القصيرة (SMS) التي تصل من محفظة فودافون كاش أو إشعار إنستاباي. يقوم محرك المطابقة لدينا بالربط بين التبرع والرسالة تلقائياً خلال ثوانٍ، وتأكيد العملية فوراً دون تدخل بشري.'
                     : 'Once you transfer and submit this form, a dedicated Android gateway device receives the official SMS from Vodafone Cash or InstaPay. Our parsing engine extracts transaction references and automatically approves the donation request in real time.'
                   }
                 </p>
@@ -1463,7 +1879,7 @@ export default function PublicDonationPage() {
               {language === 'ar' ? 'سجل المتبرعين الموثقين (الشفافية الكاملة)' : 'Verified Donors Live Ledger (Full Transparency)'}
             </h3>
             <p className="text-slate-400 text-xs leading-relaxed">
-              {language === 'ar' 
+              {language === 'ar'
                 ? 'سجل حي ومباشر للمدفوعات المعتمدة من واقع قاعدة البيانات لضمان الشفافية بنسبة 100%. يتم إخفاء أرقام الهواتف والأسماء لحماية الخصوصية.'
                 : 'Live log of verified donation payments connected to our ledger. Personal numbers and names are masked to respect privacy.'}
             </p>
@@ -1587,7 +2003,7 @@ export default function PublicDonationPage() {
       {/* FOOTER SECTION */}
       <footer className="w-full border-t border-slate-900 bg-slate-950/80 backdrop-blur-md mt-16 py-10 relative z-20">
         <div className="max-w-7xl mx-auto px-4 md:px-8 grid grid-cols-1 md:grid-cols-12 gap-8 items-start">
-          
+
           {/* Logo & Brief */}
           <div className="col-span-1 md:col-span-5 space-y-4">
             <div className="flex items-center gap-2">
@@ -1597,7 +2013,7 @@ export default function PublicDonationPage() {
               <span className="text-md font-extrabold text-white">donations 9th Batch</span>
             </div>
             <p className="text-xs text-slate-400 leading-relaxed max-w-sm">
-              {language === 'ar' 
+              {language === 'ar'
                 ? 'نظام تبرعات آمن وتلقائي لدعم حملة الدفعة التاسعة طب كفر الشيخ لتوفير الأجهزة الطبية الحيوية لمستشفى كفر الشيخ الجامعي.'
                 : 'A secure, automated donation system supporting the 9th Batch Kafr El-Sheikh Medicine campaign to provide critical medical equipment to the University Hospital.'}
             </p>
@@ -1642,17 +2058,17 @@ export default function PublicDonationPage() {
                 </div>
               </div>
               <div className="flex gap-2 pt-1">
-                <a 
-                  href="https://wa.me/201015339426" 
-                  target="_blank" 
+                <a
+                  href="https://wa.me/201015339426"
+                  target="_blank"
                   rel="noopener noreferrer"
                   className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 bg-emerald-950/30 hover:bg-emerald-950/50 border border-emerald-900/35 text-[10px] font-bold text-emerald-400 rounded-lg transition-all active:scale-95"
                 >
                   <span>WhatsApp</span>
                 </a>
-                <a 
+                <a
                   href="https://t.me/M7MED1573"
-                  target="_blank" 
+                  target="_blank"
                   rel="noopener noreferrer"
                   className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 bg-sky-950/30 hover:bg-sky-950/50 border border-sky-900/35 text-[10px] font-bold text-sky-400 rounded-lg transition-all active:scale-95"
                 >
@@ -1661,9 +2077,9 @@ export default function PublicDonationPage() {
               </div>
             </div>
           </div>
-          
+
         </div>
-        
+
         {/* Sub-footer Copyright */}
         <div className="max-w-7xl mx-auto px-4 md:px-8 mt-8 pt-6 border-t border-slate-900/40 text-center">
           <p className="text-[10px] text-slate-500 leading-normal">
@@ -1686,6 +2102,59 @@ export default function PublicDonationPage() {
             <Heart className="w-4 h-4 fill-slate-950" />
             <span>{language === 'ar' ? 'تبرع الآن للحملة' : 'Donate to Campaign'}</span>
           </button>
+        </div>
+      )}
+
+      {/* SHARE PROGRESS MODAL */}
+      {showShareModal && shareImage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+          <div className="glass-panel w-full max-w-md p-6 rounded-2xl border border-slate-900 bg-slate-950 space-y-6 shadow-2xl animate-scale-up">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-white">
+                {language === 'ar' ? 'مشاركة تقدم الحملة' : 'Share Campaign Progress'}
+              </h3>
+              <button 
+                onClick={() => setShowShareModal(false)}
+                className="text-slate-400 hover:text-white text-xs font-semibold px-2 py-1 hover:bg-slate-900 rounded-lg transition-colors"
+              >
+                {language === 'ar' ? 'إغلاق' : 'Close'}
+              </button>
+            </div>
+
+            {/* Image Preview Container */}
+            <div className="w-full bg-slate-900/40 rounded-xl overflow-hidden border border-slate-900 p-2 flex items-center justify-center relative">
+              <img 
+                src={shareImage} 
+                alt="Campaign Progress Share Card" 
+                className="w-full h-auto rounded-lg shadow-md border border-slate-950"
+              />
+            </div>
+
+            {/* Action Buttons */}
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={handleDownloadShareImage}
+                className="py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 font-black text-xs text-center shadow-md active:scale-95 transition-all hover:brightness-105"
+              >
+                {language === 'ar' ? 'تحميل الصورة' : 'Download Image'}
+              </button>
+              <button
+                onClick={handleNativeShare}
+                className="py-3.5 rounded-xl bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-350 font-bold text-xs text-center active:scale-95 transition-all"
+              >
+                {language === 'ar' ? 'نشر ومشاركة' : 'Share / Copy'}
+              </button>
+            </div>
+
+            <p className="text-[10px] text-slate-500 text-center leading-normal">
+              {language === 'ar' 
+                ? 'يمكنك تحميل بطاقة التقدم ونشرها على وسائل التواصل الاجتماعي لدعم الحملة.' 
+                : 'Download the progress card to share on social media stories.'}
+            </p>
+
+          </div>
         </div>
       )}
     </div>
