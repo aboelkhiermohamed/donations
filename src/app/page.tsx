@@ -1634,9 +1634,11 @@ export default function PublicDonationPage() {
                 </div>
                 <div>
                   <p className="text-xs font-bold text-white">
-                    {language === 'ar' ? 'م. محمد أبو الخير' : 'Eng. Mohamed Abouelkhier'}
+                    {language === 'ar' ? 'د. محمد أبو الخير' : 'Dr. Mohamed Abouelkhier'}
                   </p>
-                  <p className="text-[10px] text-slate-500 font-medium">Full-Stack Software Engineer</p>
+                  <p className="text-[10px] text-slate-500 font-medium">
+                    {language === 'ar' ? 'مطور المنصة' : 'Platform Developer'}
+                  </p>
                 </div>
               </div>
               <div className="flex gap-2 pt-1">
@@ -1649,10 +1651,12 @@ export default function PublicDonationPage() {
                   <span>WhatsApp</span>
                 </a>
                 <a 
-                  href="mailto:aboelkhiermohamed@gmail.com"
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 bg-slate-900/80 hover:bg-slate-800 border border-slate-800 text-[10px] font-bold text-slate-350 rounded-lg transition-all active:scale-95"
+                  href="https://t.me/M7MED1573"
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 bg-sky-950/30 hover:bg-sky-950/50 border border-sky-900/35 text-[10px] font-bold text-sky-400 rounded-lg transition-all active:scale-95"
                 >
-                  <span>Email</span>
+                  <span>Telegram</span>
                 </a>
               </div>
             </div>
