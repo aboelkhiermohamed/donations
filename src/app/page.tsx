@@ -871,7 +871,7 @@ export default function PublicDonationPage() {
       }
     };
 
-    const formattedDate = new Date(donation.created_at).toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US', {
+    const formattedDate = new Date(donation.created_at).toLocaleString(language === 'ar' ? 'ar-EG' : 'en-US', {
       dateStyle: 'long',
       timeStyle: 'short'
     });
