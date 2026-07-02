@@ -68,17 +68,16 @@ export default function AdminDashboardPage() {
   });
 
   // Fetch gateway status from DB settings
-  const { data: gatewayStatus, isLoading: isGatewayLoading } = useQuery({
+  const { data: gateways, isLoading: isGatewayLoading } = useQuery({
     queryKey: ['adminGatewayStatus'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('settings')
         .select('*')
-        .eq('key', 'gateway_status')
-        .maybeSingle();
+        .like('key', 'gateway_status_%');
 
       if (error) throw error;
-      return data?.value || null;
+      return (data || []).map(row => row.value) || null;
     },
     refetchInterval: 10000,
   });
@@ -473,84 +472,83 @@ export default function AdminDashboardPage() {
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-bold text-white flex items-center gap-2">
                     <Activity className="w-4 h-4 text-emerald-400 animate-pulse" />
-                    {language === 'ar' ? 'حالة بوابة الأندرويد' : 'Android Gateway Status'}
+                    {language === 'ar' ? 'حالة بوابات الأندرويد' : 'Android Gateways Status'}
                   </h3>
-                  {gatewayStatus ? (
-                    (() => {
-                      const diff = Date.now() - new Date(gatewayStatus.lastHeartbeat).getTime();
-                      const isOnline = diff < 3 * 60 * 1000; // Online if last heartbeat < 3 minutes ago
-                      return (
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          isOnline 
-                            ? 'bg-emerald-950/60 border border-emerald-900 text-emerald-400' 
-                            : 'bg-red-950/40 border border-red-900/40 text-red-300'
-                        }`}>
-                          {isOnline 
-                            ? (language === 'ar' ? '🟢 متصل / نشط' : '🟢 Online / Active') 
-                            : (language === 'ar' ? '🔴 غير متصل' : '🔴 Offline')
-                          }
-                        </span>
-                      );
-                    })()
-                  ) : (
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-900 border border-slate-800 text-slate-400">
-                      {language === 'ar' ? 'لم يتم التفعيل' : 'Not Configured'}
-                    </span>
-                  )}
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-900 border border-slate-800 text-slate-400">
+                    {gateways ? `${gateways.length} ${language === 'ar' ? 'أجهزة' : 'Devices'}` : '0'}
+                  </span>
                 </div>
 
                 {isGatewayLoading ? (
-                  <div className="h-28 bg-slate-900/40 rounded-xl animate-pulse" />
-                ) : !gatewayStatus ? (
+                  <div className="space-y-3">
+                    <div className="h-16 bg-slate-900/40 rounded-xl animate-pulse" />
+                    <div className="h-16 bg-slate-900/40 rounded-xl animate-pulse" />
+                  </div>
+                ) : !gateways || gateways.length === 0 ? (
                   <p className="text-xs text-slate-500 text-center py-6 leading-relaxed">
                     {language === 'ar' 
-                      ? 'بوابة الرسائل (Android Gateway) لم ترسل أي نبضات قلب (Heartbeats) بعد.' 
-                      : 'The Android gateway application has not sent any heartbeat telemetry yet.'}
+                      ? 'بوابات الرسائل (Android Gateways) لم ترسل أي نبضات قلب (Heartbeats) بعد.' 
+                      : 'No Android gateway applications have sent any heartbeat telemetry yet.'}
                   </p>
                 ) : (
-                  <div className="grid grid-cols-2 gap-3 text-xs">
-                    {/* Battery */}
-                    <div className="p-3 bg-slate-950/40 border border-slate-900 rounded-xl flex items-center gap-3">
-                      <Battery className={`w-5 h-5 ${gatewayStatus.battery > 20 ? 'text-emerald-400' : 'text-red-400'}`} />
-                      <div>
-                        <span className="text-[10px] text-slate-500 block">{language === 'ar' ? 'البطارية' : 'Battery'}</span>
-                        <span className="font-bold text-white">{gatewayStatus.battery}%</span>
-                      </div>
-                    </div>
+                  <div className="space-y-3 max-h-72 overflow-y-auto custom-scrollbar pr-1">
+                    {gateways.map((device: any) => {
+                      const diff = Date.now() - new Date(device.lastHeartbeat).getTime();
+                      const isOnline = diff < 3 * 60 * 1000; // Online if last heartbeat < 3 minutes ago
+                      
+                      return (
+                        <div key={device.deviceId} className="p-3 bg-slate-950/40 border border-slate-900/60 rounded-xl space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-xs text-white flex items-center gap-1.5">
+                              <Smartphone className="w-3.5 h-3.5 text-slate-400" />
+                              {language === 'ar' ? 'جهاز' : 'Device'} ({device.deviceId.substring(0, 8)})
+                            </span>
+                            <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
+                              isOnline 
+                                ? 'bg-emerald-950/60 border border-emerald-900 text-emerald-400' 
+                                : 'bg-red-950/40 border border-red-900/40 text-red-300'
+                            }`}>
+                              {isOnline 
+                                ? (language === 'ar' ? '🟢 متصل' : '🟢 Active') 
+                                : (language === 'ar' ? '🔴 غير متصل' : '🔴 Offline')
+                              }
+                            </span>
+                          </div>
 
-                    {/* Network */}
-                    <div className="p-3 bg-slate-950/40 border border-slate-900 rounded-xl flex items-center gap-3">
-                      <Wifi className="w-5 h-5 text-teal-400" />
-                      <div>
-                        <span className="text-[10px] text-slate-500 block">{language === 'ar' ? 'الشبكة' : 'Network'}</span>
-                        <span className="font-bold text-white capitalize">{gatewayStatus.network || 'wifi'}</span>
-                      </div>
-                    </div>
+                          <div className="grid grid-cols-3 gap-2 text-[11px]">
+                            {/* Battery */}
+                            <div className="flex items-center gap-1.5 text-slate-300">
+                              <Battery className={`w-4 h-4 ${device.battery > 20 ? 'text-emerald-400' : 'text-red-400'}`} />
+                              <span>{device.battery}%</span>
+                            </div>
 
-                    {/* Pending SMS */}
-                    <div className="p-3 bg-slate-950/40 border border-slate-900 rounded-xl flex items-center gap-3">
-                      <Clock className="w-5 h-5 text-amber-450" />
-                      <div>
-                        <span className="text-[10px] text-slate-500 block">{language === 'ar' ? 'في انتظار الرفع' : 'Pending Uploads'}</span>
-                        <span className={`font-bold ${gatewayStatus.pendingSms > 0 ? 'text-amber-400' : 'text-white'}`}>
-                          {gatewayStatus.pendingSms}
-                        </span>
-                      </div>
-                    </div>
+                            {/* Network */}
+                            <div className="flex items-center gap-1.5 text-slate-300 capitalize">
+                              <Wifi className="w-4 h-4 text-teal-400" />
+                              <span>{device.network || 'wifi'}</span>
+                            </div>
 
-                    {/* Last Sync */}
-                    <div className="p-3 bg-slate-950/40 border border-slate-900 rounded-xl flex items-center gap-3">
-                      <Smartphone className="w-5 h-5 text-slate-400" />
-                      <div>
-                        <span className="text-[10px] text-slate-500 block">{language === 'ar' ? 'آخر اتصال' : 'Last Telemetry'}</span>
-                        <span className="font-bold text-white">
-                          {new Date(gatewayStatus.lastHeartbeat).toLocaleTimeString(
-                            language === 'ar' ? 'ar-EG' : 'en-US',
-                            { hour: '2-digit', minute: '2-digit' }
-                          )}
-                        </span>
-                      </div>
-                    </div>
+                            {/* Pending SMS */}
+                            <div className="flex items-center gap-1.5 text-slate-300">
+                              <Clock className="w-4 h-4 text-amber-400" />
+                              <span className={device.pendingSms > 0 ? 'text-amber-400 font-bold' : ''}>
+                                {device.pendingSms} {language === 'ar' ? 'معلقة' : 'Pending'}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="text-[9px] text-slate-500 flex justify-between border-t border-slate-900/60 pt-2">
+                            <span>
+                              {language === 'ar' ? 'آخر اتصال: ' : 'Last Sync: '}
+                              {new Date(device.lastHeartbeat).toLocaleTimeString(
+                                language === 'ar' ? 'ar-EG' : 'en-US',
+                                { hour: '2-digit', minute: '2-digit', second: '2-digit' }
+                              )}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>

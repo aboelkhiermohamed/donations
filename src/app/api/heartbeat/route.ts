@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
     const { error } = await supabaseAdmin
       .from('settings')
       .upsert({
-        key: 'gateway_status',
+        key: `gateway_status_${deviceId}`,
         value: {
           deviceId,
           battery,
