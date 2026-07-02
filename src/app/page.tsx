@@ -1028,7 +1028,7 @@ export default function PublicDonationPage() {
             </div>
 
             {/* Description Card */}
-            <div className="bg-slate-900/10 border border-slate-900/60 p-6 rounded-2xl space-y-6">
+            <div className="bg-slate-900/10 border border-slate-900/60 p-6 rounded-2xl space-y-5">
               <div className="space-y-3">
                 <h3 className="text-white font-bold text-base border-b border-slate-800 pb-2 flex items-center gap-2">
                   <Heart className="w-4 h-4 text-emerald-450 fill-emerald-450/20" />
@@ -1039,65 +1039,28 @@ export default function PublicDonationPage() {
                 </p>
               </div>
 
-              {/* Target Equipment Cards */}
-              <div className="space-y-4 pt-2">
-                <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
-                  {language === 'ar' ? 'الأجهزة الطبية المستهدفة وتوزيع الدعم' : 'Target Medical Equipment'}
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  
-                  {/* Equipment 1: Ventilator */}
-                  <div className="glass-panel p-5 rounded-xl border border-slate-800/80 bg-slate-950/20 hover:border-slate-800 transition-all space-y-3 relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-xl pointer-events-none" />
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="w-9 h-9 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400">
-                        {/* Wind / Ventilator icon */}
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-                        </svg>
-                      </div>
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-950/40 border border-rose-900/30 text-rose-400">
-                        {language === 'ar' ? 'عاجل جداً' : 'Urgent'}
-                      </span>
-                    </div>
-                    <div>
-                      <h5 className="text-sm font-bold text-white">
-                        {language === 'ar' ? 'جهاز تنفس صناعي حديث' : 'Medical Ventilator'}
-                      </h5>
-                      <p className="text-slate-400 text-xs mt-1 leading-relaxed">
-                        {language === 'ar' 
-                          ? 'توفير جهاز تنفس صناعي كامل المواصفات لدعم مرضى الفشل التنفسي بالعناية المركزة.'
-                          : 'High-end ventilator to provide critical breathing support for ICU patients.'}
-                      </p>
-                    </div>
-                  </div>
+              {/* Target Equipment (Compact Inline Badge Row) */}
+              <div className="flex flex-wrap items-center gap-2.5 pt-3.5 border-t border-slate-800/60">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                  {language === 'ar' ? 'الأجهزة الطبية المستهدفة:' : 'Target Equipment:'}
+                </span>
 
-                  {/* Equipment 2: ABG Analyzer */}
-                  <div className="glass-panel p-5 rounded-xl border border-slate-800/80 bg-slate-950/20 hover:border-slate-800 transition-all space-y-3 relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 w-24 h-24 bg-teal-500/5 rounded-full blur-xl pointer-events-none" />
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="w-9 h-9 rounded-lg bg-teal-500/10 flex items-center justify-center text-teal-400">
-                        {/* Droplet / blood icon */}
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
-                        </svg>
-                      </div>
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-teal-950/40 border border-teal-900/30 text-teal-450">
-                        {language === 'ar' ? 'مستهدف' : 'Targeted'}
-                      </span>
-                    </div>
-                    <div>
-                      <h5 className="text-sm font-bold text-white">
-                        {language === 'ar' ? 'جهاز تحليل غازات الدم (ABG)' : 'ABG Blood Gas Analyzer'}
-                      </h5>
-                      <p className="text-slate-400 text-xs mt-1 leading-relaxed">
-                        {language === 'ar' 
-                          ? 'جهاز متكامل لتحليل غازات الدم وضبط مستويات الأوكسجين والحموضة لمرضى الرعاية لحظياً.'
-                          : 'Essential blood gas analyzer for real-time patient pH and gas level monitoring.'}
-                      </p>
-                    </div>
-                  </div>
+                {/* Device 1 */}
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-950/20 border border-emerald-900/25 text-xs text-white">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-450 animate-pulse" />
+                  <span className="font-bold text-[11px]">{language === 'ar' ? 'جهاز تنفس صناعي حديث' : 'Ventilator'}</span>
+                  <span className="text-[9px] font-bold bg-rose-950/40 text-rose-450 px-1 py-0.2 rounded border border-rose-900/10">
+                    {language === 'ar' ? 'عاجل' : 'Urgent'}
+                  </span>
+                </div>
 
+                {/* Device 2 */}
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-teal-950/20 border border-teal-900/25 text-xs text-white">
+                  <span className="w-1.5 h-1.5 rounded-full bg-teal-450" />
+                  <span className="font-bold text-[11px]">{language === 'ar' ? 'جهاز تحليل غازات الدم (ABG)' : 'ABG Analyzer'}</span>
+                  <span className="text-[9px] font-bold bg-teal-950/30 text-teal-450 px-1 py-0.2 rounded border border-teal-900/10">
+                    {language === 'ar' ? 'مستهدف' : 'Targeted'}
+                  </span>
                 </div>
               </div>
             </div>
