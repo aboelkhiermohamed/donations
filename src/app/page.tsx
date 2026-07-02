@@ -29,10 +29,10 @@ import Link from 'next/link';
 // --- MOCK FALLBACKS ---
 const MOCK_CAMPAIGN: Campaign = {
   id: 'c580436d-9654-4720-bc2f-a9cb6bf0f7a0',
-  name: 'Medical Ventilator for Kafr El-Sheikh University Hospital (9th Batch)',
-  name_ar: 'جهاز تنفس صناعي لمستشفى كفر الشيخ الجامعي (الدفعة التاسعة)',
-  description: 'Donations campaign by the 9th Batch of Kafr El-Sheikh Medicine to purchase and provide a state-of-the-art ventilator to Kafr El-Sheikh University Hospital ICU.',
-  description_ar: 'حملة تبرعات الدفعة التاسعة طب كفر الشيخ لتوفير جهاز تنفس صناعي حديث لدعم وحدة العناية المركزة بمستشفيات جامعة كفر الشيخ وتأمين رعاية فائقة للمرضى.',
+  name: 'Medical Ventilator & ABG Device for Kafr El-Sheikh University Hospital (9th Batch)',
+  name_ar: 'جهاز تنفس صناعي وجهاز غازات الدم (ABG) لمستشفى كفر الشيخ الجامعي (الدفعة التاسعة)',
+  description: 'Donations campaign by the 9th Batch of Kafr El-Sheikh Medicine to purchase and provide a state-of-the-art ventilator and an ABG (Arterial Blood Gas) device to Kafr El-Sheikh University Hospital ICU.',
+  description_ar: 'حملة تبرعات الدفعة التاسعة طب كفر الشيخ لتوفير جهاز تنفس صناعي حديث وجهاز تحليل غازات الدم (ABG) لدعم وحدة العناية المركزة بمستشفيات جامعة كفر الشيخ وتأمين رعاية فائقة للمرضى.',
   target_amount: 500000,
   collected_amount: 0,
   organizer: 'Kafr El-Sheikh Medicine - 9th Batch',
@@ -171,6 +171,7 @@ export default function PublicDonationPage() {
       if (error) throw error;
       return data?.value || { 
         vodafone_cash: '01015339426', 
+        vodafone_cash_2: '', 
         instapay_address: '01015339426@instapay',
         instapay_phone: '01015339426',
         instapay_payment_link: '',
@@ -180,6 +181,7 @@ export default function PublicDonationPage() {
   });
 
   const VFC_NUMBER = dbSettings?.vodafone_cash || '01015339426';
+  const VFC_NUMBER_2 = dbSettings?.vodafone_cash_2 || '';
   const INSTAPAY_ADDRESS = dbSettings?.instapay_address || '01015339426';
   const INSTAPAY_PHONE = dbSettings?.instapay_phone || '01015339426';
   const INSTAPAY_LINK = dbSettings?.instapay_payment_link || '';
@@ -830,27 +832,58 @@ export default function PublicDonationPage() {
 
               {/* Vodafone Cash Details */}
               {paymentMethod === 'vodafone_cash' && (
-                <div className="bg-slate-950/40 p-5 rounded-2xl border border-slate-900 flex flex-col md:flex-row items-center justify-between gap-4">
-                  <div className="space-y-1 text-center md:text-start">
-                    <span className="text-slate-500 text-xs uppercase tracking-wider">{t('vfc_number')}</span>
-                    <p className="text-2xl font-black tracking-widest text-white">{VFC_NUMBER}</p>
+                <div className="space-y-3 w-full">
+                  <div className="bg-slate-950/40 p-5 rounded-2xl border border-slate-900 flex flex-col md:flex-row items-center justify-between gap-4">
+                    <div className="space-y-1 text-center md:text-start">
+                      <span className="text-slate-500 text-xs uppercase tracking-wider">
+                        {language === 'ar' ? 'رقم محفظة فودافون كاش الأول' : 'Vodafone Cash Wallet 1'}
+                      </span>
+                      <p className="text-2xl font-black tracking-widest text-white font-mono">{VFC_NUMBER}</p>
+                    </div>
+                    <button
+                      onClick={() => handleCopy(VFC_NUMBER, 'vfc')}
+                      className="w-full md:w-auto flex items-center justify-center gap-2 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-sm font-semibold py-3 px-6 rounded-xl transition-all active:scale-95"
+                    >
+                      {copiedType === 'vfc' ? (
+                        <>
+                          <Check className="w-4 h-4 text-emerald-400 animate-scale-up" />
+                          <span className="text-emerald-400">{t('copied')}</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-4 h-4 text-slate-400" />
+                          <span>{t('copy')}</span>
+                        </>
+                      )}
+                    </button>
                   </div>
-                  <button
-                    onClick={() => handleCopy(VFC_NUMBER, 'vfc')}
-                    className="w-full md:w-auto flex items-center justify-center gap-2 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-sm font-semibold py-3 px-6 rounded-xl transition-all active:scale-95"
-                  >
-                    {copiedType === 'vfc' ? (
-                      <>
-                        <Check className="w-4 h-4 text-emerald-400 animate-scale-up" />
-                        <span className="text-emerald-400">{t('copied')}</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-4 h-4 text-slate-400" />
-                        <span>{t('copy')}</span>
-                      </>
-                    )}
-                  </button>
+
+                  {VFC_NUMBER_2 && (
+                    <div className="bg-slate-950/40 p-5 rounded-2xl border border-slate-900 flex flex-col md:flex-row items-center justify-between gap-4 animate-fade-in">
+                      <div className="space-y-1 text-center md:text-start">
+                        <span className="text-slate-500 text-xs uppercase tracking-wider">
+                          {language === 'ar' ? 'رقم محفظة فودافون كاش الثاني' : 'Vodafone Cash Wallet 2'}
+                        </span>
+                        <p className="text-2xl font-black tracking-widest text-white font-mono">{VFC_NUMBER_2}</p>
+                      </div>
+                      <button
+                        onClick={() => handleCopy(VFC_NUMBER_2, 'vfc2')}
+                        className="w-full md:w-auto flex items-center justify-center gap-2 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-sm font-semibold py-3 px-6 rounded-xl transition-all active:scale-95"
+                      >
+                        {copiedType === 'vfc2' ? (
+                          <>
+                            <Check className="w-4 h-4 text-emerald-400 animate-scale-up" />
+                            <span className="text-emerald-400">{t('copied')}</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-4 h-4 text-slate-400" />
+                            <span>{t('copy')}</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1550,6 +1583,90 @@ export default function PublicDonationPage() {
         </div>
 
       </main>
+
+      {/* FOOTER SECTION */}
+      <footer className="w-full border-t border-slate-900 bg-slate-950/80 backdrop-blur-md mt-16 py-10 relative z-20">
+        <div className="max-w-7xl mx-auto px-4 md:px-8 grid grid-cols-1 md:grid-cols-12 gap-8 items-start">
+          
+          {/* Logo & Brief */}
+          <div className="col-span-1 md:col-span-5 space-y-4">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center flex-shrink-0">
+                <Heart className="w-4 h-4 text-slate-950 fill-slate-950" />
+              </div>
+              <span className="text-md font-extrabold text-white">donations 9th Batch</span>
+            </div>
+            <p className="text-xs text-slate-400 leading-relaxed max-w-sm">
+              {language === 'ar' 
+                ? 'نظام تبرعات آمن وتلقائي لدعم حملة الدفعة التاسعة طب كفر الشيخ لتوفير الأجهزة الطبية الحيوية لمستشفى كفر الشيخ الجامعي.'
+                : 'A secure, automated donation system supporting the 9th Batch Kafr El-Sheikh Medicine campaign to provide critical medical equipment to the University Hospital.'}
+            </p>
+          </div>
+
+          {/* Quick Links */}
+          <div className="col-span-1 md:col-span-3 space-y-3">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300">
+              {language === 'ar' ? 'صفحات تهمك' : 'Pages'}
+            </h4>
+            <ul className="space-y-2 text-xs">
+              <li>
+                <Link href="/about" className="text-slate-400 hover:text-emerald-400 transition-colors">
+                  {language === 'ar' ? 'عن الحملة والمنصة' : 'About Campaign & Platform'}
+                </Link>
+              </li>
+              <li>
+                <Link href="/privacy-policy" className="text-slate-400 hover:text-emerald-400 transition-colors">
+                  {language === 'ar' ? 'سياسة الخصوصية' : 'Privacy Policy'}
+                </Link>
+              </li>
+            </ul>
+          </div>
+
+          {/* Developer Contact Card */}
+          <div className="col-span-1 md:col-span-4 space-y-3">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300">
+              {language === 'ar' ? 'التواصل مع المطور' : 'Contact Developer'}
+            </h4>
+            <div className="glass-panel p-4 rounded-xl border border-slate-900 space-y-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-emerald-450 font-bold text-sm">
+                  M
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-white">
+                    {language === 'ar' ? 'م. محمد أبو الخير' : 'Eng. Mohamed Abouelkhier'}
+                  </p>
+                  <p className="text-[10px] text-slate-500 font-medium">Full-Stack Software Engineer</p>
+                </div>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <a 
+                  href="https://wa.me/201015339426" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 bg-emerald-950/30 hover:bg-emerald-950/50 border border-emerald-900/35 text-[10px] font-bold text-emerald-400 rounded-lg transition-all active:scale-95"
+                >
+                  <span>WhatsApp</span>
+                </a>
+                <a 
+                  href="mailto:aboelkhiermohamed@gmail.com"
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 bg-slate-900/80 hover:bg-slate-800 border border-slate-800 text-[10px] font-bold text-slate-350 rounded-lg transition-all active:scale-95"
+                >
+                  <span>Email</span>
+                </a>
+              </div>
+            </div>
+          </div>
+          
+        </div>
+        
+        {/* Sub-footer Copyright */}
+        <div className="max-w-7xl mx-auto px-4 md:px-8 mt-8 pt-6 border-t border-slate-900/40 text-center">
+          <p className="text-[10px] text-slate-500 leading-normal">
+            &copy; {new Date().getFullYear()} donations 9th Batch. Built with Next.js, Tailwind CSS & Supabase.
+          </p>
+        </div>
+      </footer>
 
       {/* Mobile Floating Action Button (FAB) */}
       {isMounted && activeMobileTab === 'campaign' && (

@@ -14,6 +14,7 @@ export default function AdminSettingsPage() {
   // Form states
   const [targetAmount, setTargetAmount] = useState('');
   const [vodafoneCash, setVodafoneCash] = useState('');
+  const [vodafoneCash2, setVodafoneCash2] = useState('');
   const [instapayAddress, setInstapayAddress] = useState('');
   const [instapayPhone, setInstapayPhone] = useState('');
   const [instapayLink, setInstapayLink] = useState('');
@@ -46,6 +47,7 @@ export default function AdminSettingsPage() {
         campaign,
         settings: settings?.value || { 
           vodafone_cash: '01015339426', 
+          vodafone_cash_2: '', 
           instapay_address: '01015339426@instapay', 
           instapay_phone: '01015339426',
           instapay_payment_link: '',
@@ -60,6 +62,7 @@ export default function AdminSettingsPage() {
     if (config) {
       setTargetAmount(String(config.campaign?.target_amount || '500000'));
       setVodafoneCash(config.settings.vodafone_cash || '01015339426');
+      setVodafoneCash2(config.settings.vodafone_cash_2 || '');
       setInstapayAddress(config.settings.instapay_address || '01015339426@instapay');
       setInstapayPhone(config.settings.instapay_phone || '01015339426');
       setInstapayLink(config.settings.instapay_payment_link || '');
@@ -117,6 +120,7 @@ export default function AdminSettingsPage() {
           key: 'payment_accounts',
           value: {
             vodafone_cash: vodafoneCash.trim(),
+            vodafone_cash_2: vodafoneCash2.trim(),
             instapay_address: instapayAddress.trim(),
             instapay_phone: instapayPhone.trim(),
             instapay_payment_link: instapayLink.trim(),
@@ -131,7 +135,7 @@ export default function AdminSettingsPage() {
       await supabase.from('audit_logs').insert({
         admin_id: session?.user?.id || null,
         action: 'UPDATE_SYSTEM_SETTINGS',
-        details: { targetAmount, vodafoneCash, instapayAddress, instapayPhone, instapayLink, instapayQrUrl: finalQrUrl }
+        details: { targetAmount, vodafoneCash, vodafoneCash2, instapayAddress, instapayPhone, instapayLink, instapayQrUrl: finalQrUrl }
       });
 
       // Refetch
@@ -292,7 +296,7 @@ export default function AdminSettingsPage() {
           <div className="space-y-2">
             <label className="text-slate-300 text-xs font-semibold flex items-center gap-1.5">
               <Coins className="w-4 h-4 text-emerald-450" />
-              <span>{language === 'ar' ? 'رقم محفظة فودافون كاش' : 'Vodafone Cash Number'}</span>
+              <span>{language === 'ar' ? 'رقم محفظة فودافون كاش الأول' : 'Vodafone Cash Number 1'}</span>
             </label>
             <input 
               type="text"
@@ -301,6 +305,21 @@ export default function AdminSettingsPage() {
               required
               className="w-full glass-input px-4 py-3 rounded-xl text-sm font-mono"
               placeholder="e.g. 01015339426"
+            />
+          </div>
+
+          {/* Vodafone Cash 2 */}
+          <div className="space-y-2">
+            <label className="text-slate-300 text-xs font-semibold flex items-center gap-1.5">
+              <Coins className="w-4 h-4 text-emerald-450" />
+              <span>{language === 'ar' ? 'رقم محفظة فودافون كاش الثاني (اختياري)' : 'Vodafone Cash Number 2 (Optional)'}</span>
+            </label>
+            <input 
+              type="text"
+              value={vodafoneCash2}
+              onChange={(e) => setVodafoneCash2(e.target.value)}
+              className="w-full glass-input px-4 py-3 rounded-xl text-sm font-mono"
+              placeholder="e.g. 010XXXXXXXX"
             />
           </div>
 
