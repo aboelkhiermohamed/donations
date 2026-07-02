@@ -127,12 +127,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <div className="min-h-screen bg-slate-950 text-slate-50 flex flex-col md:flex-row font-sans" dir={dir}>
       {/* MOBILE HEADER */}
       <header className="md:hidden w-full bg-slate-900/80 border-b border-slate-800 p-4 flex items-center justify-between sticky top-0 z-40 backdrop-blur-md">
-        <div className="flex items-center gap-2">
+        <Link href="/" className="flex items-center gap-2 hover:opacity-90 transition-opacity">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center">
             <Heart className="w-4 h-4 text-slate-950 fill-slate-950" />
           </div>
           <span className="font-extrabold text-white text-md tracking-tight">YusrAdmin</span>
-        </div>
+        </Link>
 
         <div className="flex items-center gap-4">
           <button onClick={toggleLanguage} className="p-1.5 rounded-lg bg-slate-800 text-slate-300">
@@ -155,7 +155,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       }`}>
         <div className="space-y-8">
           {/* Logo */}
-          <div className="flex items-center gap-3">
+          <Link href="/" className="flex items-center gap-3 hover:opacity-90 transition-opacity">
             <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center shadow-lg shadow-emerald-500/20">
               <Heart className="w-5 h-5 text-slate-950 fill-slate-950" />
             </div>
@@ -163,7 +163,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <h2 className="font-black text-white text-sm tracking-tight">Yusr Dashboard</h2>
               <span className="text-[10px] text-slate-500 block uppercase tracking-widest">{t('admin_title')}</span>
             </div>
-          </div>
+          </Link>
 
           {/* Nav List */}
           <nav className="space-y-1.5">

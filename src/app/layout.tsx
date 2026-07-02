@@ -30,7 +30,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ar" dir="rtl" className={`${cairo.variable} ${outfit.variable}`}>
-      <body className="antialiased bg-slate-950 text-slate-50 min-h-screen select-none selection:bg-emerald-500/30">
+      <body className="antialiased bg-slate-950 text-slate-50 min-h-screen selection:bg-emerald-500/30">
         <QueryProvider>
           <LanguageProvider>
             {children}
