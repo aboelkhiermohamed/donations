@@ -174,7 +174,14 @@ export default function PublicDonationPage() {
         .eq('key', 'payment_accounts')
         .maybeSingle();
 
-      if (error) throw error;
+      if (error) {
+        if (error.message && (error.message.includes('JWT expired') || error.message.includes('expired'))) {
+          console.warn("JWT expired in settings query, signing out...");
+          await supabase.auth.signOut();
+          if (typeof window !== 'undefined') window.location.reload();
+        }
+        throw error;
+      }
       return data?.value || {
         vodafone_cash: '01015339426',
         vodafone_cash_2: '',
@@ -207,6 +214,11 @@ export default function PublicDonationPage() {
         .maybeSingle();
 
       if (error) {
+        if (error.message && (error.message.includes('JWT expired') || error.message.includes('expired'))) {
+          console.warn("JWT expired in campaign query, signing out...");
+          await supabase.auth.signOut();
+          if (typeof window !== 'undefined') window.location.reload();
+        }
         console.error("Supabase campaign query error:", error);
         throw error;
       }
@@ -224,7 +236,14 @@ export default function PublicDonationPage() {
         .from('donations')
         .select('amount, status, created_at');
 
-      if (error) throw error;
+      if (error) {
+        if (error.message && (error.message.includes('JWT expired') || error.message.includes('expired'))) {
+          console.warn("JWT expired in stats query, signing out...");
+          await supabase.auth.signOut();
+          if (typeof window !== 'undefined') window.location.reload();
+        }
+        throw error;
+      }
 
       const items = donations || [];
       const approved = items.filter(d => d.status === 'auto_verified' || d.status === 'manual_verified');
@@ -265,6 +284,11 @@ export default function PublicDonationPage() {
         .limit(10);
 
       if (error) {
+        if (error.message && (error.message.includes('JWT expired') || error.message.includes('expired'))) {
+          console.warn("JWT expired in public donations query, signing out...");
+          await supabase.auth.signOut();
+          if (typeof window !== 'undefined') window.location.reload();
+        }
         console.error("Error fetching public donations:", error);
         throw error;
       }
@@ -278,8 +302,19 @@ export default function PublicDonationPage() {
 
     // Check initial session
     const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setIsLoggedIn(!!session);
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error) {
+          if (error.message && (error.message.includes('JWT expired') || error.message.includes('expired'))) {
+            console.warn("JWT expired in getSession, signing out...");
+            await supabase.auth.signOut();
+            if (typeof window !== 'undefined') window.location.reload();
+          }
+        }
+        setIsLoggedIn(!!session);
+      } catch (err) {
+        console.error("checkSession error:", err);
+      }
     };
     checkSession();
 
