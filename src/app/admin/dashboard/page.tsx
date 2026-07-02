@@ -18,7 +18,10 @@ import {
   ArrowRight,
   ShieldCheck,
   UserCheck,
-  Smartphone
+  Smartphone,
+  Activity,
+  Battery,
+  Wifi
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -60,6 +63,22 @@ export default function AdminDashboardPage() {
 
       if (error) throw error;
       return data || [];
+    },
+    refetchInterval: 10000,
+  });
+
+  // Fetch gateway status from DB settings
+  const { data: gatewayStatus, isLoading: isGatewayLoading } = useQuery({
+    queryKey: ['adminGatewayStatus'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('settings')
+        .select('*')
+        .eq('key', 'gateway_status')
+        .maybeSingle();
+
+      if (error) throw error;
+      return data?.value || null;
     },
     refetchInterval: 10000,
   });
@@ -397,7 +416,7 @@ export default function AdminDashboardPage() {
               <div>
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <Smartphone className="w-4 h-4 text-emerald-455" />
+                    <Smartphone className="w-4 h-4 text-emerald-400" />
                     {language === 'ar' ? 'سجلات طلبات HTTP (بوابة SMS)' : 'HTTP Gateway Requests (SMS Logs)'}
                   </h3>
                   <Link href="/admin/sms" className="text-[10px] text-emerald-400 font-bold hover:underline flex items-center gap-0.5">
@@ -447,30 +466,120 @@ export default function AdminDashboardPage() {
               </div>
             </div>
 
-            {/* Right: Verification Status Metrics */}
-            <div className="lg:col-span-5 glass-panel p-5 rounded-2xl border border-slate-900 space-y-4">
-              <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <CheckCircle className="w-4 h-4 text-teal-400" />
-                {language === 'ar' ? 'تحليل حالات التحقق' : 'Verification Status Metrics'}
-              </h3>
+            {/* Right: Gateway Telemetry & Verification Status Metrics */}
+            <div className="lg:col-span-5 space-y-6">
+              {/* Gateway Telemetry Card */}
+              <div className="glass-panel p-5 rounded-2xl border border-slate-900 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Activity className="w-4 h-4 text-emerald-400 animate-pulse" />
+                    {language === 'ar' ? 'حالة بوابة الأندرويد' : 'Android Gateway Status'}
+                  </h3>
+                  {gatewayStatus ? (
+                    (() => {
+                      const diff = Date.now() - new Date(gatewayStatus.lastHeartbeat).getTime();
+                      const isOnline = diff < 3 * 60 * 1000; // Online if last heartbeat < 3 minutes ago
+                      return (
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          isOnline 
+                            ? 'bg-emerald-950/60 border border-emerald-900 text-emerald-400' 
+                            : 'bg-red-950/40 border border-red-900/40 text-red-300'
+                        }`}>
+                          {isOnline 
+                            ? (language === 'ar' ? '🟢 متصل / نشط' : '🟢 Online / Active') 
+                            : (language === 'ar' ? '🔴 غير متصل' : '🔴 Offline')
+                          }
+                        </span>
+                      );
+                    })()
+                  ) : (
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-900 border border-slate-800 text-slate-400">
+                      {language === 'ar' ? 'لم يتم التفعيل' : 'Not Configured'}
+                    </span>
+                  )}
+                </div>
 
-              <div className="h-60 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={dashboardData.verificationTypes} barSize={35}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.3} />
-                    <XAxis dataKey="name" stroke="#64748b" fontSize={9} tickLine={false} />
-                    <YAxis stroke="#64748b" fontSize={9} tickLine={false} />
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', borderRadius: '12px' }}
-                      itemStyle={{ color: '#fff', fontSize: '10px' }}
-                    />
-                    <Bar dataKey="count" fill="#06b6d4" radius={[6, 6, 0, 0]}>
-                      {dashboardData.verificationTypes.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+                {isGatewayLoading ? (
+                  <div className="h-28 bg-slate-900/40 rounded-xl animate-pulse" />
+                ) : !gatewayStatus ? (
+                  <p className="text-xs text-slate-500 text-center py-6 leading-relaxed">
+                    {language === 'ar' 
+                      ? 'بوابة الرسائل (Android Gateway) لم ترسل أي نبضات قلب (Heartbeats) بعد.' 
+                      : 'The Android gateway application has not sent any heartbeat telemetry yet.'}
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    {/* Battery */}
+                    <div className="p-3 bg-slate-950/40 border border-slate-900 rounded-xl flex items-center gap-3">
+                      <Battery className={`w-5 h-5 ${gatewayStatus.battery > 20 ? 'text-emerald-400' : 'text-red-400'}`} />
+                      <div>
+                        <span className="text-[10px] text-slate-500 block">{language === 'ar' ? 'البطارية' : 'Battery'}</span>
+                        <span className="font-bold text-white">{gatewayStatus.battery}%</span>
+                      </div>
+                    </div>
+
+                    {/* Network */}
+                    <div className="p-3 bg-slate-950/40 border border-slate-900 rounded-xl flex items-center gap-3">
+                      <Wifi className="w-5 h-5 text-teal-400" />
+                      <div>
+                        <span className="text-[10px] text-slate-500 block">{language === 'ar' ? 'الشبكة' : 'Network'}</span>
+                        <span className="font-bold text-white capitalize">{gatewayStatus.network || 'wifi'}</span>
+                      </div>
+                    </div>
+
+                    {/* Pending SMS */}
+                    <div className="p-3 bg-slate-950/40 border border-slate-900 rounded-xl flex items-center gap-3">
+                      <Clock className="w-5 h-5 text-amber-450" />
+                      <div>
+                        <span className="text-[10px] text-slate-500 block">{language === 'ar' ? 'في انتظار الرفع' : 'Pending Uploads'}</span>
+                        <span className={`font-bold ${gatewayStatus.pendingSms > 0 ? 'text-amber-400' : 'text-white'}`}>
+                          {gatewayStatus.pendingSms}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Last Sync */}
+                    <div className="p-3 bg-slate-950/40 border border-slate-900 rounded-xl flex items-center gap-3">
+                      <Smartphone className="w-5 h-5 text-slate-400" />
+                      <div>
+                        <span className="text-[10px] text-slate-500 block">{language === 'ar' ? 'آخر اتصال' : 'Last Telemetry'}</span>
+                        <span className="font-bold text-white">
+                          {new Date(gatewayStatus.lastHeartbeat).toLocaleTimeString(
+                            language === 'ar' ? 'ar-EG' : 'en-US',
+                            { hour: '2-digit', minute: '2-digit' }
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Right: Verification Status Metrics */}
+              <div className="glass-panel p-5 rounded-2xl border border-slate-900 space-y-4">
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-teal-400" />
+                  {language === 'ar' ? 'تحليل حالات التحقق' : 'Verification Status Metrics'}
+                </h3>
+
+                <div className="h-60 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={dashboardData.verificationTypes} barSize={35}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.3} />
+                      <XAxis dataKey="name" stroke="#64748b" fontSize={9} tickLine={false} />
+                      <YAxis stroke="#64748b" fontSize={9} tickLine={false} />
+                      <Tooltip 
+                        contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', borderRadius: '12px' }}
+                        itemStyle={{ color: '#fff', fontSize: '10px' }}
+                      />
+                      <Bar dataKey="count" fill="#06b6d4" radius={[6, 6, 0, 0]}>
+                        {dashboardData.verificationTypes.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
             </div>
           </div>
