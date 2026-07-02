@@ -78,6 +78,12 @@ export default function PublicDonationPage() {
   const [isGeneratingShare, setIsGeneratingShare] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
 
+  // Receipt State
+  const [selectedReceiptDonation, setSelectedReceiptDonation] = useState<any | null>(null);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [receiptImage, setReceiptImage] = useState<string | null>(null);
+  const [isGeneratingReceipt, setIsGeneratingReceipt] = useState(false);
+
   // Tracking State
   const [trackedDonations, setTrackedDonations] = useState<any[]>([]);
   const [trackingPhone, setTrackingPhone] = useState('');
@@ -705,6 +711,300 @@ export default function PublicDonationPage() {
       console.error("Native share failed", e);
       await navigator.clipboard.writeText(window.location.href);
       alert(language === 'ar' ? 'تم نسخ رابط الحمله لمشاركتها!' : 'Campaign link copied to clipboard!');
+    }
+  };
+
+  // Generate a receipt certificate on canvas
+  const generateReceiptCard = async (donation: any) => {
+    if (!donation) return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = 1080;
+    canvas.height = 1080;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    // Background Gradient
+    const bgGrad = ctx.createRadialGradient(540, 540, 100, 540, 540, 800);
+    bgGrad.addColorStop(0, '#0f172a'); // slate-900
+    bgGrad.addColorStop(1, '#020617'); // slate-950
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, 1080, 1080);
+
+    // Glowing border frame
+    const frameGrad = ctx.createLinearGradient(0, 0, 1080, 1080);
+    frameGrad.addColorStop(0, 'rgba(16, 185, 129, 0.4)'); // emerald
+    frameGrad.addColorStop(0.5, 'rgba(45, 212, 191, 0.1)'); // teal
+    frameGrad.addColorStop(1, 'rgba(16, 185, 129, 0.4)');
+    ctx.strokeStyle = frameGrad;
+    ctx.lineWidth = 16;
+    ctx.strokeRect(20, 20, 1040, 1040);
+
+    // Glowing corners
+    ctx.fillStyle = '#10b981';
+    ctx.fillRect(16, 16, 40, 8);
+    ctx.fillRect(16, 16, 8, 40);
+    
+    ctx.fillRect(1024, 16, 40, 8);
+    ctx.fillRect(1056, 16, 8, 40);
+    
+    ctx.fillRect(16, 1056, 40, 8);
+    ctx.fillRect(16, 1024, 8, 40);
+    
+    ctx.fillRect(1024, 1056, 40, 8);
+    ctx.fillRect(1056, 1024, 8, 40);
+
+    // Logo & Title
+    const logoGrad = ctx.createLinearGradient(80, 80, 150, 150);
+    logoGrad.addColorStop(0, '#10b981');
+    logoGrad.addColorStop(1, '#2dd4bf');
+    ctx.fillStyle = logoGrad;
+    ctx.beginPath();
+    const r = 16;
+    const rx = 80, ry = 80, rw = 70, rh = 70;
+    ctx.moveTo(rx + r, ry);
+    ctx.lineTo(rx + rw - r, ry);
+    ctx.quadraticCurveTo(rx + rw, ry, rx + rw, ry + r);
+    ctx.lineTo(rx + rw, ry + rh - r);
+    ctx.quadraticCurveTo(rx + rw, ry + rh, rx + rw - r, ry + rh);
+    ctx.lineTo(rx + r, ry + rh);
+    ctx.quadraticCurveTo(rx, ry + rh, rx, ry + rh - r);
+    ctx.lineTo(rx, ry + r);
+    ctx.quadraticCurveTo(rx, ry, rx + r, ry);
+    ctx.closePath();
+    ctx.fill();
+
+    // Heart inside logo
+    ctx.font = '36px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('❤️', 115, 115);
+
+    // Brand Label
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 32px sans-serif';
+    ctx.textBaseline = 'middle';
+    if (language === 'ar') {
+      ctx.textAlign = 'right';
+      ctx.fillText('منصة تبرع الدفعة التاسعة', 1000, 115);
+    } else {
+      ctx.textAlign = 'left';
+      ctx.fillText('donations 9th Batch', 170, 115);
+    }
+
+    // Main Certificate Header
+    const headGrad = ctx.createLinearGradient(540, 200, 540, 300);
+    headGrad.addColorStop(0, '#fbbf24'); // amber-400
+    headGrad.addColorStop(1, '#d97706'); // amber-600
+    ctx.fillStyle = headGrad;
+    ctx.font = '900 64px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(language === 'ar' ? 'شهادة مساهمة وتبرع' : 'Donation Certificate', 540, 240);
+
+    ctx.fillStyle = '#e2e8f0';
+    ctx.font = '24px sans-serif';
+    ctx.fillText(
+      language === 'ar' 
+        ? 'تتقدم إدارة منصة التبرعات بخالص الشكر والتقدير للمتبرع الكريم' 
+        : 'The Campaign Administration extends its sincere gratitude to the donor',
+      540, 310
+    );
+
+    // Donor Name Display
+    ctx.fillStyle = '#10b981';
+    ctx.font = 'bold 48px sans-serif';
+    ctx.fillText(donation.masked_name || donation.name || (language === 'ar' ? 'متبرع فاعل خير' : 'Anonymous Donor'), 540, 380);
+
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '24px sans-serif';
+    ctx.fillText(
+      language === 'ar'
+        ? 'لمساهمته الطيبة والموثقة في دعم الحملة الطبية لمستشفى كفر الشيخ الجامعي'
+        : 'for their kind verified contribution supporting Kafr El-Sheikh University Hospital campaign',
+      540, 440
+    );
+
+    // Stats Card (Details Box)
+    const cardY = 490;
+    const cardH = 340;
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.6)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+    ctx.lineWidth = 2;
+    
+    ctx.beginPath();
+    const cr = 24;
+    const cx = 100, cy = cardY, cw = 880, ch = cardH;
+    ctx.moveTo(cx + cr, cy);
+    ctx.lineTo(cx + cw - cr, cy);
+    ctx.quadraticCurveTo(cx + cw, cy, cx + cw, cy + cr);
+    ctx.lineTo(cx + cw, cy + ch - cr);
+    ctx.quadraticCurveTo(cx + cw, cy + ch, cx + cw - cr, cy + ch);
+    ctx.lineTo(cx + cr, cy + ch);
+    ctx.quadraticCurveTo(cx, cy + ch, cx, cy + ch - r);
+    ctx.lineTo(cx, cy + r);
+    ctx.quadraticCurveTo(cx, cy, cx + cr, cy);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Large Amount Render
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '900 80px sans-serif';
+    ctx.fillText(`${Number(donation.amount).toLocaleString()} ${language === 'ar' ? 'ج.م' : 'EGP'}`, 540, cardY + 90);
+
+    // Receipt details rows
+    ctx.font = 'bold 22px sans-serif';
+    
+    const drawRow = (label: string, value: string, yPos: number) => {
+      ctx.fillStyle = '#64748b';
+      if (language === 'ar') {
+        ctx.textAlign = 'right';
+        ctx.fillText(label, 900, yPos);
+        ctx.fillStyle = '#cbd5e1';
+        ctx.textAlign = 'left';
+        ctx.fillText(value, 180, yPos);
+      } else {
+        ctx.textAlign = 'left';
+        ctx.fillText(label, 180, yPos);
+        ctx.fillStyle = '#cbd5e1';
+        ctx.textAlign = 'right';
+        ctx.fillText(value, 900, yPos);
+      }
+    };
+
+    const formattedDate = new Date(donation.created_at).toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US', {
+      dateStyle: 'long',
+      timeStyle: 'short'
+    });
+
+    drawRow(language === 'ar' ? 'تاريخ التبرع المعتمد' : 'Verified Date', formattedDate, cardY + 180);
+    drawRow(
+      language === 'ar' ? 'طريقة الدفع والتحويل' : 'Payment Method', 
+      donation.payment_method === 'vodafone_cash' 
+        ? (language === 'ar' ? 'فودافون كاش' : 'Vodafone Cash') 
+        : (language === 'ar' ? 'إنستاباي' : 'InstaPay'),
+      cardY + 230
+    );
+    drawRow(language === 'ar' ? 'رقم المعاملة الفريد' : 'Receipt ID', donation.id.substring(0, 18).toUpperCase(), cardY + 280);
+
+    // Footer Verified Seal & QR code
+    const footerY = cardY + cardH + 40;
+    
+    // Draw Verified Seal Stamp
+    ctx.fillStyle = 'rgba(16, 185, 129, 0.1)';
+    ctx.strokeStyle = '#10b981';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(220, footerY + 70, 60, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#10b981';
+    ctx.font = 'bold 20px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(language === 'ar' ? 'موثق ومعتمد' : 'VERIFIED', 220, footerY + 55);
+    ctx.fillText('✓', 220, footerY + 85);
+
+    // Draw QR Code
+    try {
+      const qrImg = new Image();
+      qrImg.crossOrigin = 'anonymous';
+      
+      const loadQR = new Promise((res, rej) => {
+        qrImg.onload = res;
+        qrImg.onerror = rej;
+      });
+
+      const verUrl = `${window.location.origin}/?phone=${donation.phone || ''}&id=${donation.id}`;
+      qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&color=020617&bgcolor=f8fafc&data=${encodeURIComponent(verUrl)}`;
+      await loadQR;
+
+      ctx.fillStyle = '#f8fafc';
+      ctx.beginPath();
+      const qrr = 8;
+      const qx = 840, qy = footerY, qw = 140, qh = 140;
+      ctx.moveTo(qx + qrr, qy);
+      ctx.lineTo(qx + qw - qrr, qy);
+      ctx.quadraticCurveTo(qx + qw, qy, qx + qw, qy + qrr);
+      ctx.lineTo(qx + qw, qy + qh - qrr);
+      ctx.quadraticCurveTo(qx + qw, qy + qh, qx + qw - qrr, qy + qh);
+      ctx.lineTo(qx + qrr, qy + qh);
+      ctx.quadraticCurveTo(qx, qy + qh, qx, qy + qh - qrr);
+      ctx.lineTo(qx, qy + qrr);
+      ctx.quadraticCurveTo(qx, qy, qx + qrr, qy);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.drawImage(qrImg, 850, footerY + 10, 120, 120);
+    } catch (e) {
+      console.error("Canvas receipt QR failed", e);
+    }
+
+    ctx.fillStyle = '#64748b';
+    ctx.font = 'italic 18px sans-serif';
+    ctx.textBaseline = 'middle';
+    if (language === 'ar') {
+      ctx.textAlign = 'right';
+      ctx.fillText('امسح رمز الـ QR للتحقق من صحة الفاتورة من السجل المباشر للمنصة', 810, footerY + 70);
+    } else {
+      ctx.textAlign = 'left';
+      ctx.fillText('Scan QR to verify receipt on the live ledger', 320, footerY + 70);
+    }
+
+    return canvas.toDataURL('image/png');
+  };
+
+  const handleReceiptClick = async (donation: any) => {
+    setSelectedReceiptDonation(donation);
+    setIsGeneratingReceipt(true);
+    setShowReceiptModal(true);
+    setReceiptImage(null); // Clear previous
+    try {
+      const dataUrl = await generateReceiptCard(donation);
+      if (dataUrl) {
+        setReceiptImage(dataUrl);
+      }
+    } catch (e) {
+      console.error(e);
+      alert(language === 'ar' ? 'حدث خطأ أثناء توليد الفاتورة' : 'Error generating receipt card');
+    } finally {
+      setIsGeneratingReceipt(false);
+    }
+  };
+
+  const handleDownloadReceiptImage = () => {
+    if (!receiptImage || !selectedReceiptDonation) return;
+    const a = document.createElement('a');
+    a.href = receiptImage;
+    a.download = `receipt-${selectedReceiptDonation.id.substring(0, 8)}-${new Date().toISOString().split('T')[0]}.png`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  const handleReceiptNativeShare = async () => {
+    if (!receiptImage || !selectedReceiptDonation) return;
+    try {
+      const response = await fetch(receiptImage);
+      const blob = await response.blob();
+      const file = new File([blob], `receipt-${selectedReceiptDonation.id.substring(0, 8)}.png`, { type: 'image/png' });
+      
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: language === 'ar' ? 'فاتورة تبرع معتمدة' : 'Verified Donation Receipt',
+          text: language === 'ar' 
+            ? `الحمد لله، تم توثيق تبرعي بقيمة ${selectedReceiptDonation.amount} ج.م لمستشفى كفر الشيخ الجامعي. الرابط للتبرع:\n${window.location.origin}`
+            : `My donation of ${selectedReceiptDonation.amount} EGP has been verified. Support the campaign here:\n${window.location.origin}`,
+        });
+      } else {
+        await navigator.clipboard.writeText(`${window.location.origin}/?phone=${selectedReceiptDonation.phone || ''}`);
+        alert(language === 'ar' ? 'تم نسخ رابط التحقق من التبرع!' : 'Donation tracking link copied!');
+      }
+    } catch (e) {
+      console.error("Receipt share failed", e);
+      await navigator.clipboard.writeText(`${window.location.origin}/?phone=${selectedReceiptDonation.phone || ''}`);
+      alert(language === 'ar' ? 'تم نسخ رابط التحقق من التبرع!' : 'Donation tracking link copied!');
     }
   };
 
@@ -1486,10 +1786,22 @@ export default function PublicDonationPage() {
                                 </span>
                               )}
                               {(d.status === 'auto_verified' || d.status === 'manual_verified') && (
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950/60 border border-emerald-900/40 text-emerald-400 flex items-center gap-1">
-                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 fill-transparent" />
-                                  <span>{t('track_status_verified')}</span>
-                                </span>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950/60 border border-emerald-900/40 text-emerald-400 flex items-center gap-1">
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 fill-transparent" />
+                                    <span>{t('track_status_verified')}</span>
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleReceiptClick(d)}
+                                    className="px-2.5 py-1 rounded bg-slate-900 border border-slate-800 hover:bg-slate-800 text-[10px] font-bold text-emerald-400 flex items-center gap-1 cursor-pointer active:scale-95 transition-all"
+                                  >
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                    </svg>
+                                    <span>{language === 'ar' ? 'عرض الفاتورة' : 'View Receipt'}</span>
+                                  </button>
+                                </div>
                               )}
                               {d.status === 'rejected' && (
                                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-950/30 border border-red-900/20 text-red-300 flex items-center gap-1">
@@ -1820,10 +2132,22 @@ export default function PublicDonationPage() {
                             </span>
                           )}
                           {(d.status === 'auto_verified' || d.status === 'manual_verified') && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950/60 border border-emerald-900/40 text-emerald-400 flex items-center gap-1">
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 fill-transparent" />
-                              <span>{t('track_status_verified')}</span>
-                            </span>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950/60 border border-emerald-900/40 text-emerald-400 flex items-center gap-1">
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 fill-transparent" />
+                                <span>{t('track_status_verified')}</span>
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleReceiptClick(d)}
+                                className="px-2.5 py-1 rounded bg-slate-900 border border-slate-800 hover:bg-slate-800 text-[10px] font-bold text-emerald-400 flex items-center gap-1 cursor-pointer active:scale-95 transition-all"
+                              >
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                </svg>
+                                <span>{language === 'ar' ? 'عرض الفاتورة' : 'View Receipt'}</span>
+                              </button>
+                            </div>
                           )}
                           {d.status === 'rejected' && (
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-950/30 border border-red-900/20 text-red-300 flex items-center gap-1">
@@ -2152,6 +2476,76 @@ export default function PublicDonationPage() {
               {language === 'ar' 
                 ? 'يمكنك تحميل بطاقة التقدم ونشرها على وسائل التواصل الاجتماعي لدعم الحملة.' 
                 : 'Download the progress card to share on social media stories.'}
+            </p>
+
+          </div>
+        </div>
+      )}
+
+      {/* DONATION RECEIPT MODAL */}
+      {showReceiptModal && selectedReceiptDonation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+          <div className="glass-panel w-full max-w-md p-6 rounded-2xl border border-slate-900 bg-slate-950 space-y-6 shadow-2xl animate-scale-up">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-white">
+                {language === 'ar' ? 'فاتورة تبرع معتمدة' : 'Verified Donation Receipt'}
+              </h3>
+              <button 
+                onClick={() => {
+                  setShowReceiptModal(false);
+                  setSelectedReceiptDonation(null);
+                  setReceiptImage(null);
+                }}
+                className="text-slate-400 hover:text-white text-xs font-semibold px-2 py-1 hover:bg-slate-900 rounded-lg transition-colors"
+              >
+                {language === 'ar' ? 'إغلاق' : 'Close'}
+              </button>
+            </div>
+
+            {/* Receipt Preview */}
+            <div className="w-full bg-slate-900/40 rounded-xl overflow-hidden border border-slate-900 p-2 flex flex-col items-center justify-center min-h-[300px] relative">
+              {isGeneratingReceipt || !receiptImage ? (
+                <div className="flex flex-col items-center justify-center py-12 space-y-3">
+                  <Loader2 className="w-8 h-8 animate-spin text-emerald-400" />
+                  <p className="text-xs text-slate-400">
+                    {language === 'ar' ? 'جاري توليد الفاتورة المعتمدة...' : 'Generating certified receipt...'}
+                  </p>
+                </div>
+              ) : (
+                <img 
+                  src={receiptImage} 
+                  alt="Donation Receipt" 
+                  className="w-full h-auto rounded-lg shadow-md border border-slate-950"
+                />
+              )}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={handleDownloadReceiptImage}
+                disabled={isGeneratingReceipt || !receiptImage}
+                className="py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 font-black text-xs text-center shadow-md active:scale-95 transition-all hover:brightness-105 disabled:opacity-50"
+              >
+                {language === 'ar' ? 'تحميل كبطاقة' : 'Download Image'}
+              </button>
+              <button
+                type="button"
+                onClick={handleReceiptNativeShare}
+                disabled={isGeneratingReceipt || !receiptImage}
+                className="py-3.5 rounded-xl bg-slate-900 border border-slate-800 hover:bg-slate-850 text-slate-350 font-bold text-xs text-center active:scale-95 transition-all disabled:opacity-50"
+              >
+                {language === 'ar' ? 'مشاركة وتوثيق' : 'Share / Copy'}
+              </button>
+            </div>
+
+            <p className="text-[10px] text-slate-500 text-center leading-normal">
+              {language === 'ar' 
+                ? 'تحتوي الفاتورة على رقم معاملة فريد ورمز QR مشفر للتحقق الفوري من صحة التبرع.' 
+                : 'The receipt includes a unique transaction ID and a verification QR code linked to the ledger.'}
             </p>
 
           </div>
