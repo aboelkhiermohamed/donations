@@ -2175,21 +2175,7 @@ export default function PublicDonationPage() {
               )}
             </div>
 
-            {/* Platform Trust banner */}
-            <div className="bg-emerald-950/20 border border-emerald-900/30 rounded-2xl p-5 flex items-start gap-4">
-              <AlertCircle className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" />
-              <div className="space-y-1">
-                <h4 className="text-white font-bold text-sm">
-                  {language === 'ar' ? 'كيف يعمل التحقق التلقائي؟' : 'How does Auto-Verification work?'}
-                </h4>
-                <p className="text-slate-400 text-xs leading-relaxed">
-                  {language === 'ar'
-                    ? 'عند إرسال تبرعك، يقوم هاتف أندرويد متصل بنظامنا بالتقاط رسالة تأكيد الدفع القصيرة (SMS) التي تصل من محفظة فودافون كاش أو إشعار إنستاباي. يقوم محرك المطابقة لدينا بالربط بين التبرع والرسالة تلقائياً خلال ثوانٍ، وتأكيد العملية فوراً دون تدخل بشري.'
-                    : 'Once you transfer and submit this form, a dedicated Android gateway device receives the official SMS from Vodafone Cash or InstaPay. Our parsing engine extracts transaction references and automatically approves the donation request in real time.'
-                  }
-                </p>
-              </div>
-            </div>
+
 
           </div>
 
