@@ -693,7 +693,9 @@ export default function PublicDonationPage() {
         await navigator.share({
           files: [file],
           title: language === 'ar' ? 'حملة الدفعة التاسعة طب كفر الشيخ' : '9th Batch Donations Campaign',
-          text: language === 'ar' ? 'ادعم معنا حملة توفير جهاز التنفس وجهاز ABG' : 'Support our ventilator & ABG campaign',
+          text: language === 'ar' 
+            ? `ادعم معنا حملة توفير جهاز التنفس وجهاز ABG:\n${window.location.origin}` 
+            : `Support our ventilator & ABG campaign:\n${window.location.origin}`,
         });
       } else {
         await navigator.clipboard.writeText(window.location.href);
