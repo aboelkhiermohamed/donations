@@ -720,10 +720,13 @@ export default function PublicDonationPage() {
               {/* Call-to-action Button */}
               <button
                 onClick={() => {
-                  const formElement = document.querySelector('form');
-                  if (formElement) {
-                    formElement.scrollIntoView({ behavior: 'smooth' });
-                  }
+                  setActiveMobileTab('donate');
+                  setTimeout(() => {
+                    const formElement = document.querySelector('form');
+                    if (formElement) {
+                      formElement.scrollIntoView({ behavior: 'smooth' });
+                    }
+                  }, 100);
                 }}
                 className="w-full py-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:brightness-105 active:scale-[0.98] transition-all text-slate-950 font-black text-center text-sm shadow-lg shadow-emerald-500/10 cursor-pointer"
               >
