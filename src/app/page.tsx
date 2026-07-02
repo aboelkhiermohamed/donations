@@ -329,11 +329,43 @@ export default function PublicDonationPage() {
       setIsLoggedIn(!!session);
     });
 
-    // Load initial IDs from localStorage
-    const storedIds = localStorage.getItem('my_donation_ids');
-    if (storedIds) {
-      const ids = storedIds.split(',').filter(Boolean);
-      fetchTrackedStatus(ids, true);
+    // Load initial IDs from URL parameters (QR code scans) or localStorage (history)
+    const urlParams = new URLSearchParams(window.location.search);
+    const idParam = urlParams.get('id');
+    const phoneParam = urlParams.get('phone');
+
+    if (idParam) {
+      fetchTrackedStatus([idParam], true);
+      setActiveMobileTab('ledger');
+      setTimeout(() => {
+        const trackingElement = document.getElementById('tracking-card');
+        if (trackingElement) {
+          trackingElement.scrollIntoView({ behavior: 'smooth' });
+        }
+      }, 500);
+    } else if (phoneParam) {
+      setTrackingPhone(phoneParam);
+      setActiveMobileTab('ledger');
+      setTimeout(async () => {
+        setIsTrackingLoading(true);
+        try {
+          const res = await fetch(`/api/donations/status?phone=${phoneParam}`);
+          if (res.ok) {
+            const data = await res.json();
+            setTrackedDonations(data);
+          }
+        } catch (e) {
+          console.error(e);
+        } finally {
+          setIsTrackingLoading(false);
+        }
+      }, 100);
+    } else {
+      const storedIds = localStorage.getItem('my_donation_ids');
+      if (storedIds) {
+        const ids = storedIds.split(',').filter(Boolean);
+        fetchTrackedStatus(ids, true);
+      }
     }
 
     return () => {
@@ -2043,7 +2075,7 @@ export default function PublicDonationPage() {
             </div>
 
             {/* TRACK YOUR DONATION CARD */}
-            <div className="glass-panel rounded-2xl p-6 space-y-6 relative overflow-hidden">
+            <div id="tracking-card" className="glass-panel rounded-2xl p-6 space-y-6 relative overflow-hidden">
               <div className="absolute -top-12 -left-12 w-24 h-24 bg-emerald-500/10 rounded-full blur-xl pointer-events-none" />
 
               <div className="space-y-1">
