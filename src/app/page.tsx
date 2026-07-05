@@ -381,13 +381,16 @@ export default function PublicDonationPage() {
 
   // Dedication Toast timer
   useEffect(() => {
+    const isMobile = window.innerWidth < 768;
+    const displayDuration = isMobile ? 4000 : 10000;
+
     const showTimer = setTimeout(() => {
       setShowDedicationToast(true);
     }, 1500);
 
     const hideTimer = setTimeout(() => {
       setShowDedicationToast(false);
-    }, 11500); // 10 seconds display time
+    }, 1500 + displayDuration);
 
     return () => {
       clearTimeout(showTimer);
