@@ -20,6 +20,10 @@ export default function AdminSettingsPage() {
   const [instapayLink, setInstapayLink] = useState('');
   const [instapayQrUrl, setInstapayQrUrl] = useState('');
   const [instapayQrFile, setInstapayQrFile] = useState<File | null>(null);
+
+  const [vodafoneCashEnabled, setVodafoneCashEnabled] = useState(true);
+  const [vodafoneCash2Enabled, setVodafoneCash2Enabled] = useState(true);
+  const [instapayEnabled, setInstapayEnabled] = useState(true);
   
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -51,7 +55,10 @@ export default function AdminSettingsPage() {
           instapay_address: '01015339426@instapay', 
           instapay_phone: '01015339426',
           instapay_payment_link: '',
-          instapay_qr_url: ''
+          instapay_qr_url: '',
+          vodafone_cash_enabled: true,
+          vodafone_cash_2_enabled: true,
+          instapay_enabled: true
         }
       };
     }
@@ -67,6 +74,9 @@ export default function AdminSettingsPage() {
       setInstapayPhone(config.settings.instapay_phone || '01015339426');
       setInstapayLink(config.settings.instapay_payment_link || '');
       setInstapayQrUrl(config.settings.instapay_qr_url || '');
+      setVodafoneCashEnabled(config.settings.vodafone_cash_enabled !== false);
+      setVodafoneCash2Enabled(config.settings.vodafone_cash_2_enabled !== false);
+      setInstapayEnabled(config.settings.instapay_enabled !== false);
     }
   }, [config]);
 
@@ -124,7 +134,10 @@ export default function AdminSettingsPage() {
             instapay_address: instapayAddress.trim(),
             instapay_phone: instapayPhone.trim(),
             instapay_payment_link: instapayLink.trim(),
-            instapay_qr_url: finalQrUrl
+            instapay_qr_url: finalQrUrl,
+            vodafone_cash_enabled: vodafoneCashEnabled,
+            vodafone_cash_2_enabled: vodafoneCash2Enabled,
+            instapay_enabled: instapayEnabled
           },
           updated_at: new Date().toISOString()
         });
@@ -135,7 +148,18 @@ export default function AdminSettingsPage() {
       await supabase.from('audit_logs').insert({
         admin_id: session?.user?.id || null,
         action: 'UPDATE_SYSTEM_SETTINGS',
-        details: { targetAmount, vodafoneCash, vodafoneCash2, instapayAddress, instapayPhone, instapayLink, instapayQrUrl: finalQrUrl }
+        details: { 
+          targetAmount, 
+          vodafoneCash, 
+          vodafoneCash2, 
+          instapayAddress, 
+          instapayPhone, 
+          instapayLink, 
+          instapayQrUrl: finalQrUrl,
+          vodafoneCashEnabled,
+          vodafoneCash2Enabled,
+          instapayEnabled
+        }
       });
 
       // Refetch
@@ -294,116 +318,172 @@ export default function AdminSettingsPage() {
 
           {/* Vodafone Cash */}
           <div className="space-y-2">
-            <label className="text-slate-300 text-xs font-semibold flex items-center gap-1.5">
-              <Coins className="w-4 h-4 text-emerald-450" />
-              <span>{language === 'ar' ? 'رقم محفظة فودافون كاش الأول' : 'Vodafone Cash Number 1'}</span>
-            </label>
+            <div className="flex items-center justify-between">
+              <label className="text-slate-300 text-xs font-semibold flex items-center gap-1.5">
+                <Coins className="w-4 h-4 text-emerald-450" />
+                <span>{language === 'ar' ? 'رقم محفظة فودافون كاش الأول' : 'Vodafone Cash Number 1'}</span>
+              </label>
+              <label className="relative inline-flex items-center gap-2 cursor-pointer select-none">
+                <input 
+                  type="checkbox" 
+                  checked={vodafoneCashEnabled}
+                  onChange={(e) => setVodafoneCashEnabled(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="relative w-9 h-5 bg-slate-850 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-400 after:border-slate-400 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500 peer-checked:after:bg-slate-950 peer-checked:after:border-transparent"></div>
+                <span className="text-[10px] font-bold text-slate-400 peer-checked:text-emerald-400">
+                  {vodafoneCashEnabled ? (language === 'ar' ? 'نشط' : 'Active') : (language === 'ar' ? 'معطل' : 'Disabled')}
+                </span>
+              </label>
+            </div>
             <input 
               type="text"
               value={vodafoneCash}
               onChange={(e) => setVodafoneCash(e.target.value)}
-              required
-              className="w-full glass-input px-4 py-3 rounded-xl text-sm font-mono"
+              required={vodafoneCashEnabled}
+              disabled={!vodafoneCashEnabled}
+              className={`w-full glass-input px-4 py-3 rounded-xl text-sm font-mono transition-all ${!vodafoneCashEnabled ? 'opacity-45 pointer-events-none border-slate-950/20' : ''}`}
               placeholder="e.g. 01015339426"
             />
           </div>
 
           {/* Vodafone Cash 2 */}
           <div className="space-y-2">
-            <label className="text-slate-300 text-xs font-semibold flex items-center gap-1.5">
-              <Coins className="w-4 h-4 text-emerald-450" />
-              <span>{language === 'ar' ? 'رقم محفظة فودافون كاش الثاني (اختياري)' : 'Vodafone Cash Number 2 (Optional)'}</span>
-            </label>
+            <div className="flex items-center justify-between">
+              <label className="text-slate-300 text-xs font-semibold flex items-center gap-1.5">
+                <Coins className="w-4 h-4 text-emerald-450" />
+                <span>{language === 'ar' ? 'رقم محفظة فودافون كاش الثاني (اختياري)' : 'Vodafone Cash Number 2 (Optional)'}</span>
+              </label>
+              <label className="relative inline-flex items-center gap-2 cursor-pointer select-none">
+                <input 
+                  type="checkbox" 
+                  checked={vodafoneCash2Enabled}
+                  onChange={(e) => setVodafoneCash2Enabled(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="relative w-9 h-5 bg-slate-850 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-400 after:border-slate-400 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500 peer-checked:after:bg-slate-950 peer-checked:after:border-transparent"></div>
+                <span className="text-[10px] font-bold text-slate-400 peer-checked:text-emerald-400">
+                  {vodafoneCash2Enabled ? (language === 'ar' ? 'نشط' : 'Active') : (language === 'ar' ? 'معطل' : 'Disabled')}
+                </span>
+              </label>
+            </div>
             <input 
               type="text"
               value={vodafoneCash2}
               onChange={(e) => setVodafoneCash2(e.target.value)}
-              className="w-full glass-input px-4 py-3 rounded-xl text-sm font-mono"
+              disabled={!vodafoneCash2Enabled}
+              className={`w-full glass-input px-4 py-3 rounded-xl text-sm font-mono transition-all ${!vodafoneCash2Enabled ? 'opacity-45 pointer-events-none border-slate-950/20' : ''}`}
               placeholder="e.g. 010XXXXXXXX"
             />
           </div>
 
-          {/* InstaPay */}
-          <div className="space-y-2">
-            <label className="text-slate-300 text-xs font-semibold flex items-center gap-1.5">
+          {/* InstaPay Header & Toggles */}
+          <div className="pt-4 border-t border-slate-900 flex items-center justify-between">
+            <h3 className="text-sm font-bold text-white flex items-center gap-2">
               <Coins className="w-4 h-4 text-teal-400" />
-              <span>{language === 'ar' ? 'عنوان حساب إنستاباي (InstaPay Address)' : 'InstaPay Address'}</span>
+              <span>{language === 'ar' ? 'طريقة الدفع إنستاباي (InstaPay)' : 'InstaPay Payment Method'}</span>
+            </h3>
+            <label className="relative inline-flex items-center gap-2 cursor-pointer select-none">
+              <input 
+                type="checkbox" 
+                checked={instapayEnabled}
+                onChange={(e) => setInstapayEnabled(e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className="relative w-9 h-5 bg-slate-850 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-400 after:border-slate-400 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-teal-500 peer-checked:after:bg-slate-950 peer-checked:after:border-transparent"></div>
+              <span className="text-[10px] font-bold text-slate-400 peer-checked:text-teal-400">
+                {instapayEnabled ? (language === 'ar' ? 'نشط' : 'Active') : (language === 'ar' ? 'معطل' : 'Disabled')}
+              </span>
             </label>
-            <input 
-              type="text"
-              value={instapayAddress}
-              onChange={(e) => setInstapayAddress(e.target.value)}
-              required
-              className="w-full glass-input px-4 py-3 rounded-xl text-sm font-mono"
-              placeholder="e.g. 01015339426@instapay"
-            />
           </div>
 
-          {/* InstaPay Phone */}
-          <div className="space-y-2">
-            <label className="text-slate-300 text-xs font-semibold flex items-center gap-1.5">
-              <Coins className="w-4 h-4 text-teal-400" />
-              <span>{language === 'ar' ? 'رقم هاتف حساب إنستاباي (InstaPay Phone Number)' : 'InstaPay Phone Number'}</span>
-            </label>
-            <input 
-              type="text"
-              value={instapayPhone}
-              onChange={(e) => setInstapayPhone(e.target.value)}
-              required
-              className="w-full glass-input px-4 py-3 rounded-xl text-sm font-mono"
-              placeholder="e.g. 01015339426"
-            />
-          </div>
+          <div className={`space-y-6 transition-all ${!instapayEnabled ? 'opacity-45 pointer-events-none' : ''}`}>
+            {/* InstaPay Address */}
+            <div className="space-y-2">
+              <label className="text-slate-300 text-xs font-semibold flex items-center gap-1.5">
+                <Coins className="w-4 h-4 text-teal-400" />
+                <span>{language === 'ar' ? 'عنوان حساب إنستاباي (InstaPay Address)' : 'InstaPay Address'}</span>
+              </label>
+              <input 
+                type="text"
+                value={instapayAddress}
+                onChange={(e) => setInstapayAddress(e.target.value)}
+                required={instapayEnabled}
+                disabled={!instapayEnabled}
+                className="w-full glass-input px-4 py-3 rounded-xl text-sm font-mono"
+                placeholder="e.g. 01015339426@instapay"
+              />
+            </div>
 
-          {/* InstaPay Payment Link */}
-          <div className="space-y-2">
-            <label className="text-slate-300 text-xs font-semibold flex items-center gap-1.5">
-              <Coins className="w-4 h-4 text-teal-400" />
-              <span>{language === 'ar' ? 'رابط الدفع المباشر إنستاباي (InstaPay Payment Link)' : 'Direct InstaPay Payment Link'}</span>
-            </label>
-            <input 
-              type="text"
-              value={instapayLink}
-              onChange={(e) => setInstapayLink(e.target.value)}
-              className="w-full glass-input px-4 py-3 rounded-xl text-sm font-mono"
-              placeholder="e.g. https://ipn.eg/S/..."
-              dir="ltr"
-            />
-          </div>
+            {/* InstaPay Phone */}
+            <div className="space-y-2">
+              <label className="text-slate-300 text-xs font-semibold flex items-center gap-1.5">
+                <Coins className="w-4 h-4 text-teal-400" />
+                <span>{language === 'ar' ? 'رقم هاتف حساب إنستاباي (InstaPay Phone Number)' : 'InstaPay Phone Number'}</span>
+              </label>
+              <input 
+                type="text"
+                value={instapayPhone}
+                onChange={(e) => setInstapayPhone(e.target.value)}
+                required={instapayEnabled}
+                disabled={!instapayEnabled}
+                className="w-full glass-input px-4 py-3 rounded-xl text-sm font-mono"
+                placeholder="e.g. 01015339426"
+              />
+            </div>
 
-          {/* InstaPay QR Code Upload */}
-          <div className="space-y-2">
-            <label className="text-slate-300 text-xs font-semibold flex items-center gap-1.5">
-              <Upload className="w-4 h-4 text-teal-400" />
-              <span>{language === 'ar' ? 'تحميل صورة رمز الاستجابة السريعة (InstaPay QR Code Image)' : 'Upload InstaPay QR Code Image'}</span>
-            </label>
-            <div className="flex flex-col sm:flex-row gap-4 items-center">
-              <div className="flex-1 w-full font-sans">
-                <input 
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    if (e.target.files && e.target.files[0]) {
-                      setInstapayQrFile(e.target.files[0]);
-                    }
-                  }}
-                  className="w-full text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-slate-900 file:text-slate-300 hover:file:bg-slate-800"
-                />
-                <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">
-                  {language === 'ar' ? 'الصيغ المدعومة: PNG, JPG. سيتم استخدام هذه الصورة كـ رمز QR ثابت للمتبرعين.' : 'Supported formats: PNG, JPG. Used as a static QR code.'}
-                </p>
-              </div>
-              
-              {/* Preview */}
-              {(instapayQrFile || instapayQrUrl) && (
-                <div className="w-20 h-20 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex items-center justify-center p-1.5 flex-shrink-0">
-                  <img 
-                    src={instapayQrFile ? URL.createObjectURL(instapayQrFile) : instapayQrUrl} 
-                    alt="QR Preview" 
-                    className="w-full h-full object-contain"
+            {/* InstaPay Payment Link */}
+            <div className="space-y-2">
+              <label className="text-slate-300 text-xs font-semibold flex items-center gap-1.5">
+                <Coins className="w-4 h-4 text-teal-400" />
+                <span>{language === 'ar' ? 'رابط الدفع المباشر إنستاباي (InstaPay Payment Link)' : 'Direct InstaPay Payment Link'}</span>
+              </label>
+              <input 
+                type="text"
+                value={instapayLink}
+                onChange={(e) => setInstapayLink(e.target.value)}
+                disabled={!instapayEnabled}
+                className="w-full glass-input px-4 py-3 rounded-xl text-sm font-mono"
+                placeholder="e.g. https://ipn.eg/S/..."
+                dir="ltr"
+              />
+            </div>
+
+            {/* InstaPay QR Code Upload */}
+            <div className="space-y-2">
+              <label className="text-slate-300 text-xs font-semibold flex items-center gap-1.5">
+                <Upload className="w-4 h-4 text-teal-400" />
+                <span>{language === 'ar' ? 'تحميل صورة رمز الاستجابة السريعة (InstaPay QR Code Image)' : 'Upload InstaPay QR Code Image'}</span>
+              </label>
+              <div className="flex flex-col sm:flex-row gap-4 items-center">
+                <div className="flex-1 w-full font-sans">
+                  <input 
+                    type="file"
+                    accept="image/*"
+                    disabled={!instapayEnabled}
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        setInstapayQrFile(e.target.files[0]);
+                      }
+                    }}
+                    className="w-full text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-slate-900 file:text-slate-300 hover:file:bg-slate-800 disabled:opacity-50"
                   />
+                  <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">
+                    {language === 'ar' ? 'الصيغ المدعومة: PNG, JPG. سيتم استخدام هذه الصورة كـ رمز QR ثابت للمتبرعين.' : 'Supported formats: PNG, JPG. Used as a static QR code.'}
+                  </p>
                 </div>
-              )}
+                
+                {/* Preview */}
+                {(instapayQrFile || instapayQrUrl) && (
+                  <div className="w-20 h-20 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex items-center justify-center p-1.5 flex-shrink-0">
+                    <img 
+                      src={instapayQrFile ? URL.createObjectURL(instapayQrFile) : instapayQrUrl} 
+                      alt="QR Preview" 
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 

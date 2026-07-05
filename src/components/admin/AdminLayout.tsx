@@ -126,7 +126,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <div className="min-h-screen bg-slate-950 text-slate-50 flex flex-col md:flex-row font-sans" dir={dir}>
       {/* MOBILE HEADER */}
-      <header className="md:hidden w-full bg-slate-900/80 border-b border-slate-800 p-4 flex items-center justify-between sticky top-0 z-40 backdrop-blur-md">
+      <header className="md:hidden w-full bg-slate-900/80 border-b border-slate-800 p-4 flex items-center justify-between sticky top-0 z-40 backdrop-blur-md print:hidden">
         <Link href="/" className="flex items-center gap-2 hover:opacity-90 transition-opacity">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center">
             <Heart className="w-4 h-4 text-slate-950 fill-slate-950" />
@@ -146,7 +146,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </header>
 
       {/* SIDEBAR NAVIGATION (Desktop) */}
-      <aside className={`fixed inset-y-0 start-0 z-30 w-64 glass-panel border-r border-slate-800/80 p-6 flex flex-col justify-between transition-transform duration-300 md:translate-x-0 md:static ${
+      <aside className={`fixed inset-y-0 start-0 z-30 w-64 glass-panel border-r border-slate-800/80 p-6 flex flex-col justify-between transition-transform duration-300 md:translate-x-0 md:static print:hidden ${
         mobileMenuOpen 
           ? 'translate-x-0' 
           : dir === 'rtl' 
@@ -229,10 +229,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </aside>
 
       {/* MAIN CONTAINER CONTENT */}
-      <div className="flex-1 min-w-0 p-6 md:p-8 overflow-y-auto space-y-6">
+      <div className="flex-1 min-w-0 p-6 md:p-8 overflow-y-auto space-y-6 print:p-0 print:m-0 print:overflow-visible">
         {/* Banner Alert for Unverified Matches */}
         {unreadNotificationsCount > 0 && (
-          <div className="w-full p-4 bg-emerald-950/20 border border-emerald-900/30 rounded-2xl flex items-center justify-between gap-4 animate-scale-up">
+          <div className="w-full p-4 bg-emerald-950/20 border border-emerald-900/30 rounded-2xl flex items-center justify-between gap-4 animate-scale-up print:hidden">
             <div className="flex items-center gap-3">
               <AlertTriangle className="w-5 h-5 text-emerald-400 flex-shrink-0" />
               <div>

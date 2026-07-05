@@ -206,9 +206,114 @@ export default function AdminReportsPage() {
     }
   };
 
+  // Helper Formatters for Localized PDF/Print Tables
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'auto_verified':
+        return language === 'ar' ? 'موثق تلقائياً' : 'Auto Verified';
+      case 'manual_verified':
+        return language === 'ar' ? 'موثق يدوياً' : 'Manual Verified';
+      case 'pending':
+        return language === 'ar' ? 'قيد التحقق' : 'Pending';
+      case 'rejected':
+        return language === 'ar' ? 'مرفوض' : 'Rejected';
+      case 'refunded':
+        return language === 'ar' ? 'مسترجع' : 'Refunded';
+      default:
+        return status;
+    }
+  };
+
+  const getMethodLabel = (method: string) => {
+    if (method === 'vodafone_cash') {
+      return language === 'ar' ? 'فودافون كاش' : 'Vodafone Cash';
+    } else if (method === 'instapay') {
+      return language === 'ar' ? 'إنستاباي' : 'InstaPay';
+    }
+    return method.replace('_', ' ');
+  };
+
+  const getVerificationLabel = (method?: string) => {
+    if (method === 'auto') {
+      return language === 'ar' ? 'تلقائي' : 'Auto';
+    } else if (method === 'manual') {
+      return language === 'ar' ? 'يدوي' : 'Manual';
+    }
+    return language === 'ar' ? 'بدون' : 'None';
+  };
+
   return (
     <AdminLayout>
-      <div className="space-y-6 print:p-0 print:space-y-4">
+      {/* Premium Print Media Stylesheet injection */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        @media print {
+          /* Reset color theme to print-friendly light layout */
+          html, body, main, div, table, tr, td, th, tbody, thead, span, h2, h3, h4, p {
+            background: white !important;
+            background-color: white !important;
+            color: #0f172a !important;
+            border-color: #cbd5e1 !important;
+          }
+          
+          /* Force page margins */
+          @page {
+            margin: 20mm 15mm 20mm 15mm !important;
+            size: A4 portrait !important;
+          }
+
+          /* Clean, elegant table rendering with clear gridlines */
+          table {
+            border: 1px solid #cbd5e1 !important;
+            font-size: 8.5pt !important;
+            width: 100% !important;
+            margin-top: 10px !important;
+          }
+          th, td {
+            border: 1px solid #cbd5e1 !important;
+            padding: 8px 10px !important;
+            text-align: ${language === 'ar' ? 'right' : 'left'} !important;
+          }
+          th {
+            background-color: #f8fafc !important;
+            font-weight: 800 !important;
+            color: #0f172a !important;
+          }
+          
+          /* Prevent row splitting across pages */
+          tr {
+            page-break-inside: avoid !important;
+            page-break-after: auto !important;
+          }
+          
+          /* Repeat header on every print page */
+          thead {
+            display: table-header-group !important;
+          }
+          
+          /* Hide sidebar, native controls, and settings cards */
+          aside, header, nav, .print\\:hidden {
+            display: none !important;
+          }
+
+          /* Force correct layout container margins */
+          .print\\:m-0 {
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          
+          /* Style printed aggregates boxes nicely */
+          .print-agg-card {
+            border: 1px solid #cbd5e1 !important;
+            border-radius: 8px !important;
+            padding: 12px !important;
+            background-color: #f8fafc !important;
+            flex: 1 !important;
+            text-align: center !important;
+          }
+        }
+      `}} />
+
+      <div className="space-y-6 print:p-0 print:space-y-6" dir={language === 'ar' ? 'rtl' : 'ltr'}>
         
         {/* Title Block */}
         <div className="print:hidden">
@@ -219,23 +324,31 @@ export default function AdminReportsPage() {
         </div>
 
         {/* PRINT ONLY REPORT HEADER */}
-        <div className="hidden print:flex flex-col gap-4 border-b border-slate-700 pb-4 text-slate-900" dir={language === 'ar' ? 'rtl' : 'ltr'}>
+        <div className="hidden print:flex flex-col gap-5 border-b-2 border-slate-900 pb-5" dir={language === 'ar' ? 'rtl' : 'ltr'}>
           <div className="flex justify-between items-center">
-            <h2 className="text-xl font-bold text-slate-950">{language === 'ar' ? 'تقرير التبرعات والمدفوعات الرسمي' : 'Official Donations & Payments Report'}</h2>
-            <span className="text-xs text-slate-500 font-mono">Date Generated: {new Date().toLocaleDateString()}</span>
+            <div>
+              <h2 className="text-2xl font-black text-slate-950 tracking-tight">{language === 'ar' ? 'تقرير التبرعات والمدفوعات الرسمي' : 'Official Campaign Financial Report'}</h2>
+              <p className="text-xs text-slate-500 mt-1 font-semibold">
+                {language === 'ar' ? 'حملة اليسر لمساعدة المحتاجين - لوحة التحكم الإدارية' : 'Yusr Charity Campaign - Administrative Control Portal'}
+              </p>
+            </div>
+            <div className="text-end">
+              <span className="text-[10px] text-slate-500 font-mono block">Exported: {new Date().toLocaleString()}</span>
+              <span className="text-[10px] text-slate-400 font-mono block">Status: Verified Approved Records</span>
+            </div>
           </div>
-          <div className="grid grid-cols-3 gap-4 text-xs">
+          <div className="grid grid-cols-3 gap-6 bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs">
             <div>
-              <span className="text-slate-500 font-bold block">{language === 'ar' ? 'الفترة المشمولة:' : 'Coverage Range:'}</span>
-              <span className="text-slate-800 font-semibold">{reportRange.toUpperCase()} ({startDate} to {endDate})</span>
+              <span className="text-slate-500 font-bold block mb-0.5">{language === 'ar' ? 'الفترة المشمولة:' : 'Coverage Range:'}</span>
+              <span className="text-slate-900 font-extrabold">{reportRange.toUpperCase()} ({startDate} to {endDate})</span>
             </div>
             <div>
-              <span className="text-slate-500 font-bold block">{language === 'ar' ? 'إجمالي التبرعات:' : 'Total Record Count:'}</span>
-              <span className="text-slate-800 font-semibold">{items.length} ({approvedItems.length} Approved)</span>
+              <span className="text-slate-500 font-bold block mb-0.5">{language === 'ar' ? 'إجمالي التبرعات:' : 'Total Record Count:'}</span>
+              <span className="text-slate-900 font-extrabold">{items.length} ({approvedItems.length} Approved)</span>
             </div>
             <div>
-              <span className="text-slate-500 font-bold block">{language === 'ar' ? 'إجمالي الأموال المحصلة:' : 'Total Funds Collected:'}</span>
-              <span className="text-slate-800 font-black text-emerald-700">{totalApprovedSum.toLocaleString()} EGP</span>
+              <span className="text-slate-500 font-bold block mb-0.5">{language === 'ar' ? 'إجمالي الأموال المحصلة:' : 'Total Funds Collected:'}</span>
+              <span className="text-slate-950 font-black text-sm text-emerald-700">{totalApprovedSum.toLocaleString()} EGP</span>
             </div>
           </div>
         </div>
@@ -323,18 +436,18 @@ export default function AdminReportsPage() {
         )}
 
         {/* REPORT AGGREGATES CARDS */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 print:hidden">
-          <div className="glass-panel p-4 rounded-xl border border-slate-900">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 print:grid print:grid-cols-3 print:gap-4 print:my-4">
+          <div className="glass-panel p-4 rounded-xl border border-slate-900 print-agg-card">
             <span className="text-slate-500 text-[10px] uppercase font-bold block">{language === 'ar' ? 'إجمالي طلبات الفترة' : 'Period Total Submissions'}</span>
-            <p className="text-xl font-bold text-white mt-1">{items.length}</p>
+            <p className="text-xl font-bold text-white mt-1 print:text-slate-950">{items.length}</p>
           </div>
-          <div className="glass-panel p-4 rounded-xl border border-slate-900">
+          <div className="glass-panel p-4 rounded-xl border border-slate-900 print-agg-card">
             <span className="text-slate-500 text-[10px] uppercase font-bold block">{language === 'ar' ? 'الطلبات المعتمدة' : 'Verified & Approved'}</span>
-            <p className="text-xl font-bold text-white mt-1">{approvedItems.length}</p>
+            <p className="text-xl font-bold text-white mt-1 print:text-slate-950">{approvedItems.length}</p>
           </div>
-          <div className="glass-panel p-4 rounded-xl border border-slate-900">
+          <div className="glass-panel p-4 rounded-xl border border-slate-900 print-agg-card">
             <span className="text-slate-500 text-[10px] uppercase font-bold block">{language === 'ar' ? 'الأموال الموثقة للفترة' : 'Verified Period Total'}</span>
-            <p className="text-xl font-bold text-emerald-450 mt-1">{totalApprovedSum.toLocaleString()} EGP</p>
+            <p className="text-xl font-bold text-emerald-450 mt-1 print:text-emerald-700">{totalApprovedSum.toLocaleString()} EGP</p>
           </div>
         </div>
 
@@ -373,24 +486,36 @@ export default function AdminReportsPage() {
                       <td className="px-5 py-3 text-white print:text-slate-950 font-bold"><bdi>{d.donor?.name}</bdi></td>
                       <td className="px-5 py-3 font-mono text-slate-400 print:text-slate-600"><span dir="ltr">{d.donor?.phone}</span></td>
                       <td className="px-5 py-3 font-bold text-white print:text-slate-900">{d.amount} EGP</td>
-                      <td className="px-5 py-3 uppercase text-slate-400 print:text-slate-600 font-semibold">{d.payment_method.replace('_', ' ')}</td>
+                      <td className="px-5 py-3 text-slate-400 print:text-slate-600 font-semibold">{getMethodLabel(d.payment_method)}</td>
                       <td className="px-5 py-3 font-mono text-slate-400 print:text-slate-600">{d.transaction_ref || '—'}</td>
-                      <td className="px-5 py-3 capitalize text-slate-400 print:text-slate-600">{d.verification_method || 'none'}</td>
+                      <td className="px-5 py-3 text-slate-400 print:text-slate-600">{getVerificationLabel(d.verification_method)}</td>
                       <td className="px-5 py-3 font-bold">
                         <span className={`capitalize ${
                           d.status.includes('verified') ? 'text-emerald-550 print:text-emerald-700' : 'text-slate-400 print:text-slate-600'
                         }`}>
-                          {d.status}
+                          {getStatusLabel(d.status)}
                         </span>
                       </td>
-                      <td className="px-5 py-3 text-slate-450 print:text-slate-500">
-                        {new Date(d.created_at).toLocaleDateString()}
+                      <td className="px-5 py-3 text-slate-450 print:text-slate-500 font-mono">
+                        {new Date(d.created_at).toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US')}
                       </td>
                     </tr>
                   ))
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+
+        {/* PRINT ONLY FOOTER */}
+        <div className="hidden print:flex justify-between items-center w-full mt-10 border-t border-slate-300 pt-5 text-[10px] text-slate-500" dir={language === 'ar' ? 'rtl' : 'ltr'}>
+          <div>
+            <p className="font-bold">{language === 'ar' ? 'توقيع المسؤول المالي:' : 'Treasurer Signature:'}</p>
+            <p className="mt-8 border-b border-slate-400 w-40"></p>
+          </div>
+          <div className="text-end">
+            <p className="font-bold">{language === 'ar' ? 'نهاية التقرير المالي المعتمد' : 'End of Certified Financial Report'}</p>
+            <p className="text-[9px] mt-1 text-slate-400">{language === 'ar' ? 'شكرًا لدعمكم المستمر للحملة الخيرية.' : 'Thank you for your continuous support of the charity campaign.'}</p>
           </div>
         </div>
 

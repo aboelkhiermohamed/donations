@@ -55,7 +55,7 @@ export default function AdminDonationsPage() {
   const { data: donations, isLoading, error: donationsError } = useQuery<Donation[]>({
     queryKey: ['adminDonations'],
     queryFn: async () => {
-      const { data, error } = await supabase
+       const { data, error } = await supabase
         .from('donations')
         .select(`
           *,
@@ -70,6 +70,10 @@ export default function AdminDonationsPage() {
             sender_phone,
             transaction_ref,
             received_at
+          ),
+          verified_by:admins (
+            name,
+            email
           )
         `)
         .order('created_at', { ascending: false });
@@ -113,6 +117,7 @@ export default function AdminDonationsPage() {
           verification_method: 'manual',
           verified_at: new Date().toISOString(),
           matched_transaction_id: matchedTxId || null,
+          verified_by_admin_id: session?.user?.id || null,
         })
         .eq('id', donationId);
 
@@ -335,9 +340,16 @@ export default function AdminDonationsPage() {
                       </td>
                       <td className="px-6 py-4 text-xs font-semibold text-slate-400 capitalize">
                         {d.verification_method ? (
-                          <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-[10px] text-emerald-350">
-                            {d.verification_method}
-                          </span>
+                          <div className="space-y-1">
+                            <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-[10px] text-emerald-350">
+                              {d.verification_method}
+                            </span>
+                            {d.verified_by && (
+                              <span className="block text-[10px] text-slate-500 font-normal">
+                                {language === 'ar' ? `بواسطة: ${d.verified_by.name}` : `By: ${d.verified_by.name}`}
+                              </span>
+                            )}
+                          </div>
                         ) : (
                           <span className="text-slate-600">—</span>
                         )}
@@ -421,8 +433,13 @@ export default function AdminDonationsPage() {
                     </div>
 
                     <div className="flex justify-between items-center pt-2 border-t border-slate-900/40">
-                      <span className="text-[10px] text-slate-500 uppercase">
-                        {d.verification_method ? `Verified via ${d.verification_method}` : 'Not verified'}
+                      <span className="text-[10px] text-slate-500 uppercase flex flex-col items-start gap-0.5">
+                        <span>{d.verification_method ? `Verified via ${d.verification_method}` : 'Not verified'}</span>
+                        {d.verified_by && (
+                          <span className="text-[9px] text-slate-600 font-normal lowercase">
+                            {language === 'ar' ? `بواسطة: ${d.verified_by.name}` : `by: ${d.verified_by.name}`}
+                          </span>
+                        )}
                       </span>
                       <button
                         onClick={() => {
@@ -546,14 +563,50 @@ export default function AdminDonationsPage() {
 
                   {selectedDonation.status !== 'pending' ? (
                     <div className="p-4 bg-slate-950/40 border border-slate-900 rounded-xl space-y-3 text-xs">
-                      <div className="p-3 bg-emerald-950/20 border border-emerald-900/30 rounded-lg text-emerald-300 font-semibold flex items-center gap-2">
-                        <CheckCircle className="w-5 h-5 text-emerald-450" />
-                        <span>
-                          {language === 'ar' 
-                            ? 'هذا التبرع موثق ومعتمد بالفعل.' 
-                            : 'This donation has already been verified and approved.'
-                          }
-                        </span>
+                      <div className={`p-3 rounded-lg font-semibold flex items-center gap-2 ${
+                        selectedDonation.status === 'rejected' 
+                          ? 'bg-red-950/20 border border-red-900/30 text-red-300' 
+                          : selectedDonation.status === 'refunded'
+                          ? 'bg-yellow-950/20 border border-yellow-900/30 text-yellow-300'
+                          : 'bg-emerald-950/20 border border-emerald-900/30 text-emerald-300'
+                      }`}>
+                        <CheckCircle className={`w-5 h-5 ${
+                          selectedDonation.status === 'rejected' 
+                            ? 'text-red-400' 
+                            : selectedDonation.status === 'refunded'
+                            ? 'text-yellow-400'
+                            : 'text-emerald-450'
+                        }`} />
+                        <div className="text-xs font-semibold">
+                          {selectedDonation.status === 'manual_verified' && (
+                            <span>
+                              {language === 'ar'
+                                ? `تم توثيق هذا التبرع يدوياً بواسطة: ${selectedDonation.verified_by?.name || 'مسؤول'}`
+                                : `This donation was manually verified by: ${selectedDonation.verified_by?.name || 'Admin'}`}
+                            </span>
+                          )}
+                          {selectedDonation.status === 'auto_verified' && (
+                            <span>
+                              {language === 'ar'
+                                ? 'تم توثيق هذا التبرع تلقائياً ونظامياً.'
+                                : 'This donation was automatically verified by system matching.'}
+                            </span>
+                          )}
+                          {selectedDonation.status === 'rejected' && (
+                            <span>
+                              {language === 'ar'
+                                ? `تم رفض هذا الطلب بواسطة: ${selectedDonation.verified_by?.name || 'مسؤول'}`
+                                : `This request was rejected by: ${selectedDonation.verified_by?.name || 'Admin'}`}
+                            </span>
+                          )}
+                          {selectedDonation.status === 'refunded' && (
+                            <span>
+                              {language === 'ar'
+                                ? 'تم استرجاع هذا التبرع.'
+                                : 'This donation has been refunded.'}
+                            </span>
+                          )}
+                        </div>
                       </div>
                       
                       {selectedDonation.matched_transaction && (

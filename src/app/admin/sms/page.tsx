@@ -178,6 +178,7 @@ export default function AdminSMSMonitorPage() {
           verification_method: 'manual',
           verified_at: new Date().toISOString(),
           matched_transaction_id: selectedTx.id,
+          verified_by_admin_id: session?.user?.id || null,
         })
         .eq('id', donationId);
 

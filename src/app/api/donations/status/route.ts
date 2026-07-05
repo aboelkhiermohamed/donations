@@ -22,6 +22,11 @@ export async function GET(req: NextRequest) {
         payment_method,
         transaction_ref,
         created_at,
+        verification_method,
+        verified_at,
+        verified_by:admins (
+          name
+        ),
         donor:donors (
           name,
           phone
@@ -92,6 +97,9 @@ export async function GET(req: NextRequest) {
         payment_method: d.payment_method,
         transaction_ref: d.transaction_ref,
         created_at: d.created_at,
+        verification_method: d.verification_method,
+        verified_at: d.verified_at,
+        verified_by: d.verified_by ? { name: d.verified_by.name } : null,
         donor: {
           name: maskedName,
           phone: maskedPhone,

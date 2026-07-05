@@ -39,6 +39,7 @@ export interface Donation {
   verification_method?: 'auto' | 'manual';
   verified_at?: string;
   matched_transaction_id?: string;
+  verified_by_admin_id?: string;
   created_at: string;
   updated_at: string;
   
@@ -46,6 +47,7 @@ export interface Donation {
   donor?: Donor;
   campaign?: Campaign;
   matched_transaction?: IncomingTransaction;
+  verified_by?: Admin;
 }
 
 export type TransactionStatus = 'unmatched' | 'matched' | 'manual_match';
