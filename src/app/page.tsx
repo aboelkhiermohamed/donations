@@ -88,7 +88,7 @@ export default function PublicDonationPage() {
 
   // Tracking State
   const [trackedDonations, setTrackedDonations] = useState<any[]>([]);
-  const [trackingPhone, setTrackingPhone] = useState('');
+  const [trackingRef, setTrackingRef] = useState('');
   const [isTrackingLoading, setIsTrackingLoading] = useState(false);
   const [trackingError, setTrackingError] = useState('');
   const [showDedicationToast, setShowDedicationToast] = useState(false);
@@ -135,13 +135,13 @@ export default function PublicDonationPage() {
   };
 
   // Track by Phone Number Handler
-  const handleTrackByPhone = async (e: React.FormEvent) => {
+  const handleTrackByRef = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!trackingPhone.trim()) return;
+    if (!trackingRef.trim()) return;
     setIsTrackingLoading(true);
     setTrackingError('');
     try {
-      const res = await fetch(`/api/donations/status?phone=${encodeURIComponent(trackingPhone.trim())}`);
+      const res = await fetch(`/api/donations/status?ref=${encodeURIComponent(trackingRef.trim())}`);
       if (!res.ok) throw new Error('Query failed');
       const data = await res.json();
 
@@ -151,7 +151,6 @@ export default function PublicDonationPage() {
       if (data.length === 0) {
         setTrackingError(t('track_no_results'));
       } else {
-        // Save these IDs to localStorage as well
         const newIds = data.map((d: any) => d.id);
         const storedIds = localStorage.getItem('my_donation_ids');
         const existingIds = storedIds ? storedIds.split(',').filter(Boolean) : [];
@@ -159,7 +158,7 @@ export default function PublicDonationPage() {
         localStorage.setItem('my_donation_ids', mergedIds.join(','));
       }
     } catch (err: any) {
-      console.error('Tracking by phone error:', err);
+      console.error('Tracking by ref error:', err);
       setTrackingError(language === 'ar' ? 'حدث خطأ أثناء البحث.' : 'Error occurred while tracking.');
     } finally {
       setIsTrackingLoading(false);
@@ -170,7 +169,7 @@ export default function PublicDonationPage() {
     localStorage.removeItem('my_donation_ids');
     setTrackedDonations([]);
     setLastTrackedUpdate(null);
-    setTrackingPhone('');
+    setTrackingRef('');
   };
 
   // Fetch payment accounts from DB settings
@@ -1329,6 +1328,14 @@ export default function PublicDonationPage() {
       errors.amount = language === 'ar' ? 'المبلغ يجب أن يكون أكبر من الصفر' : 'Amount must be greater than zero';
     }
 
+    if (!refNum.trim()) {
+      errors.refNum = language === 'ar' ? 'رقم العملية مطلوب لإتمام التسجيل' : 'Transaction reference number is required';
+    }
+
+    if (!screenshot) {
+      errors.screenshot = language === 'ar' ? 'لقطة شاشة الإيصال مطلوبة للتحقق' : 'Receipt screenshot is required for verification';
+    }
+
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -2186,17 +2193,21 @@ export default function PublicDonationPage() {
                       {formErrors.amount && <span className="text-red-400 text-xs block">{formErrors.amount}</span>}
                     </div>
 
-                    {/* Ref Number */}
+                    {/* Ref Number - Required */}
                     <div className="space-y-1.5">
-                      <label className="text-slate-300 text-xs font-semibold">{t('field_ref')}</label>
+                      <label className="text-slate-300 text-xs font-semibold flex items-center gap-1">
+                        {t('field_ref')}
+                        <span className="text-red-400">*</span>
+                      </label>
                       <input
                         type="text"
                         value={refNum}
                         onChange={(e) => setRefNum(e.target.value)}
-                        className="w-full glass-input px-4 py-3 rounded-xl text-sm"
+                        className={`w-full glass-input px-4 py-3 rounded-xl text-sm ${formErrors.refNum ? 'border-red-500' : ''}`}
                         placeholder={paymentMethod === 'vodafone_cash' ? 'مثال: 020493825433' : 'e.g. 4a36aa42'}
                         dir="ltr"
                       />
+                      {formErrors.refNum && <span className="text-red-400 text-xs block">{formErrors.refNum}</span>}
                     </div>
                   </div>
 
@@ -2215,10 +2226,13 @@ export default function PublicDonationPage() {
                       />
                     </div>
 
-                    {/* Screenshot File Upload */}
+                    {/* Screenshot File Upload - Required */}
                     <div className="space-y-1.5">
-                      <label className="text-slate-300 text-xs font-semibold">{t('field_screenshot')}</label>
-                      <div className="relative w-full h-[46px] rounded-xl glass-input border border-dashed border-slate-700 hover:border-emerald-500 flex items-center justify-center transition-colors overflow-hidden">
+                      <label className="text-slate-300 text-xs font-semibold flex items-center gap-1">
+                        {t('field_screenshot')}
+                        <span className="text-red-400">*</span>
+                      </label>
+                      <div className={`relative w-full h-[46px] rounded-xl glass-input border border-dashed hover:border-emerald-500 flex items-center justify-center transition-colors overflow-hidden ${formErrors.screenshot ? 'border-red-500' : 'border-slate-700'}`}>
                         <input
                           type="file"
                           accept="image/*"
@@ -2226,10 +2240,11 @@ export default function PublicDonationPage() {
                           className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
                         />
                         <div className="flex items-center gap-2 text-slate-400 text-xs">
-                          <ImageIcon className="w-4 h-4 text-emerald-400" />
-                          <span>{screenshot ? screenshot.name : (language === 'ar' ? 'اختر صورة من جهازك' : 'Choose screenshot file')}</span>
+                          <ImageIcon className={`w-4 h-4 ${screenshot ? 'text-emerald-400' : formErrors.screenshot ? 'text-red-400' : 'text-emerald-400'}`} />
+                          <span className={screenshot ? 'text-emerald-400' : ''}>{screenshot ? screenshot.name : (language === 'ar' ? 'اختر صورة من جهازك' : 'Choose screenshot file')}</span>
                         </div>
                       </div>
+                      {formErrors.screenshot && <span className="text-red-400 text-xs block">{formErrors.screenshot}</span>}
                     </div>
                   </div>
 
@@ -2360,21 +2375,21 @@ export default function PublicDonationPage() {
                 <p className="text-slate-400 text-xs">{t('track_desc')}</p>
               </div>
 
-              {/* Form to query by phone */}
-              <form onSubmit={handleTrackByPhone} className="flex gap-2">
+              {/* Form to query by transaction ref */}
+              <form onSubmit={handleTrackByRef} className="flex gap-2">
                 <div className="relative flex-1">
                   <input
                     type="text"
-                    value={trackingPhone}
-                    onChange={(e) => setTrackingPhone(e.target.value)}
-                    placeholder={t('track_phone_placeholder')}
+                    value={trackingRef}
+                    onChange={(e) => setTrackingRef(e.target.value)}
+                    placeholder={language === 'ar' ? 'أدخل رقم العملية (مثال: 020493825433)' : 'Enter transaction ref (e.g. 020493825433)'}
                     className="w-full glass-input px-3 py-2.5 rounded-xl text-xs"
                     dir="ltr"
                   />
                 </div>
                 <button
                   type="submit"
-                  disabled={isTrackingLoading || !trackingPhone.trim()}
+                  disabled={isTrackingLoading || !trackingRef.trim()}
                   className="px-4 py-2.5 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-xs font-bold rounded-xl text-white transition-all disabled:opacity-50"
                 >
                   {isTrackingLoading ? (

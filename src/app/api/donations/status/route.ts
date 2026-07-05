@@ -8,9 +8,10 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const idsParam = searchParams.get('ids');
     const phoneParam = searchParams.get('phone');
+    const refParam = searchParams.get('ref');
 
-    if (!idsParam && !phoneParam) {
-      return NextResponse.json({ error: 'Missing query parameters: ids or phone' }, { status: 400 });
+    if (!idsParam && !phoneParam && !refParam) {
+      return NextResponse.json({ error: 'Missing query parameters: ids, phone, or ref' }, { status: 400 });
     }
 
     let query = supabaseAdmin
@@ -40,6 +41,12 @@ export async function GET(req: NextRequest) {
         return NextResponse.json([]);
       }
       query = query.in('id', ids);
+    } else if (refParam) {
+      const ref = refParam.trim();
+      if (!ref) {
+        return NextResponse.json([]);
+      }
+      query = query.ilike('transaction_ref', `%${ref}%`);
     } else if (phoneParam) {
       const phone = phoneParam.trim();
       if (!phone) {
