@@ -1822,7 +1822,7 @@ export default function PublicDonationPage() {
               </div>
 
               {/* Tabs for Payment method selection */}
-              <div className="grid grid-cols-2 gap-2 bg-slate-950/80 p-1 rounded-xl border border-slate-900">
+              <div className={`grid ${INSTAPAY_ENABLED ? 'grid-cols-2' : 'grid-cols-1'} gap-2 bg-slate-950/80 p-1 rounded-xl border border-slate-900`}>
                 <button
                   onClick={() => setPaymentMethod('vodafone_cash')}
                   className={`py-3 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2.5 ${paymentMethod === 'vodafone_cash'
@@ -1833,16 +1833,18 @@ export default function PublicDonationPage() {
                   <img src="/vf_Logo.png" alt="Vodafone Cash" className="w-5 h-5 object-contain rounded-full bg-white p-0.5" />
                   {t('vfc_label')}
                 </button>
-                <button
-                  onClick={() => setPaymentMethod('instapay')}
-                  className={`py-3 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2.5 ${paymentMethod === 'instapay'
-                      ? 'bg-slate-900 border border-slate-800 text-violet-400 shadow-md'
-                      : 'text-slate-400 hover:text-white'
-                    }`}
-                >
-                  <img src="/InstaPay_Logo.png" alt="InstaPay" className="w-5 h-5 object-contain rounded bg-white p-0.5" />
-                  {t('instapay_label')}
-                </button>
+                {INSTAPAY_ENABLED && (
+                  <button
+                    onClick={() => setPaymentMethod('instapay')}
+                    className={`py-3 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2.5 ${paymentMethod === 'instapay'
+                        ? 'bg-slate-900 border border-slate-800 text-violet-400 shadow-md'
+                        : 'text-slate-400 hover:text-white'
+                      }`}
+                  >
+                    <img src="/InstaPay_Logo.png" alt="InstaPay" className="w-5 h-5 object-contain rounded bg-white p-0.5" />
+                    {t('instapay_label')}
+                  </button>
+                )}
               </div>
 
               {/* Vodafone Cash Details */}
@@ -1905,7 +1907,7 @@ export default function PublicDonationPage() {
               )}
 
               {/* InstaPay Details */}
-              {paymentMethod === 'instapay' && (
+              {paymentMethod === 'instapay' && INSTAPAY_ENABLED && (
                 <div className="space-y-6 bg-slate-950/20 p-5 rounded-2xl border border-slate-900 flex flex-col items-center">
 
                   {/* Top: InstaPay Logo */}
