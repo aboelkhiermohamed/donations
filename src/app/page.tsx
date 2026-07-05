@@ -2874,10 +2874,15 @@ export default function PublicDonationPage() {
 
       {/* Dedication Toast Notification (Messenger Style) */}
       <div 
-        className={`fixed bottom-6 left-6 rtl:right-6 rtl:left-auto z-50 max-w-sm w-[calc(100vw-2rem)] md:w-[360px] bg-slate-950/95 backdrop-blur-md border border-emerald-500/20 p-4 rounded-2xl shadow-[0_15px_35px_rgba(0,0,0,0.6)] flex items-start gap-3.5 transition-all duration-500 transform ${
+        className={`fixed z-50 
+          top-4 left-1/2 -translate-x-1/2
+          md:top-auto md:bottom-6 md:left-6 md:translate-x-0 rtl:md:right-6 rtl:md:left-auto
+          max-w-sm w-[calc(100vw-2rem)] md:w-[360px] 
+          bg-slate-950/95 backdrop-blur-md border border-emerald-500/20 p-4 rounded-2xl 
+          shadow-[0_15px_35px_rgba(0,0,0,0.6)] flex items-start gap-3.5 transition-all duration-500 transform ${
           showDedicationToast 
             ? 'translate-y-0 opacity-100 scale-100' 
-            : 'translate-y-12 opacity-0 scale-95 pointer-events-none'
+            : '-translate-y-4 md:translate-y-12 opacity-0 scale-95 pointer-events-none'
         }`}
         dir={language === 'ar' ? 'rtl' : 'ltr'}
       >
