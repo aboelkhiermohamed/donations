@@ -53,6 +53,15 @@ export async function POST(req: NextRequest) {
 
     if (existingDonor) {
       donorId = existingDonor.id;
+      // Update donor name in case they submitted a different name/correction
+      const { error: donorUpdateError } = await supabaseAdmin
+        .from('donors')
+        .update({ name: name.trim() })
+        .eq('id', donorId);
+      
+      if (donorUpdateError) {
+        console.error('Failed to update donor name:', donorUpdateError);
+      }
     } else {
       const { data: newDonor, error: donorInsertError } = await supabaseAdmin
         .from('donors')
