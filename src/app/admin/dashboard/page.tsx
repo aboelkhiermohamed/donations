@@ -21,7 +21,10 @@ import {
   Smartphone,
   Activity,
   Battery,
-  Wifi
+  Wifi,
+  Edit3,
+  Check,
+  X
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -29,6 +32,10 @@ export default function AdminDashboardPage() {
   const { language, t } = useLanguage();
   const [isMounted, setIsMounted] = useState(false);
   const queryClient = useQueryClient();
+
+  const [editingDevice, setEditingDevice] = useState<string | null>(null);
+  const [newNickname, setNewNickname] = useState('');
+  const [isSavingNickname, setIsSavingNickname] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
@@ -81,6 +88,48 @@ export default function AdminDashboardPage() {
     },
     refetchInterval: 10000,
   });
+
+  // Fetch gateway nicknames from DB settings
+  const { data: nicknames } = useQuery<Record<string, string>>({
+    queryKey: ['adminGatewayNicknames'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('settings')
+        .select('*')
+        .eq('key', 'gateway_nicknames')
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!data) return {};
+      return (typeof data.value === 'string' ? JSON.parse(data.value) : data.value) || {};
+    },
+  });
+
+  const handleSaveNickname = async (deviceId: string) => {
+    if (isSavingNickname) return;
+    setIsSavingNickname(true);
+    try {
+      const updatedNicknames = { ...(nicknames || {}), [deviceId]: newNickname.trim() };
+      
+      const { error } = await supabase
+        .from('settings')
+        .upsert({
+          key: 'gateway_nicknames',
+          value: updatedNicknames,
+          updated_at: new Date().toISOString()
+        });
+
+      if (error) throw error;
+      
+      queryClient.invalidateQueries({ queryKey: ['adminGatewayNicknames'] });
+      setEditingDevice(null);
+    } catch (err) {
+      console.error(err);
+      alert(language === 'ar' ? 'فشل حفظ الاسم المستعار' : 'Failed to save nickname');
+    } finally {
+      setIsSavingNickname(false);
+    }
+  };
 
   const getLogStatusBadge = (status: string) => {
     switch (status) {
@@ -499,10 +548,60 @@ export default function AdminDashboardPage() {
                       return (
                         <div key={device.deviceId} className="p-3 bg-slate-950/40 border border-slate-900/60 rounded-xl space-y-3">
                           <div className="flex items-center justify-between">
-                            <span className="font-bold text-xs text-white flex items-center gap-1.5">
-                              <Smartphone className="w-3.5 h-3.5 text-slate-400" />
-                              {language === 'ar' ? 'جهاز' : 'Device'} ({device.deviceId.substring(0, 8)})
-                            </span>
+                            {editingDevice === device.deviceId ? (
+                              <div className="flex items-center gap-1.5">
+                                <Smartphone className="w-3.5 h-3.5 text-slate-400" />
+                                <input
+                                  type="text"
+                                  value={newNickname}
+                                  onChange={(e) => setNewNickname(e.target.value)}
+                                  className="bg-slate-900 border border-slate-800 text-[11px] px-2 py-0.5 rounded text-white focus:outline-none focus:border-emerald-500 w-28 md:w-36"
+                                  placeholder={language === 'ar' ? 'الاسم المستعار' : 'Nickname'}
+                                  disabled={isSavingNickname}
+                                  autoFocus
+                                />
+                                <button
+                                  onClick={() => handleSaveNickname(device.deviceId)}
+                                  disabled={isSavingNickname}
+                                  className="text-emerald-400 hover:text-emerald-350 p-0.5 disabled:opacity-50"
+                                  title={language === 'ar' ? 'حفظ' : 'Save'}
+                                >
+                                  <Check className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => setEditingDevice(null)}
+                                  disabled={isSavingNickname}
+                                  className="text-slate-400 hover:text-slate-300 p-0.5"
+                                  title={language === 'ar' ? 'إلغاء' : 'Cancel'}
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="font-bold text-xs text-white flex items-center gap-1.5 group">
+                                <Smartphone className="w-3.5 h-3.5 text-slate-400" />
+                                <span className="truncate max-w-[120px] md:max-w-[160px]">
+                                  {nicknames?.[device.deviceId] 
+                                    ? nicknames[device.deviceId] 
+                                    : `${language === 'ar' ? 'جهاز' : 'Device'} (${device.deviceId.substring(0, 8)})`}
+                                </span>
+                                {nicknames?.[device.deviceId] && (
+                                  <span className="text-[10px] font-normal text-slate-500">
+                                    ({device.deviceId.substring(0, 8)})
+                                  </span>
+                                )}
+                                <button
+                                  onClick={() => {
+                                    setEditingDevice(device.deviceId);
+                                    setNewNickname(nicknames?.[device.deviceId] || '');
+                                  }}
+                                  className="text-slate-500 hover:text-white p-0.5 transition-colors duration-150"
+                                  title={language === 'ar' ? 'تعديل الاسم المستعار' : 'Edit Nickname'}
+                                >
+                                  <Edit3 className="w-3 h-3" />
+                                </button>
+                              </span>
+                            )}
                             <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
                               isOnline 
                                 ? 'bg-emerald-950/60 border border-emerald-900 text-emerald-400' 
