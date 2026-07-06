@@ -89,23 +89,9 @@ export default function AboutPage() {
           <div className="space-y-4 text-xs md:text-sm text-slate-300 leading-relaxed">
             <p>
               {language === 'ar'
-                ? 'تهدف هذه الحملة بشكل أساسي لتأمين وتوريد جهازين طبيين بالغة الأهمية لوحدة العناية المركزة بمستشفيات جامعة كفر الشيخ لخدمة المرضى ذوي الحالات الحرجة مجاناً وبأعلى جودة طبية:'
-                : 'The primary objective of this campaign is to secure and deliver two highly critical medical devices for the Intensive Care Unit (ICU) at Kafr El-Sheikh University Hospital, saving lives and providing free high-quality care:'}
+                ? 'تهدف هذه الحملة بشكل أساسي لتأمين وتوريد جهاز تنفس صناعي حديث (Medical Ventilator) فائق الكفاءة لوحدة العناية المركزة بمستشفيات جامعة كفر الشيخ لدعم رئتي المرضى غير القادرين على التنفس بمفردهم نتيجة الفشل التنفسي أو الصدمات الحادة، وخدمتهم مجاناً وبأعلى جودة طبية.'
+                : 'The primary objective of this campaign is to secure and deliver a state-of-the-art medical ventilator for the Intensive Care Unit (ICU) at Kafr El-Sheikh University Hospital, designed to support respiratory failure cases and assist ICU patients in critical conditions.'}
             </p>
-            <ul className="list-disc list-inside space-y-2.5 pl-2">
-              <li>
-                <strong>{language === 'ar' ? 'جهاز تنفس صناعي حديث (Medical Ventilator):' : 'State-of-the-Art Ventilator:'}</strong>{' '}
-                {language === 'ar'
-                  ? 'جهاز تنفس صناعي فائق الكفاءة لدعم رئتي المرضى غير القادرين على التنفس بمفردهم نتيجة الفشل التنفسي أو الصدمات الحادة.'
-                  : 'An advanced mechanical ventilator designed to support respiratory failure cases and assist ICU patients in critical conditions.'}
-              </li>
-              <li>
-                <strong>{language === 'ar' ? 'جهاز تحليل غازات الدم (ABG Device):' : 'ABG (Arterial Blood Gas) Analyzer:'}</strong>{' '}
-                {language === 'ar'
-                  ? 'جهاز أساسي لتحليل نسبة الأكسجين وثاني أكسيد الكربون ودرجة الحموضة (pH) في الدم الشرياني بشكل فوري لتوجيه خطة علاج مرضى الرعاية بدقة بالغة.'
-                  : 'A diagnostic device vital for measuring arterial oxygen, carbon dioxide levels, and blood pH in real time to guide critical medical treatment.'}
-              </li>
-            </ul>
           </div>
         </div>
 

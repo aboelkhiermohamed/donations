@@ -32,10 +32,10 @@ import { jsPDF } from 'jspdf';
 // --- MOCK FALLBACKS ---
 const MOCK_CAMPAIGN: Campaign = {
   id: 'c580436d-9654-4720-bc2f-a9cb6bf0f7a0',
-  name: 'Medical Ventilator & ABG Device for Kafr El-Sheikh University Hospital (9th Batch)',
-  name_ar: 'جهاز تنفس صناعي وجهاز غازات الدم (ABG) لمستشفى كفر الشيخ الجامعي (الدفعة التاسعة)',
-  description: 'Donations campaign by the 9th Batch of Kafr El-Sheikh Medicine to purchase and provide a state-of-the-art ventilator and an ABG (Arterial Blood Gas) device to Kafr El-Sheikh University Hospital ICU.',
-  description_ar: 'حملة تبرعات الدفعة التاسعة طب كفر الشيخ لتوفير جهاز تنفس صناعي حديث وجهاز تحليل غازات الدم (ABG) لدعم وحدة العناية المركزة بمستشفيات جامعة كفر الشيخ وتأمين رعاية فائقة للمرضى.',
+  name: 'Medical Ventilator for Kafr El-Sheikh University Hospital - 9th Batch',
+  name_ar: 'جهاز تنفس صناعي لمستشفى كفر الشيخ الجامعي - الدفعة التاسعة',
+  description: 'Donations campaign by the 9th Batch of Kafr El-Sheikh Medicine to purchase and provide a state-of-the-art ventilator to Kafr El-Sheikh University Hospital ICU.',
+  description_ar: 'حملة تبرعات الدفعة التاسعة طب كفر الشيخ لتوفير جهاز تنفس صناعي حديث لدعم وحدة العناية المركزة بمستشفيات جامعة كفر الشيخ وتأمين رعاية فائقة للمرضى.',
   target_amount: 500000,
   collected_amount: 0,
   organizer: 'Kafr El-Sheikh Medicine - 9th Batch',
@@ -349,7 +349,7 @@ export default function PublicDonationPage() {
         }
       }, 500);
     } else if (phoneParam) {
-      setTrackingPhone(phoneParam);
+      setTrackingRef(phoneParam);
       setActiveMobileTab('ledger');
       setTimeout(async () => {
         setIsTrackingLoading(true);
@@ -448,51 +448,123 @@ export default function PublicDonationPage() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
 
-    // Background Gradient
-    const bgGrad = ctx.createRadialGradient(540, 540, 100, 540, 540, 800);
-    bgGrad.addColorStop(0, '#0f172a'); // slate-900
-    bgGrad.addColorStop(1, '#020617'); // slate-950
-    ctx.fillStyle = bgGrad;
+    // Helper for drawing rounded rectangles
+    const drawRoundedRect = (
+      c: CanvasRenderingContext2D,
+      x: number,
+      y: number,
+      w: number,
+      h: number,
+      r: number,
+      fill = true,
+      stroke = true
+    ) => {
+      c.beginPath();
+      c.moveTo(x + r, y);
+      c.lineTo(x + w - r, y);
+      c.quadraticCurveTo(x + w, y, x + w, y + r);
+      c.lineTo(x + w, y + h - r);
+      c.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      c.lineTo(x + r, y + h);
+      c.quadraticCurveTo(x, y + h, x, y + h - r);
+      c.lineTo(x, y + r);
+      c.quadraticCurveTo(x, y, x + r, y);
+      c.closePath();
+      if (fill) c.fill();
+      if (stroke) c.stroke();
+    };
+
+    // Load device image first
+    let deviceImg: HTMLImageElement | null = null;
+    try {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      const loadImg = new Promise((res, rej) => {
+        img.onload = res;
+        img.onerror = rej;
+      });
+      img.src = '/vent%20png.png';
+      await loadImg;
+      deviceImg = img;
+    } catch (e) {
+      console.error("Failed to load device image", e);
+    }
+
+    // Load QR code image
+    let qrImg: HTMLImageElement | null = null;
+    try {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      const loadQR = new Promise((res, rej) => {
+        img.onload = res;
+        img.onerror = rej;
+      });
+      img.src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&color=020617&bgcolor=f8fafc&data=${encodeURIComponent(window.location.href)}`;
+      await loadQR;
+      qrImg = img;
+    } catch (e) {
+      console.error("Canvas QR drawing failed", e);
+    }
+
+    // 1. Background Fill
+    ctx.fillStyle = '#020617'; // Deep space slate-950
     ctx.fillRect(0, 0, 1080, 1080);
 
-    // Glow Orbs
-    const trGrad = ctx.createRadialGradient(1080, 0, 50, 1080, 0, 500);
-    trGrad.addColorStop(0, 'rgba(16, 185, 129, 0.15)'); // emerald
-    trGrad.addColorStop(1, 'rgba(16, 185, 129, 0)');
-    ctx.fillStyle = trGrad;
+    // 2. High-Tech Diagonal Grid Lines
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.012)';
+    ctx.lineWidth = 1.5;
+    const gridSpacing = 60;
+    for (let x = -1080; x < 1080 * 2; x += gridSpacing) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x + 1080, 1080);
+      ctx.stroke();
+    }
+
+    // 3. Dynamic layout configuration based on language (RTL/LTR)
+    const isRTL = language === 'ar';
+    const textColX = isRTL ? 560 : 80;       // X start for text stats
+    const textColAlign = isRTL ? 'right' : 'left';
+    const textColAnchor = isRTL ? 1000 : 80; // text drawing X coordinate
+    
+    const prodColX = isRTL ? 80 : 560;       // X start for product visual
+    const prodColCenter = prodColX + 220;    // Center X of product column (col width is 440)
+
+    // 4. Ambient Glows behind sections
+    // Device Glow
+    const devGlow = ctx.createRadialGradient(
+      prodColCenter, 480, 50,
+      prodColCenter, 480, 450
+    );
+    devGlow.addColorStop(0, 'rgba(45, 212, 191, 0.16)'); // teal glow
+    devGlow.addColorStop(1, 'rgba(2, 6, 23, 0)');
+    ctx.fillStyle = devGlow;
     ctx.beginPath();
-    ctx.arc(1080, 0, 500, 0, Math.PI * 2);
+    ctx.arc(prodColCenter, 480, 450, 0, Math.PI * 2);
     ctx.fill();
 
-    const blGrad = ctx.createRadialGradient(0, 1080, 50, 0, 1080, 500);
-    blGrad.addColorStop(0, 'rgba(45, 212, 191, 0.15)'); // teal
-    blGrad.addColorStop(1, 'rgba(45, 212, 191, 0)');
-    ctx.fillStyle = blGrad;
+    // Stats Glow
+    const statsGlow = ctx.createRadialGradient(
+      textColX + 220, 540, 50,
+      textColX + 220, 540, 400
+    );
+    statsGlow.addColorStop(0, 'rgba(16, 185, 129, 0.08)'); // emerald glow
+    statsGlow.addColorStop(1, 'rgba(2, 6, 23, 0)');
+    ctx.fillStyle = statsGlow;
     ctx.beginPath();
-    ctx.arc(0, 1080, 500, 0, Math.PI * 2);
+    ctx.arc(textColX + 220, 540, 400, 0, Math.PI * 2);
     ctx.fill();
 
-    // Draw Rounded Logo box
+    // 5. Header and Logo
     const logoGrad = ctx.createLinearGradient(80, 80, 160, 160);
     logoGrad.addColorStop(0, '#10b981');
     logoGrad.addColorStop(1, '#2dd4bf');
     ctx.fillStyle = logoGrad;
-    ctx.beginPath();
-    const r = 20;
-    const rx = 80, ry = 80, rw = 80, rh = 80;
-    ctx.moveTo(rx + r, ry);
-    ctx.lineTo(rx + rw - r, ry);
-    ctx.quadraticCurveTo(rx + rw, ry, rx + rw, ry + r);
-    ctx.lineTo(rx + rw, ry + rh - r);
-    ctx.quadraticCurveTo(rx + rw, ry + rh, rx + rw - r, ry + rh);
-    ctx.lineTo(rx + r, ry + rh);
-    ctx.quadraticCurveTo(rx, ry + rh, rx, ry + rh - r);
-    ctx.lineTo(rx, ry + r);
-    ctx.quadraticCurveTo(rx, ry, rx + r, ry);
-    ctx.closePath();
-    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.lineWidth = 1;
+    drawRoundedRect(ctx, 80, 80, 80, 80, 20, true, true);
 
-    // Heart Emoji
+    // Heart Emoji inside logo
     ctx.font = '40px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -510,13 +582,20 @@ export default function PublicDonationPage() {
       ctx.fillText('donations 9th Batch', 185, 120);
     }
 
-    // Campaign Title wrap & draw
+    // 6. Wrapped Campaign Title (Text Column)
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 44px sans-serif';
-    ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
 
-    const wrapText = (text: string, x: number, y: number, maxWidth: number, lineHeight: number) => {
+    const drawWrappedText = (
+      text: string,
+      x: number,
+      y: number,
+      maxWidth: number,
+      lineHeight: number,
+      align: 'left' | 'right' | 'center'
+    ) => {
+      ctx.textAlign = align;
       const words = text.split(' ');
       let line = '';
       let currentY = y;
@@ -526,194 +605,225 @@ export default function PublicDonationPage() {
         let metrics = ctx.measureText(testLine);
         let testWidth = metrics.width;
         if (testWidth > maxWidth && n > 0) {
-          ctx.fillText(line, x, currentY);
+          ctx.fillText(line.trim(), x, currentY);
           line = words[n] + ' ';
           currentY += lineHeight;
         } else {
           line = testLine;
         }
       }
-      ctx.fillText(line, x, currentY);
+      ctx.fillText(line.trim(), x, currentY);
       return currentY + lineHeight;
     };
 
     const displayTitle = language === 'ar' ? displayCampaignName : displayCampaignName;
-    const nextY = wrapText(displayTitle, 540, 230, 920, 65);
+    const nextY = drawWrappedText(displayTitle, textColAnchor, 210, 440, 58, textColAlign);
 
-    // Middle Glass card
-    const cardY = nextY + 30;
-    const cardH = 430;
-    
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.65)';
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-    ctx.lineWidth = 2;
-    
-    ctx.beginPath();
-    const cr = 30;
-    const cx = 80, cy = cardY, cw = 920, ch = cardH;
-    ctx.moveTo(cx + cr, cy);
-    ctx.lineTo(cx + cw - cr, cy);
-    ctx.quadraticCurveTo(cx + cw, cy, cx + cw, cy + cr);
-    ctx.lineTo(cx + cw, cy + ch - cr);
-    ctx.quadraticCurveTo(cx + cw, cy + ch, cx + cw - cr, cy + ch);
-    ctx.lineTo(cx + cr, cy + ch);
-    ctx.quadraticCurveTo(cx, cy + ch, cx, cy + ch - cr);
-    ctx.lineTo(cx, cy + cr);
-    ctx.quadraticCurveTo(cx, cy, cx + cr, cy);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
+    // 7. Stats and Progress Block (Text Column)
+    const statsStartY = nextY + 35;
 
     // Large Percentage Progress text
-    ctx.fillStyle = '#10b981';
-    ctx.font = '900 110px sans-serif';
-    ctx.textAlign = 'center';
+    const pctGrad = ctx.createLinearGradient(textColX, statsStartY, textColX + 440, statsStartY);
+    pctGrad.addColorStop(0, '#10b981');
+    pctGrad.addColorStop(1, '#2dd4bf');
+    ctx.fillStyle = pctGrad;
+    ctx.font = '900 120px sans-serif';
+    ctx.textAlign = textColAlign;
     ctx.textBaseline = 'top';
-    ctx.fillText(`${percentVal}%`, 540, cardY + 50);
+    
+    // Add glow shadow to percentage text
+    ctx.shadowColor = 'rgba(45, 212, 191, 0.4)';
+    ctx.shadowBlur = 15;
+    ctx.fillText(`${percentVal}%`, textColAnchor, statsStartY);
+    ctx.shadowBlur = 0; // reset shadow
 
     // Progress Subtitle
     ctx.fillStyle = '#94a3b8';
-    ctx.font = 'bold 26px sans-serif';
-    ctx.fillText(language === 'ar' ? 'نسبة إنجاز الحملة' : 'Campaign Progress Completed', 540, cardY + 175);
+    ctx.font = 'bold 22px sans-serif';
+    ctx.fillText(
+      language === 'ar' ? 'نسبة إنجاز الحملة' : 'Campaign Progress Completed',
+      textColAnchor,
+      statsStartY + 140
+    );
 
-    // Progress bar track
-    ctx.fillStyle = '#020617';
-    ctx.beginPath();
-    const br = 10;
-    const bx = 140, by = cardY + 235, bw = 800, bh = 20;
-    ctx.moveTo(bx + br, by);
-    ctx.lineTo(bx + bw - br, by);
-    ctx.quadraticCurveTo(bx + bw, by, bx + bw, by + br);
-    ctx.lineTo(bx + bw, by + bh - br);
-    ctx.quadraticCurveTo(bx + bw, by + bh, bx + bw - br, by + bh);
-    ctx.lineTo(bx + br, by + bh);
-    ctx.quadraticCurveTo(bx, by + bh, bx, by + bh - br);
-    ctx.lineTo(bx, by + br);
-    ctx.quadraticCurveTo(bx, by, bx + br, by);
-    ctx.closePath();
-    ctx.fill();
-
-    // Progress bar fill
-    const fillW = Math.min(800, Math.max(0, (percentVal / 100) * 800));
+    // Slider-Style Progress bar
+    const barW = 440;
+    const barH = 14;
+    const barY = statsStartY + 195;
+    const fillW = Math.min(barW, Math.max(0, (percentVal / 100) * barW));
+    
+    // Draw track (dark grey rounded track)
+    ctx.fillStyle = '#1e293b';
+    drawRoundedRect(ctx, textColX, barY, barW, barH, 7, true, false);
+    
+    // Draw fill
     if (fillW > 0) {
-      const barGrad = ctx.createLinearGradient(140, 0, 940, 0);
+      const barGrad = ctx.createLinearGradient(textColX, 0, textColX + barW, 0);
       barGrad.addColorStop(0, '#10b981');
       barGrad.addColorStop(1, '#2dd4bf');
       ctx.fillStyle = barGrad;
       
-      ctx.beginPath();
-      ctx.moveTo(bx + br, by);
-      ctx.lineTo(bx + fillW - br, by);
-      ctx.quadraticCurveTo(bx + fillW, by, bx + fillW, by + br);
-      ctx.lineTo(bx + fillW, by + bh - br);
-      ctx.quadraticCurveTo(bx + fillW, by + bh, bx + fillW - br, by + bh);
-      ctx.lineTo(bx + br, by + bh);
-      ctx.quadraticCurveTo(bx, by + bh, bx, by + bh - br);
-      ctx.lineTo(bx, by + br);
-      ctx.quadraticCurveTo(bx, by, bx + br, by);
-      ctx.closePath();
-      ctx.fill();
-    }
-
-    // Stats Grid inside card
-    const statsY = cardY + 295;
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = 'bold 24px sans-serif';
-    
-    if (language === 'ar') {
-      ctx.textAlign = 'right';
-      ctx.fillText('المبلغ المجمع', 940, statsY);
-      ctx.textAlign = 'left';
-      ctx.fillText('المبلغ المستهدف', 140, statsY);
-
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '900 36px sans-serif';
-      ctx.textAlign = 'right';
-      ctx.fillText(`${collectedVal.toLocaleString()} ج.م`, 940, statsY + 45);
-      ctx.textAlign = 'left';
-      ctx.fillText(`${targetVal.toLocaleString()} ج.م`, 140, statsY + 45);
-    } else {
-      ctx.textAlign = 'left';
-      ctx.fillText('Collected Amount', 140, statsY);
-      ctx.textAlign = 'right';
-      ctx.fillText('Target Goal', 940, statsY);
-
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '900 36px sans-serif';
-      ctx.textAlign = 'left';
-      ctx.fillText(`${collectedVal.toLocaleString()} EGP`, 140, statsY + 45);
-      ctx.textAlign = 'right';
-      ctx.fillText(`${targetVal.toLocaleString()} EGP`, 940, statsY + 45);
-    }
-
-    // Footer section (QR code & scan instructions)
-    const footerY = cardY + cardH + 40;
-
-    try {
-      const qrImg = new Image();
-      qrImg.crossOrigin = 'anonymous';
+      // Draw progress fill (flipping direction for RTL/LTR)
+      const fillX = isRTL ? (textColX + barW - fillW) : textColX;
+      ctx.shadowColor = 'rgba(16, 185, 129, 0.5)';
+      ctx.shadowBlur = 12;
+      drawRoundedRect(ctx, fillX, barY, fillW, barH, 7, true, false);
+      ctx.shadowBlur = 0; // reset
       
-      const loadQR = new Promise((res, rej) => {
-        qrImg.onload = res;
-        qrImg.onerror = rej;
-      });
-
-      qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&color=020617&bgcolor=f8fafc&data=${encodeURIComponent(window.location.href)}`;
-      await loadQR;
-
-      ctx.fillStyle = '#f8fafc';
+      // Glowing White Knob
+      const knobX = isRTL ? (textColX + barW - fillW) : (textColX + fillW);
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = 'rgba(255, 255, 255, 0.8)';
+      ctx.shadowBlur = 10;
       ctx.beginPath();
-      const qrr = 15;
-      const qx = 80, qy = footerY, qw = 170, qh = 170;
-      ctx.moveTo(qx + qrr, qy);
-      ctx.lineTo(qx + qw - qrr, qy);
-      ctx.quadraticCurveTo(qx + qw, qy, qx + qw, qy + qrr);
-      ctx.lineTo(qx + qw, qy + qh - qrr);
-      ctx.quadraticCurveTo(qx + qw, qy + qh, qx + qw - qrr, qy + qh);
-      ctx.lineTo(qx + qrr, qy + qh);
-      ctx.quadraticCurveTo(qx, qy + qh, qx, qy + qh - qrr);
-      ctx.lineTo(qx, qy + qrr);
-      ctx.quadraticCurveTo(qx, qy, qx + qrr, qy);
-      ctx.closePath();
+      ctx.arc(knobX, barY + 7, 10, 0, Math.PI * 2);
       ctx.fill();
-
-      ctx.drawImage(qrImg, 90, footerY + 10, 150, 150);
-    } catch (e) {
-      console.error("Canvas QR drawing failed", e);
-      ctx.fillStyle = 'rgba(255,255,255,0.05)';
-      ctx.beginPath();
-      const qrr = 15;
-      const qx = 80, qy = footerY, qw = 170, qh = 170;
-      ctx.moveTo(qx + qrr, qy);
-      ctx.lineTo(qx + qw - qrr, qy);
-      ctx.quadraticCurveTo(qx + qw, qy, qx + qw, qy + qrr);
-      ctx.lineTo(qx + qw, qy + qh - qrr);
-      ctx.quadraticCurveTo(qx + qw, qy + qh, qx + qw - qrr, qy + qh);
-      ctx.lineTo(qx + qrr, qy + qh);
-      ctx.quadraticCurveTo(qx, qy + qh, qx, qy + qh - qrr);
-      ctx.lineTo(qx, qy + qrr);
-      ctx.quadraticCurveTo(qx, qy, qx + qrr, qy);
-      ctx.closePath();
-      ctx.fill();
+      ctx.shadowBlur = 0; // reset
     }
 
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 30px sans-serif';
-    ctx.textBaseline = 'middle';
+    // Side-by-side Collected vs Target Stats (under progress slider)
+    const statsNumY = statsStartY + 240;
+    const currencySuffix = language === 'ar' ? ' ج.م' : ' EGP';
     
-    if (language === 'ar') {
-      ctx.textAlign = 'right';
-      ctx.fillText('مسح الرمز للتبرع والمشاركة في الثواب', 1000, footerY + 60);
-      ctx.fillStyle = '#10b981';
-      ctx.font = 'bold 22px sans-serif';
-      ctx.fillText(window.location.host, 1000, footerY + 110);
+    // Collected Amount (Always aligns to textColX / outer edge depending on RTL)
+    ctx.textAlign = isRTL ? 'right' : 'left';
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = 'bold 20px sans-serif';
+    const colX = isRTL ? (textColX + 440) : textColX;
+    ctx.fillText(language === 'ar' ? 'المبلغ المجمع' : 'Collected', colX, statsNumY);
+    
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '900 32px sans-serif';
+    ctx.fillText(`${collectedVal.toLocaleString()}${currencySuffix}`, colX, statsNumY + 42);
+
+    // Target Goal (Aligns to inner edge)
+    ctx.textAlign = isRTL ? 'left' : 'right';
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = 'bold 20px sans-serif';
+    const targX = isRTL ? textColX : (textColX + 440);
+    ctx.fillText(language === 'ar' ? 'المستهدف الكلي' : 'Target Goal', targX, statsNumY);
+    
+    ctx.fillStyle = '#64748b';
+    ctx.font = '900 32px sans-serif';
+    ctx.fillText(`${targetVal.toLocaleString()}${currencySuffix}`, targX, statsNumY + 42);
+
+    // Urgency Badge (Remaining target)
+    const badgeY = statsStartY + 325;
+    ctx.fillStyle = 'rgba(249, 115, 22, 0.06)'; // Soft orange
+    ctx.strokeStyle = 'rgba(249, 115, 22, 0.22)';
+    ctx.lineWidth = 1.5;
+    drawRoundedRect(ctx, textColX, badgeY, 440, 54, 12, true, true);
+    
+    ctx.fillStyle = '#fb923c'; // orange-400
+    ctx.font = 'bold 20px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const urgencyText = language === 'ar' 
+      ? `متبقي ${remainingVal.toLocaleString()} ج.م فقط وتكتمل الحملة` 
+      : `Only ${remainingVal.toLocaleString()} EGP left to complete!`;
+    ctx.fillText(urgencyText, textColX + 220, badgeY + 27);
+
+    // 8. Hero Product Showcase Column (visual pedestal and device img)
+    const cardY = nextY + 35;
+
+    // Glowing Pedestal Platform (in 3D perspective)
+    ctx.save();
+    const pedGrad = ctx.createRadialGradient(
+      prodColCenter, cardY + 320, 10,
+      prodColCenter, cardY + 320, 170
+    );
+    pedGrad.addColorStop(0, 'rgba(45, 212, 191, 0.38)'); // glowing teal light
+    pedGrad.addColorStop(1, 'rgba(2, 6, 23, 0)');
+    ctx.fillStyle = pedGrad;
+    ctx.beginPath();
+    ctx.translate(prodColCenter, cardY + 320);
+    ctx.scale(1, 0.2); // flatten circle into perspective ellipse
+    ctx.arc(0, 0, 170, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // Draw Device Image
+    if (deviceImg) {
+      const imgRatio = deviceImg.width / deviceImg.height;
+      const maxW = 390;
+      const maxH = 340;
+      let dWidth = maxW;
+      let dHeight = maxW / imgRatio;
+      if (dHeight > maxH) {
+        dHeight = maxH;
+        dWidth = maxH * imgRatio;
+      }
+      const dx = prodColCenter - dWidth / 2;
+      const dy = (cardY + 160) - dHeight / 2; // center visually on upper column
+      
+      // Floating drop shadow for the physical equipment
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
+      ctx.shadowBlur = 20;
+      ctx.shadowOffsetY = 12;
+      ctx.drawImage(deviceImg, dx, dy, dWidth, dHeight);
+      ctx.shadowBlur = 0; // reset
+      ctx.shadowOffsetY = 0;
     } else {
-      ctx.textAlign = 'left';
-      ctx.fillText('Scan QR to support the campaign & share', 280, footerY + 60);
-      ctx.fillStyle = '#10b981';
-      ctx.font = 'bold 22px sans-serif';
-      ctx.fillText(window.location.host, 280, footerY + 110);
+      ctx.fillStyle = '#475569';
+      ctx.font = 'italic 24px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(language === 'ar' ? 'صورة جهاز التنفس الصناعي' : 'Medical Ventilator Image', prodColCenter, cardY + 160);
     }
+
+    // Equipment Label Text
+    ctx.fillStyle = '#2dd4bf'; // teal
+    ctx.font = 'bold 22px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(
+      language === 'ar' ? 'جهاز التنفس الصناعي الحديث' : 'Medical Ventilator',
+      prodColCenter,
+      cardY + 395
+    );
+
+    // 9. Footer section
+    // Separator line
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(80, 820);
+    ctx.lineTo(1000, 820);
+    ctx.stroke();
+
+    // Layout values for QR code and text alignment
+    const qrX = isRTL ? 80 : 840;
+    const textX = isRTL ? 1000 : 80;
+    const tAlign = isRTL ? 'right' : 'left';
+
+    // Draw QR Code
+    if (qrImg) {
+      ctx.fillStyle = '#f8fafc';
+      drawRoundedRect(ctx, qrX, 850, 160, 160, 16, true, false);
+      ctx.drawImage(qrImg, qrX + 10, 860, 140, 140);
+    } else {
+      ctx.fillStyle = 'rgba(255,255,255,0.05)';
+      drawRoundedRect(ctx, qrX, 850, 160, 160, 16, true, false);
+    }
+
+    // Footer Text
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 32px sans-serif';
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = tAlign;
+    
+    ctx.fillText(
+      language === 'ar' ? 'تبرع الآن لتجهيز غرف العناية المركزة وإنقاذ الأرواح' : 'Donate now to equip ICU beds & save lives',
+      textX,
+      905
+    );
+    
+    ctx.fillStyle = '#10b981';
+    ctx.font = 'bold 24px sans-serif';
+    ctx.fillText(
+      language === 'ar' ? `مسح الرمز أو زيارة: ${window.location.host}` : `Scan QR or visit: ${window.location.host}`,
+      textX,
+      960
+    );
 
     return canvas.toDataURL('image/png');
   };
@@ -756,8 +866,8 @@ export default function PublicDonationPage() {
           files: [file],
           title: language === 'ar' ? 'حملة الدفعة التاسعة طب كفر الشيخ' : '9th Batch Donations Campaign',
           text: language === 'ar' 
-            ? `ادعم معنا حملة توفير جهاز التنفس وجهاز ABG:\n${window.location.origin}` 
-            : `Support our ventilator & ABG campaign:\n${window.location.origin}`,
+            ? `ادعم معنا حملة توفير جهاز التنفس الصناعي:\n${window.location.origin}` 
+            : `Support our medical ventilator campaign:\n${window.location.origin}`,
         });
       } else {
         await navigator.clipboard.writeText(window.location.href);
@@ -1662,15 +1772,6 @@ export default function PublicDonationPage() {
                   <span className="font-bold text-[11px]">{language === 'ar' ? 'جهاز تنفس صناعي حديث' : 'Ventilator'}</span>
                   <span className="text-[9px] font-bold bg-rose-950/40 text-rose-450 px-1 py-0.2 rounded border border-rose-900/10">
                     {language === 'ar' ? 'عاجل' : 'Urgent'}
-                  </span>
-                </div>
-
-                {/* Device 2 */}
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-teal-950/20 border border-teal-900/25 text-xs text-white">
-                  <span className="w-1.5 h-1.5 rounded-full bg-teal-450" />
-                  <span className="font-bold text-[11px]">{language === 'ar' ? 'جهاز تحليل غازات الدم (ABG)' : 'ABG Analyzer'}</span>
-                  <span className="text-[9px] font-bold bg-teal-950/30 text-teal-450 px-1 py-0.2 rounded border border-teal-900/10">
-                    {language === 'ar' ? 'مستهدف' : 'Targeted'}
                   </span>
                 </div>
               </div>
