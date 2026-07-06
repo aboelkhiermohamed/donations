@@ -266,9 +266,8 @@ CREATE POLICY "Admins only access sms_logs" ON sms_logs FOR ALL USING (
     EXISTS (SELECT 1 FROM admins WHERE id = auth.uid())
 );
 
-CREATE POLICY "Admins only access admins" ON admins FOR ALL USING (
-    id = auth.uid()
-);
+CREATE POLICY "Admins can read all admins" ON admins FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Admins can modify their own record" ON admins FOR ALL USING (id = auth.uid()) WITH CHECK (id = auth.uid());
 
 CREATE POLICY "Admins only access audit_logs" ON audit_logs FOR ALL USING (
     EXISTS (SELECT 1 FROM admins WHERE id = auth.uid())
