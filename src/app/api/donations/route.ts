@@ -38,12 +38,13 @@ export async function POST(req: NextRequest) {
       screenshotUrl,
     } = validation.data;
 
-    // 1. Insert or reuse Donor (Check if donor with phone already exists)
+    // 1. Insert or reuse Donor (Check if donor with same phone and name already exists)
     let donorId: string;
     const { data: existingDonor, error: donorFetchError } = await supabaseAdmin
       .from('donors')
       .select('id')
       .eq('phone', phone.trim())
+      .eq('name', name.trim())
       .limit(1)
       .maybeSingle();
 
@@ -53,15 +54,6 @@ export async function POST(req: NextRequest) {
 
     if (existingDonor) {
       donorId = existingDonor.id;
-      // Update donor name in case they submitted a different name/correction
-      const { error: donorUpdateError } = await supabaseAdmin
-        .from('donors')
-        .update({ name: name.trim() })
-        .eq('id', donorId);
-      
-      if (donorUpdateError) {
-        console.error('Failed to update donor name:', donorUpdateError);
-      }
     } else {
       const { data: newDonor, error: donorInsertError } = await supabaseAdmin
         .from('donors')
