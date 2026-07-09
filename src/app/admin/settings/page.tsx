@@ -5,7 +5,7 @@ import AdminLayout from '@/components/admin/AdminLayout';
 import { useLanguage } from '@/context/LanguageContext';
 import { supabase } from '@/lib/supabase';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Save, Loader2, Coins, Target, CheckCircle, Upload, Image } from 'lucide-react';
+import { Save, Loader2, Coins, Target, CheckCircle, Upload, Image, ShieldAlert, Wrench } from 'lucide-react';
 
 export default function AdminSettingsPage() {
   const { language } = useLanguage();
@@ -25,6 +25,13 @@ export default function AdminSettingsPage() {
   const [vodafoneCash2Enabled, setVodafoneCash2Enabled] = useState(true);
   const [instapayEnabled, setInstapayEnabled] = useState(true);
   
+  // Maintenance Mode States
+  const [maintenanceEnabled, setMaintenanceEnabled] = useState(false);
+  const [maintenanceMessageAr, setMaintenanceMessageAr] = useState('');
+  const [maintenanceMessageEn, setMaintenanceMessageEn] = useState('');
+  const [isSavingMaintenance, setIsSavingMaintenance] = useState(false);
+  const [maintenanceSaveSuccess, setMaintenanceSaveSuccess] = useState(false);
+
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
@@ -47,6 +54,13 @@ export default function AdminSettingsPage() {
         .eq('key', 'payment_accounts')
         .maybeSingle();
 
+      // Fetch maintenance settings
+      const { data: maintenance } = await supabase
+        .from('settings')
+        .select('*')
+        .eq('key', 'maintenance_mode')
+        .maybeSingle();
+
       return {
         campaign,
         settings: settings?.value || { 
@@ -59,6 +73,11 @@ export default function AdminSettingsPage() {
           vodafone_cash_enabled: true,
           vodafone_cash_2_enabled: true,
           instapay_enabled: true
+        },
+        maintenance: maintenance?.value || {
+          enabled: false,
+          message_ar: '',
+          message_en: ''
         }
       };
     }
@@ -77,6 +96,10 @@ export default function AdminSettingsPage() {
       setVodafoneCashEnabled(config.settings.vodafone_cash_enabled !== false);
       setVodafoneCash2Enabled(config.settings.vodafone_cash_2_enabled !== false);
       setInstapayEnabled(config.settings.instapay_enabled !== false);
+      
+      setMaintenanceEnabled(config.maintenance?.enabled || false);
+      setMaintenanceMessageAr(config.maintenance?.message_ar || '');
+      setMaintenanceMessageEn(config.maintenance?.message_en || '');
     }
   }, [config]);
 
@@ -175,6 +198,55 @@ export default function AdminSettingsPage() {
       alert(`Save failed: ${err.message}`);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // Save Maintenance Settings Handler
+  const handleSaveMaintenance = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingMaintenance(true);
+    setMaintenanceSaveSuccess(false);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+
+      // Update Maintenance settings in settings table
+      const { error: settingsError } = await supabase
+        .from('settings')
+        .upsert({
+          key: 'maintenance_mode',
+          value: {
+            enabled: maintenanceEnabled,
+            message_ar: maintenanceMessageAr.trim(),
+            message_en: maintenanceMessageEn.trim(),
+          },
+          updated_at: new Date().toISOString()
+        });
+
+      if (settingsError) throw settingsError;
+
+      // Log Audit Log
+      await supabase.from('audit_logs').insert({
+        admin_id: session?.user?.id || null,
+        action: 'UPDATE_MAINTENANCE_MODE',
+        details: { 
+          enabled: maintenanceEnabled,
+          message_ar: maintenanceMessageAr,
+          message_en: maintenanceMessageEn
+        }
+      });
+
+      // Refetch queries
+      queryClient.invalidateQueries({ queryKey: ['adminConfigData'] });
+      queryClient.invalidateQueries({ queryKey: ['maintenanceMode'] });
+      
+      setMaintenanceSaveSuccess(true);
+      setTimeout(() => setMaintenanceSaveSuccess(false), 4000);
+    } catch (err: any) {
+      console.error(err);
+      alert(`Save failed: ${err.message}`);
+    } finally {
+      setIsSavingMaintenance(false);
     }
   };
 
@@ -506,6 +578,95 @@ export default function AdminSettingsPage() {
             )}
           </button>
 
+        </form>
+
+        {/* Maintenance Mode Card */}
+        <form onSubmit={handleSaveMaintenance} className="glass-panel p-6 rounded-2xl border border-slate-900 space-y-6">
+          <div className="flex items-center justify-between border-b border-slate-800/60 pb-4">
+            <div className="space-y-0.5">
+              <h3 className="text-md font-bold text-white flex items-center gap-2">
+                <Wrench className="w-5 h-5 text-amber-500" />
+                <span>{language === 'ar' ? 'وضع صيانة الموقع' : 'Website Maintenance Mode'}</span>
+              </h3>
+              <p className="text-slate-400 text-xs">
+                {language === 'ar' 
+                  ? 'تفعيل هذا الوضع سيمنع الزوار العاديين من تصفح الموقع وعرض شاشة صيانة بدلاً منه.' 
+                  : 'Enabling this mode redirects public users to a premium maintenance landing page.'}
+              </p>
+            </div>
+            <label className="relative inline-flex items-center gap-2 cursor-pointer select-none">
+              <input 
+                type="checkbox" 
+                checked={maintenanceEnabled}
+                onChange={(e) => setMaintenanceEnabled(e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className="relative w-9 h-5 bg-slate-850 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-400 after:border-slate-400 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-550 peer-checked:after:bg-slate-950 peer-checked:after:border-transparent"></div>
+              <span className="text-[10px] font-bold text-slate-400 peer-checked:text-amber-500">
+                {maintenanceEnabled ? (language === 'ar' ? 'مفعّل' : 'Enabled') : (language === 'ar' ? 'معطّل' : 'Disabled')}
+              </span>
+            </label>
+          </div>
+
+          {/* Success Notification for Maintenance */}
+          {maintenanceSaveSuccess && (
+            <div className="p-4 bg-emerald-950/20 border border-emerald-900/30 text-emerald-350 text-xs rounded-xl flex items-center gap-2 animate-scale-up">
+              <CheckCircle className="w-5 h-5 text-emerald-450" />
+              <span>{language === 'ar' ? 'تم تحديث وضع الصيانة بنجاح!' : 'Maintenance settings updated successfully!'}</span>
+            </div>
+          )}
+
+          {maintenanceEnabled && (
+            <div className="space-y-4">
+              {/* Message AR */}
+              <div className="space-y-2">
+                <label className="text-slate-350 text-xs font-semibold">
+                  {language === 'ar' ? 'رسالة الصيانة (باللغة العربية)' : 'Maintenance Message (Arabic)'}
+                </label>
+                <textarea
+                  value={maintenanceMessageAr}
+                  onChange={(e) => setMaintenanceMessageAr(e.target.value)}
+                  rows={3}
+                  className="w-full glass-input px-4 py-3 rounded-xl text-sm leading-relaxed"
+                  placeholder={language === 'ar' ? 'مثال: نقوم ببعض التحديثات المجدولة وسنعود قريباً...' : 'Arabic message to display...'}
+                />
+              </div>
+
+              {/* Message EN */}
+              <div className="space-y-2">
+                <label className="text-slate-350 text-xs font-semibold">
+                  {language === 'ar' ? 'رسالة الصيانة (باللغة الإنجليزية)' : 'Maintenance Message (English)'}
+                </label>
+                <textarea
+                  value={maintenanceMessageEn}
+                  onChange={(e) => setMaintenanceMessageEn(e.target.value)}
+                  rows={3}
+                  className="w-full glass-input px-4 py-3 rounded-xl text-sm leading-relaxed"
+                  placeholder={language === 'ar' ? 'Example: We are performing scheduled updates and will be back online soon...' : 'English message to display...'}
+                  dir="ltr"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Save Maintenance Button */}
+          <button
+            type="submit"
+            disabled={isSavingMaintenance}
+            className="w-full bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-extrabold text-sm py-4 rounded-xl shadow-lg shadow-amber-500/10 hover:brightness-105 active:scale-[0.99] transition-all flex items-center justify-center gap-2"
+          >
+            {isSavingMaintenance ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>{language === 'ar' ? 'جاري الحفظ...' : 'Saving...'}</span>
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4" />
+                <span>{language === 'ar' ? 'حفظ إعدادات الصيانة' : 'Save Maintenance Settings'}</span>
+              </>
+            )}
+          </button>
         </form>
 
         {/* Danger Zone */}

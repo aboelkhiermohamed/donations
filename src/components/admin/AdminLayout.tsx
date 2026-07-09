@@ -32,6 +32,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
   const [adminName, setAdminName] = useState('');
+  const [isMaintenanceActive, setIsMaintenanceActive] = useState(false);
 
   // 1. Session verification & redirection
   useEffect(() => {
@@ -90,6 +91,43 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'notifications' }, () => {
         fetchNotifications();
       })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isAdmin]);
+
+  // 2.5. Check and Subscribe to Maintenance Mode status
+  useEffect(() => {
+    if (!isAdmin) return;
+
+    const checkMaintenance = async () => {
+      const { data, error } = await supabase
+        .from('settings')
+        .select('*')
+        .eq('key', 'maintenance_mode')
+        .maybeSingle();
+
+      if (!error && data) {
+        setIsMaintenanceActive(data.value?.enabled || false);
+      }
+    };
+
+    checkMaintenance();
+
+    // Subscribe to changes in settings table
+    const channel = supabase
+      .channel('admin_settings_maintenance')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'settings' },
+        (payload) => {
+          if (payload.new && (payload.new as any).key === 'maintenance_mode') {
+            setIsMaintenanceActive((payload.new as any).value?.enabled || false);
+          }
+        }
+      )
       .subscribe();
 
     return () => {
@@ -230,6 +268,32 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
       {/* MAIN CONTAINER CONTENT */}
       <div className="flex-1 min-w-0 p-6 md:p-8 overflow-y-auto space-y-6 print:p-0 print:m-0 print:overflow-visible">
+        {/* Banner Alert for Maintenance Mode */}
+        {isMaintenanceActive && (
+          <div className="w-full p-4 bg-amber-950/20 border border-amber-900/30 rounded-2xl flex items-center justify-between gap-4 animate-scale-up print:hidden">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0" />
+              <div>
+                <h4 className="text-white font-bold text-sm">
+                  {language === 'ar' ? 'تنبيه: وضع الصيانة نشط حالياً' : 'Alert: Maintenance Mode is Active'}
+                </h4>
+                <p className="text-slate-400 text-xs mt-0.5">
+                  {language === 'ar' 
+                    ? 'الموقع حالياً معروض للمشرفين فقط ومغلق للعامة. لا تنسَ إيقافه فور الانتهاء.' 
+                    : 'The site is currently hidden from public users. Remember to disable it when done.'
+                  }
+                </p>
+              </div>
+            </div>
+            <Link 
+              href="/admin/settings"
+              className="px-4 py-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-lg text-xs font-bold text-amber-400 hover:text-amber-350 flex-shrink-0"
+            >
+              {language === 'ar' ? 'الإعدادات' : 'Settings'}
+            </Link>
+          </div>
+        )}
+
         {/* Banner Alert for Unverified Matches */}
         {unreadNotificationsCount > 0 && (
           <div className="w-full p-4 bg-emerald-950/20 border border-emerald-900/30 rounded-2xl flex items-center justify-between gap-4 animate-scale-up print:hidden">

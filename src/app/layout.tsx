@@ -3,6 +3,7 @@ import { Cairo, Outfit } from 'next/font/google';
 import './globals.css';
 import { LanguageProvider } from '@/context/LanguageContext';
 import QueryProvider from '@/providers/QueryProvider';
+import MaintenanceGuard from '@/components/MaintenanceGuard';
 
 const cairo = Cairo({
   subsets: ['arabic'],
@@ -33,7 +34,9 @@ export default function RootLayout({
       <body className="antialiased bg-slate-950 text-slate-50 min-h-screen selection:bg-emerald-500/30">
         <QueryProvider>
           <LanguageProvider>
-            {children}
+            <MaintenanceGuard>
+              {children}
+            </MaintenanceGuard>
           </LanguageProvider>
         </QueryProvider>
       </body>
