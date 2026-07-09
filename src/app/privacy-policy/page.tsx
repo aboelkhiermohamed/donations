@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useLanguage } from '@/context/LanguageContext';
-import { Heart, Globe, ArrowLeft, ArrowRight, ShieldAlert, Lock, EyeOff } from 'lucide-react';
+import { Heart, Globe, ArrowLeft, ArrowRight, ShieldAlert, Lock, EyeOff, Coins } from 'lucide-react';
 
 export default function PrivacyPolicyPage() {
   const { language, dir, toggleLanguage } = useLanguage();
@@ -126,6 +126,23 @@ export default function PrivacyPolicyPage() {
               {language === 'ar'
                 ? 'تُخزن جميع البيانات في قواعد بيانات مؤمنة وسحابية (Supabase) مع تمكين سياسات الحماية على مستوى الصف (RLS). لا توجد إمكانية للوصول الخارجي للبيانات أو تفاصيل المتبرعين غير الموثقين، ويتم تشفير الاتصالات بالكامل باستخدام بروتوكول SSL/TLS.'
                 : 'All database transactions are secured using PostgreSQL Row Level Security (RLS) hosted on Supabase. Access to raw donor directories is sealed and encrypted via SSL/TLS. External network request authentication protects configurations and audit files.'}
+            </p>
+          </div>
+
+          {/* Policy Card 4: Donation Disclaimer */}
+          <div className="glass-panel p-6 rounded-2xl border border-slate-900 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-400">
+                <Coins className="w-5 h-5" />
+              </div>
+              <h2 className="text-lg font-bold text-white">
+                {language === 'ar' ? 'تنويه هام وإخلاء مسؤولية مالي' : 'Important Disclaimer & Funds Notice'}
+              </h2>
+            </div>
+            <p className="text-xs md:text-sm text-slate-300 leading-relaxed">
+              {language === 'ar'
+                ? 'تقتصر وظيفة المنصة فقط على تأكيد وتوثيق التبرعات الواردة. نود التنويه بأن جميع التبرعات تذهب مباشرة وتوجد في المحافظ الشخصية للأشخاص المسؤولين عنها، وليس للمنصة أي صلاحية أو إمكانية للوصول إلى أي أموال أو حسابات خاصة بالمتبرعين.'
+                : 'The platform\'s role is strictly limited to confirming and documenting incoming donations. All donations are sent directly to and remain within the personal wallets of the responsible individuals. The platform does not have any access, control, or authority over any donor funds or private accounts.'}
             </p>
           </div>
 
