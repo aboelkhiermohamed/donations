@@ -111,6 +111,84 @@ export default function PublicDonationPage() {
     ref: string;
     status: 'pending' | 'auto_verified' | 'manual_verified' | 'rejected';
   } | null>(null);
+  const [justLiveConfirmed, setJustLiveConfirmed] = useState(false);
+
+  // Real-time listener & light poll for submitted pending donation
+  useEffect(() => {
+    if (!submittedDonation || submittedDonation.status !== 'pending') return;
+
+    const donationId = submittedDonation.id;
+    let isSubscribed = true;
+
+    const handleDonationConfirmed = () => {
+      if (!isSubscribed) return;
+      setSubmittedDonation(prev => {
+        if (!prev || prev.id !== donationId || prev.status === 'auto_verified') return prev;
+        return {
+          ...prev,
+          status: 'auto_verified',
+        };
+      });
+
+      setJustLiveConfirmed(true);
+
+      // Fire celebratory confetti!
+      fireConfetti({
+        particleCount: 110,
+        spread: 80,
+        origin: { y: 0.6 },
+        colors: ['#153C32', '#217A61', '#24B58A', '#B79B68', '#F59E0B'],
+      });
+
+      // Invalidate public stats
+      queryClient.invalidateQueries({ queryKey: ['publicConfirmedDonationsLedger'] });
+      queryClient.invalidateQueries({ queryKey: ['campaignSummaryPublic'] });
+    };
+
+    // 1. Supabase Realtime channel
+    const channel = supabase
+      .channel(`realtime-donation-${donationId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'donations',
+          filter: `id=eq.${donationId}`,
+        },
+        (payload: any) => {
+          const newStatus = payload.new?.status;
+          if (newStatus === 'auto_verified' || newStatus === 'manual_verified') {
+            handleDonationConfirmed();
+          }
+        }
+      )
+      .subscribe();
+
+    // 2. Periodic poll check (every 4 seconds)
+    const checkStatus = async () => {
+      if (!isSubscribed) return;
+      try {
+        const res = await fetch(`/api/donations/status?ids=${donationId}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          const st = data[0].status;
+          if (st === 'auto_verified' || st === 'manual_verified') {
+            handleDonationConfirmed();
+          }
+        }
+      } catch {}
+    };
+
+    const interval = setInterval(checkStatus, 4000);
+
+    return () => {
+      isSubscribed = false;
+      clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
+  }, [submittedDonation?.id, submittedDonation?.status]);
 
   // Shuffled Vodafone Cash wallets: randomized on every page refresh/load to distribute incoming transfers evenly
   const [shuffledWallets, setShuffledWallets] = useState<WalletConfig[]>([]);
@@ -422,6 +500,7 @@ export default function PublicDonationPage() {
       });
 
       const isAutoMatched = Boolean(result.match?.matched);
+      setJustLiveConfirmed(false);
       setSubmittedDonation({
         id: result.donationId,
         amount: Number(amount),
@@ -1176,6 +1255,14 @@ export default function PublicDonationPage() {
                         )}
                       </div>
 
+                      {/* Live Confirmation Alert Banner */}
+                      {justLiveConfirmed && (
+                        <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-400 dark:border-emerald-600 text-emerald-800 dark:text-emerald-200 text-xs sm:text-sm font-bold flex items-center justify-center gap-2.5 animate-bounce shadow-subtle max-w-md mx-auto">
+                          <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                          <span>{language === 'ar' ? '🎉 تم استلام وتأكيد التحويل الآن بنجاح! تم اعتماد تبرعكم وتحديث لوحة الشفافية.' : '🎉 Payment verified & confirmed right now!'}</span>
+                        </div>
+                      )}
+
                       {/* Explicit Status Badge */}
                       <div className="flex justify-center">
                         {submittedDonation.status === 'auto_verified' ? (
@@ -1276,7 +1363,10 @@ export default function PublicDonationPage() {
 
                         <button
                           type="button"
-                          onClick={() => setSubmittedDonation(null)}
+                          onClick={() => {
+                            setSubmittedDonation(null);
+                            setJustLiveConfirmed(false);
+                          }}
                           className="w-full sm:w-auto px-6 py-3 rounded-xl bg-white dark:bg-[#111C2D] border border-[#DDD9CC] dark:border-[#283849] text-xs font-semibold text-[#3D4742] dark:text-[#F3F5F4] hover:bg-[#F4F3ED] dark:hover:bg-[#1f3047]"
                         >
                           {t('new_submission_btn')}
