@@ -29,7 +29,15 @@ import {
   Wrench, 
   AlertCircle, 
   X,
-  ExternalLink
+  ExternalLink,
+  Users,
+  UserPlus,
+  ShieldCheck,
+  AlertTriangle,
+  RotateCcw,
+  Key,
+  Mail,
+  User
 } from 'lucide-react';
 
 export default function AdminSettingsPage() {
@@ -68,8 +76,46 @@ export default function AdminSettingsPage() {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
+  // Admins state
+  const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+  const [newAdminName, setNewAdminName] = useState('');
+  const [newAdminEmail, setNewAdminEmail] = useState('');
+  const [newAdminPassword, setNewAdminPassword] = useState('');
+  const [newAdminRole, setNewAdminRole] = useState<'admin' | 'superadmin'>('admin');
+  const [adminFormError, setAdminFormError] = useState('');
+  const [isSubmittingAdmin, setIsSubmittingAdmin] = useState(false);
+  const [isDeletingAdminId, setIsDeletingAdminId] = useState<string | null>(null);
+
+  // Reset Data Modal State
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [resetConfirmationInput, setResetConfirmationInput] = useState('');
+  const [isResettingData, setIsResettingData] = useState(false);
+  const [resetSuccessMessage, setResetSuccessMessage] = useState('');
+  const [resetErrorMessage, setResetErrorMessage] = useState('');
+
   // Public Preview Tab
   const [previewMethod, setPreviewMethod] = useState<string>('vodafone_cash');
+
+  const getAuthToken = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token || '';
+  };
+
+  // Fetch Admins List
+  const { data: adminsData, isLoading: isLoadingAdmins, refetch: refetchAdmins } = useQuery({
+    queryKey: ['adminUsersList'],
+    queryFn: async () => {
+      const token = await getAuthToken();
+      const res = await fetch('/api/admin/users', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to fetch admins');
+      }
+      return res.json();
+    },
+  });
 
   // 1. Fetch Campaign and Payment Config Data
   const { data: config, isLoading } = useQuery({
@@ -402,6 +448,110 @@ export default function AdminSettingsPage() {
       alert(`Error saving maintenance: ${err.message}`);
     } finally {
       setIsSavingMaintenance(false);
+    }
+  };
+
+  // Add new administrator
+  const handleAddAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAdminFormError('');
+    setIsSubmittingAdmin(true);
+
+    try {
+      const token = await getAuthToken();
+      const res = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          name: newAdminName,
+          email: newAdminEmail,
+          password: newAdminPassword,
+          role: newAdminRole,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to create admin');
+      }
+
+      setNewAdminName('');
+      setNewAdminEmail('');
+      setNewAdminPassword('');
+      setNewAdminRole('admin');
+      setIsAdminModalOpen(false);
+      refetchAdmins();
+      alert(language === 'ar' ? 'تم إضافة المشرف بنجاح!' : 'Admin added successfully!');
+    } catch (err: any) {
+      setAdminFormError(err.message);
+    } finally {
+      setIsSubmittingAdmin(false);
+    }
+  };
+
+  // Delete administrator
+  const handleDeleteAdmin = async (adminId: string, adminName: string) => {
+    if (!confirm(language === 'ar' ? `هل أنت متأكد من حذف المشرف (${adminName})؟` : `Are you sure you want to delete ${adminName}?`)) {
+      return;
+    }
+
+    setIsDeletingAdminId(adminId);
+    try {
+      const token = await getAuthToken();
+      const res = await fetch(`/api/admin/users?id=${adminId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to delete admin');
+      }
+
+      refetchAdmins();
+      alert(language === 'ar' ? 'تم حذف المشرف بنجاح.' : 'Admin deleted successfully.');
+    } catch (err: any) {
+      alert(`Error: ${err.message}`);
+    } finally {
+      setIsDeletingAdminId(null);
+    }
+  };
+
+  // Reset database test data
+  const handleResetData = async () => {
+    setResetErrorMessage('');
+    setIsResettingData(true);
+
+    try {
+      const token = await getAuthToken();
+      const res = await fetch('/api/admin/reset-data', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ confirmation: resetConfirmationInput }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to reset data');
+      }
+
+      setResetSuccessMessage(data.message || 'تم تصفير البيانات بنجاح.');
+      setResetConfirmationInput('');
+      setIsResetModalOpen(false);
+      
+      // Invalidate all queries across entire app
+      queryClient.invalidateQueries();
+      alert(data.message || 'تم تصفير كافة البيانات التجريبية بنجاح.');
+    } catch (err: any) {
+      setResetErrorMessage(err.message);
+    } finally {
+      setIsResettingData(false);
     }
   };
 
@@ -878,6 +1028,158 @@ export default function AdminSettingsPage() {
 
         </section>
 
+        {/* 6. ADMINS & TEAM MANAGEMENT */}
+        <section className="p-6 sm:p-8 rounded-3xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-subtle space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-[#EAE8DE] dark:border-[#283849] gap-3">
+            <div className="flex items-center gap-2">
+              <Users className="w-5 h-5 text-[#153C32] dark:text-[#24B58A]" />
+              <div>
+                <h3 className="font-extrabold text-base text-[#153C32] dark:text-[#F3F5F4]">
+                  {language === 'ar' ? '6. إدارة المشرفين وفريق العمل' : '6. Admin & Team Management'}
+                </h3>
+                <span className="text-xs text-[#738079] dark:text-[#A7B4B0]">
+                  {language === 'ar' ? 'إضافة وإدارة حسابات المشرفين المصرح لهم بالدخول للوحة التحكم واعتماد التبرعات.' : 'Manage accounts authorized to access admin panel and verify contributions.'}
+                </span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setAdminFormError('');
+                setIsAdminModalOpen(true);
+              }}
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#153C32] dark:bg-[#24B58A] text-white dark:text-[#0B1220] text-xs font-bold hover:bg-[#1C4E41] dark:hover:bg-[#1fa37b] transition-all shadow-subtle self-start sm:self-auto"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>{language === 'ar' ? 'إضافة مشرف جديد' : 'Add New Admin'}</span>
+            </button>
+          </div>
+
+          {isLoadingAdmins ? (
+            <div className="py-8 flex justify-center text-[#738079]">
+              <Loader2 className="w-6 h-6 animate-spin" />
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {(adminsData?.admins || []).map((admin: any) => {
+                const isCurrent = admin.id === adminsData?.currentUserId;
+                const isSuper = admin.role === 'superadmin';
+
+                return (
+                  <div
+                    key={admin.id}
+                    className="p-4 rounded-2xl bg-[#FAF9F5] dark:bg-[#111C2D] border border-[#EAE8DE] dark:border-[#283849] flex items-center justify-between gap-3 shadow-subtle"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-[#153C32]/10 dark:bg-[#24B58A]/10 text-[#153C32] dark:text-[#24B58A] flex items-center justify-center font-bold text-sm flex-shrink-0">
+                        <User className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-bold text-sm text-[#191F1C] dark:text-[#F3F5F4] truncate">
+                            {admin.name}
+                          </h4>
+                          {isCurrent && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                              {language === 'ar' ? 'أنت' : 'You'}
+                            </span>
+                          )}
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                            isSuper
+                              ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                          }`}>
+                            {isSuper ? (language === 'ar' ? 'مدير عام' : 'Superadmin') : (language === 'ar' ? 'مشرف' : 'Admin')}
+                          </span>
+                        </div>
+                        <span className="text-xs text-[#738079] dark:text-[#A7B4B0] block truncate font-mono">
+                          {admin.email}
+                        </span>
+                      </div>
+                    </div>
+
+                    {!isCurrent && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteAdmin(admin.id, admin.name)}
+                        disabled={isDeletingAdminId === admin.id}
+                        className="p-2 rounded-xl text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors disabled:opacity-50 flex-shrink-0"
+                        title={language === 'ar' ? 'حذف المشرف' : 'Delete Admin'}
+                      >
+                        {isDeletingAdminId === admin.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-4 h-4" />
+                        )}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        {/* 7. DANGER ZONE — SYSTEM RESET */}
+        <section className="p-6 sm:p-8 rounded-3xl bg-red-50/40 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50 shadow-subtle space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-red-200 dark:border-red-900/50 gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-black text-base text-red-900 dark:text-red-200">
+                  {language === 'ar' ? '7. منطقة العمليات الحساسة: تصفير بيانات الموقع قبل البدء' : '7. Danger Zone: System Data Reset'}
+                </h3>
+                <p className="text-xs text-red-700/80 dark:text-red-300/80 mt-0.5">
+                  {language === 'ar'
+                    ? 'مسح جميع التبرعات والمعاملات التجريبية وتصفير العدادات تمهيداً لبدء الحملة واستقبال التبرعات الحقيقية.'
+                    : 'Purge all test donations, transactions, and logs before officially launching the campaign.'}
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setResetConfirmationInput('');
+                setResetErrorMessage('');
+                setIsResetModalOpen(true);
+              }}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold shadow-subtle transition-all self-start sm:self-auto"
+            >
+              <RotateCcw className="w-4 h-4" />
+              <span>{language === 'ar' ? 'تصفير كافة البيانات التجريبية' : 'Zero-Out Test Data'}</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+            <div className="p-3.5 rounded-2xl bg-white dark:bg-[#172436] border border-red-200 dark:border-red-900/40 space-y-1">
+              <span className="font-bold text-red-800 dark:text-red-300 block">
+                {language === 'ar' ? 'ما الذي سيتم مسحه وتصفيره؟' : 'What will be wiped?'}
+              </span>
+              <ul className="list-disc list-inside space-y-0.5 text-[#55625B] dark:text-[#A7B4B0] text-[11px]">
+                <li>{language === 'ar' ? 'كافة التبرعات المسجلة (المعلقة والمعتمدة).' : 'All donations (pending & approved).'}</li>
+                <li>{language === 'ar' ? 'جميع المعاملات البنكية الواردة ورسائل الـ SMS.' : 'All incoming bank & SMS transactions.'}</li>
+                <li>{language === 'ar' ? 'بيانات المتبرعين التجريبية وسجلات التصدير.' : 'All test donors and report exports.'}</li>
+                <li>{language === 'ar' ? 'تصفير إجمالي المبالغ المجمعة ولوحة الشفافية فوراً.' : 'Reset campaign total and transparency ledger.'}</li>
+              </ul>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-white dark:bg-[#172436] border border-emerald-200 dark:border-emerald-900/40 space-y-1">
+              <span className="font-bold text-emerald-800 dark:text-emerald-300 block">
+                {language === 'ar' ? 'ما الذي سيتم الحفاظ عليه بأمان؟' : 'What is safely preserved?'}
+              </span>
+              <ul className="list-disc list-inside space-y-0.5 text-[#55625B] dark:text-[#A7B4B0] text-[11px]">
+                <li>{language === 'ar' ? 'حسابات جميع المشرفين والمديرين (لن يتم حذف أي أدمن).' : 'All administrator and superadmin accounts.'}</li>
+                <li>{language === 'ar' ? 'بيانات الحملة والمبلغ المستهدف واسم المبادرة.' : 'Campaign target, name, and memorial info.'}</li>
+                <li>{language === 'ar' ? 'إعدادات وسائل الدفع وأرقام محافظ فودافون كاش وإنستاباي.' : 'All configured wallets and payment methods.'}</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
         {/* Master Save Bar */}
         <div className="p-4 rounded-2xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-subtle flex items-center justify-between">
           <div>
@@ -984,6 +1286,195 @@ export default function AdminSettingsPage() {
                   </button>
                 </div>
               </form>
+
+            </div>
+          </div>
+        )}
+
+        {/* MODAL: ADD ADMIN */}
+        {isAdminModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn">
+            <div className="w-full max-w-md bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] rounded-3xl p-6 sm:p-8 shadow-editorial space-y-6">
+              
+              <div className="flex items-center justify-between pb-3 border-b border-[#EAE8DE] dark:border-[#283849]">
+                <div className="flex items-center gap-2">
+                  <UserPlus className="w-5 h-5 text-[#153C32] dark:text-[#24B58A]" />
+                  <h3 className="font-extrabold text-base text-[#153C32] dark:text-[#F3F5F4]">
+                    {language === 'ar' ? 'إضافة مشرف جديد للنظام' : 'Add New Administrator'}
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsAdminModalOpen(false)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {adminFormError && (
+                <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/40 text-red-700 dark:text-red-300 text-xs">
+                  {adminFormError}
+                </div>
+              )}
+
+              <form onSubmit={handleAddAdmin} className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-[#191F1C] dark:text-[#F3F5F4]">
+                    {language === 'ar' ? 'الاسم بالكامل' : 'Full Name'}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newAdminName}
+                    onChange={e => setNewAdminName(e.target.value)}
+                    placeholder="مثال: د. أحمد محمود"
+                    className="w-full py-2.5 px-3.5 rounded-xl bg-[#FAF9F5] dark:bg-[#111C2D] border border-[#DDD9CC] dark:border-[#283849] text-xs sm:text-sm text-[#191F1C] dark:text-[#F3F5F4] focus:outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-[#191F1C] dark:text-[#F3F5F4]">
+                    {language === 'ar' ? 'البريد الإلكتروني' : 'Email Address'}
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={newAdminEmail}
+                    onChange={e => setNewAdminEmail(e.target.value)}
+                    placeholder="admin@example.com"
+                    dir="ltr"
+                    className="w-full py-2.5 px-3.5 rounded-xl bg-[#FAF9F5] dark:bg-[#111C2D] border border-[#DDD9CC] dark:border-[#283849] text-xs sm:text-sm text-[#191F1C] dark:text-[#F3F5F4] focus:outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-[#191F1C] dark:text-[#F3F5F4]">
+                    {language === 'ar' ? 'كلمة المرور (8 أحرف على الأقل)' : 'Password (min 8 chars)'}
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    minLength={8}
+                    value={newAdminPassword}
+                    onChange={e => setNewAdminPassword(e.target.value)}
+                    placeholder="••••••••"
+                    dir="ltr"
+                    className="w-full py-2.5 px-3.5 rounded-xl bg-[#FAF9F5] dark:bg-[#111C2D] border border-[#DDD9CC] dark:border-[#283849] text-xs sm:text-sm text-[#191F1C] dark:text-[#F3F5F4] focus:outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-[#191F1C] dark:text-[#F3F5F4]">
+                    {language === 'ar' ? 'مستوى الصلاحية' : 'Role'}
+                  </label>
+                  <select
+                    value={newAdminRole}
+                    onChange={e => setNewAdminRole(e.target.value as any)}
+                    className="w-full py-2.5 px-3.5 rounded-xl bg-[#FAF9F5] dark:bg-[#111C2D] border border-[#DDD9CC] dark:border-[#283849] text-xs sm:text-sm text-[#191F1C] dark:text-[#F3F5F4] focus:outline-none"
+                  >
+                    <option value="admin">{language === 'ar' ? 'مشرف معتمد (مراجعة واعتماد التبرعات)' : 'Admin'}</option>
+                    <option value="superadmin">{language === 'ar' ? 'مدير عام للنظام (صلاحيات كاملة)' : 'Superadmin'}</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-4 border-t border-[#EAE8DE] dark:border-[#283849]">
+                  <button
+                    type="button"
+                    onClick={() => setIsAdminModalOpen(false)}
+                    className="px-4 py-2 rounded-xl border border-[#DDD9CC] dark:border-[#283849] text-xs font-semibold text-[#738079]"
+                  >
+                    إلغاء
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={isSubmittingAdmin}
+                    className="px-5 py-2 rounded-xl bg-[#153C32] dark:bg-[#24B58A] text-white dark:text-[#0B1220] text-xs font-bold hover:bg-[#1C4E41] disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {isSubmittingAdmin && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    <span>{language === 'ar' ? 'حفظ المشرف' : 'Create Admin'}</span>
+                  </button>
+                </div>
+              </form>
+
+            </div>
+          </div>
+        )}
+
+        {/* MODAL: RESET DATA CONFIRMATION */}
+        {isResetModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+            <div className="w-full max-w-lg bg-white dark:bg-[#172436] border border-red-300 dark:border-red-900/60 rounded-3xl p-6 sm:p-8 shadow-editorial space-y-6">
+              
+              <div className="flex items-center justify-between pb-3 border-b border-red-200 dark:border-red-900/50">
+                <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
+                  <AlertTriangle className="w-6 h-6" />
+                  <h3 className="font-black text-lg text-red-900 dark:text-red-200">
+                    {language === 'ar' ? 'تأكيد تصفير بيانات الموقع' : 'Confirm System Data Reset'}
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsResetModalOpen(false)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/40 text-xs text-red-800 dark:text-red-200 space-y-2 leading-relaxed">
+                <p className="font-bold">
+                  {language === 'ar' ? 'تحذير هام: هذا الإجراء لا يمكن التراجع عنه!' : 'Warning: This action cannot be undone!'}
+                </p>
+                <p>
+                  {language === 'ar' 
+                    ? 'سيتم حذف كافة التبرعات التجريبية، ورسائل الـ SMS، والمعاملات البنكية، وبيانات المتبرعين نهائياً لتصفير العداد إلى (0 ج.م) والبدء الحقيقي للحملة. حسابات المشرفين وإعدادات المحافظ ستبقى محفوظة بالكامل.'
+                    : 'All test donations, SMS logs, incoming transactions, and donors will be permanently wiped to reset the total to 0 EGP.'}
+                </p>
+              </div>
+
+              {resetErrorMessage && (
+                <div className="p-3 rounded-xl bg-red-100 dark:bg-red-900/40 border border-red-300 text-red-800 dark:text-red-200 text-xs font-bold">
+                  {resetErrorMessage}
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-[#191F1C] dark:text-[#F3F5F4] block">
+                  {language === 'ar' 
+                    ? 'للتأكيد، يرجى كتابة كلمة "تصفير" أو "RESET" في الحقل أدناه:' 
+                    : 'Type "RESET" to confirm:'}
+                </label>
+                <input
+                  type="text"
+                  value={resetConfirmationInput}
+                  onChange={e => setResetConfirmationInput(e.target.value)}
+                  placeholder={language === 'ar' ? 'اكتب: تصفير' : 'Type: RESET'}
+                  className="w-full py-2.5 px-3.5 rounded-xl bg-[#FAF9F5] dark:bg-[#111C2D] border border-red-300 dark:border-red-800 font-bold text-sm text-red-700 dark:text-red-300 text-center focus:outline-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-4 border-t border-[#EAE8DE] dark:border-[#283849]">
+                <button
+                  type="button"
+                  onClick={() => setIsResetModalOpen(false)}
+                  disabled={isResettingData}
+                  className="px-4 py-2 rounded-xl border border-[#DDD9CC] dark:border-[#283849] text-xs font-semibold text-[#738079]"
+                >
+                  إلغاء التراجع
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleResetData}
+                  disabled={isResettingData || (resetConfirmationInput.trim() !== 'تصفير' && resetConfirmationInput.trim() !== 'RESET')}
+                  className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold shadow-subtle disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {isResettingData && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>{language === 'ar' ? 'تأكيد التصفير والمسح الشامل' : 'Confirm Complete Reset'}</span>
+                </button>
+              </div>
 
             </div>
           </div>
