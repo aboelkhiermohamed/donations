@@ -47,6 +47,10 @@ export default function LottieAnimation({
           loop,
           autoplay,
           animationData,
+          rendererSettings: {
+            preserveAspectRatio: 'xMidYMid meet',
+            progressiveLoad: true,
+          },
         });
       }
     });

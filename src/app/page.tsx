@@ -1160,11 +1160,19 @@ export default function PublicDonationPage() {
                     <div className="p-8 sm:p-10 rounded-3xl bg-white dark:bg-[#172436] border border-[#217A61]/30 dark:border-[#24B58A]/30 shadow-editorial text-center space-y-6 animate-fadeIn">
                       
                       {/* Lottie Animation depending on real verification status */}
-                      <div className="flex justify-center">
+                      <div className="flex justify-center -my-3">
                         {submittedDonation.status === 'auto_verified' ? (
-                          <LottieAnimation animationPath="/animations/payment-success.json" className="w-28 h-28" />
+                          <LottieAnimation 
+                            animationPath="/animations/payment-success.json" 
+                            className="w-44 h-44 sm:w-52 sm:h-52 mx-auto" 
+                            loop={false}
+                          />
                         ) : (
-                          <LottieAnimation animationPath="/animations/payment-waiting.json" className="w-28 h-28" />
+                          <LottieAnimation 
+                            animationPath="/animations/payment-waiting.json" 
+                            className="w-40 h-40 sm:w-48 sm:h-48 mx-auto" 
+                            loop={true}
+                          />
                         )}
                       </div>
 
@@ -1556,7 +1564,7 @@ export default function PublicDonationPage() {
                         <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                           {isVerified ? (
                             <div className="flex items-center gap-2">
-                              <LottieAnimation animationPath="/animations/payment-success.json" className="w-9 h-9 flex-shrink-0" loop={false} />
+                              <LottieAnimation animationPath="/animations/payment-success.json" className="w-12 h-12 flex-shrink-0" loop={false} />
                               <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#F0F9F6] dark:bg-[#24B58A]/10 border border-[#217A61]/30 dark:border-[#24B58A]/30 text-xs font-bold text-[#217A61] dark:text-[#24B58A]">
                                 <CheckCircle2 className="w-3.5 h-3.5" />
                                 <span>{t('track_status_verified')}</span>
@@ -1564,7 +1572,7 @@ export default function PublicDonationPage() {
                             </div>
                           ) : isRejected ? (
                             <div className="flex items-center gap-2">
-                              <LottieAnimation animationPath="/animations/payment-failed.json" className="w-9 h-9 flex-shrink-0" loop={true} />
+                              <LottieAnimation animationPath="/animations/payment-failed.json" className="w-12 h-12 flex-shrink-0" loop={false} />
                               <div className="flex flex-col items-start gap-0.5">
                                 <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/40 text-xs font-bold text-red-700 dark:text-red-300">
                                   <X className="w-3.5 h-3.5" />
@@ -1577,7 +1585,7 @@ export default function PublicDonationPage() {
                             </div>
                           ) : (
                             <div className="flex items-center gap-2">
-                              <LottieAnimation animationPath="/animations/payment-waiting.json" className="w-9 h-9 flex-shrink-0" loop={true} />
+                              <LottieAnimation animationPath="/animations/payment-waiting.json" className="w-12 h-12 flex-shrink-0" loop={true} />
                               <div className="flex flex-col items-start gap-0.5">
                                 <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/40 text-xs font-bold text-amber-800 dark:text-amber-300">
                                   <Clock className="w-3.5 h-3.5" />
