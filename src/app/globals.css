@@ -3,71 +3,59 @@
 @tailwind utilities;
 
 :root {
-  --background: #020617; /* slate-950 */
-  --foreground: #f8fafc; /* slate-50 */
+  --background: #FAF9F5;
+  --foreground: #191F1C;
+  --color-forest: #153C32;
+  --color-cream: #FAF9F5;
+  --color-gold: #B79B68;
+}
+
+.dark {
+  --background: #0B1220;
+  --foreground: #F3F5F4;
+  --color-forest: #24B58A;
+  --color-cream: #172436;
+  --color-gold: #C5A876;
 }
 
 html {
   scroll-behavior: smooth;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
   color: var(--foreground);
   background-color: var(--background);
-  font-family: var(--font-cairo), var(--font-outfit), system-ui, sans-serif;
+  font-family: var(--font-alexandria), var(--font-jakarta), system-ui, sans-serif;
   overflow-x: hidden;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Custom Scrollbars */
+/* Custom Editorial Scrollbars (Light & Dark) */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
 }
 ::-webkit-scrollbar-track {
-  background: #020617;
+  background: #FAF9F5;
+}
+.dark ::-webkit-scrollbar-track {
+  background: #0B1220;
 }
 ::-webkit-scrollbar-thumb {
-  background: #1e293b; /* slate-800 */
+  background: #DDD9CC;
   border-radius: 4px;
 }
+.dark ::-webkit-scrollbar-thumb {
+  background: #283849;
+}
 ::-webkit-scrollbar-thumb:hover {
-  background: #334155; /* slate-700 */
+  background: #B79B68;
 }
-
-/* Glassmorphism Styles */
-.glass-panel {
-  background: rgba(15, 23, 42, 0.65); /* slate-900 with opacity */
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.glass-card {
-  background: rgba(30, 41, 59, 0.45); /* slate-800 with opacity */
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.glass-card:hover {
-  border-color: rgba(16, 185, 129, 0.2); /* green hover */
-  box-shadow: 0 12px 40px 0 rgba(16, 185, 129, 0.1);
-  transform: translateY(-2px);
-}
-
-.glass-input {
-  background: rgba(15, 23, 42, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #f8fafc;
-  transition: all 0.2s ease-in-out;
-}
-
-.glass-input:focus {
-  border-color: #10b981; /* emerald-500 */
-  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
-  outline: none;
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #24B58A;
 }
 
 /* RTL-aware positioning helpers */
@@ -75,55 +63,69 @@ html[dir="rtl"] .rtl-flip {
   transform: scaleX(-1);
 }
 
+/* Editorial Card & Panel Classes */
+.editorial-card {
+  background: #FFFFFF;
+  border: 1px solid #EAE8DE;
+  box-shadow: 0 2px 8px -2px rgba(25, 31, 28, 0.04);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.dark .editorial-card {
+  background: #172436;
+  border-color: #283849;
+  box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.35);
+}
+
+.editorial-card:hover {
+  border-color: #DDD9CC;
+  box-shadow: 0 8px 24px -4px rgba(21, 60, 50, 0.08);
+}
+.dark .editorial-card:hover {
+  border-color: #33465B;
+  box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.5);
+}
+
+.editorial-input {
+  background: #FFFFFF;
+  border: 1px solid #DDD9CC;
+  color: #191F1C;
+  border-radius: 0.75rem;
+  transition: all 0.2s ease-in-out;
+}
+.dark .editorial-input {
+  background: #111C2D;
+  border-color: #283849;
+  color: #F3F5F4;
+}
+
+.editorial-input:focus {
+  border-color: #153C32;
+  box-shadow: 0 0 0 3px rgba(21, 60, 50, 0.08);
+  outline: none;
+}
+.dark .editorial-input:focus {
+  border-color: #24B58A;
+  box-shadow: 0 0 0 3px rgba(36, 181, 138, 0.15);
+}
+
 /* Animation utilities */
-@keyframes pulse-glow {
-  0%, 100% {
-    opacity: 0.6;
-    box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
-  }
-  50% {
-    opacity: 1;
-    box-shadow: 0 0 16px rgba(16, 185, 129, 0.8);
-  }
-}
-
-.glow-green {
-  animation: pulse-glow 2s infinite ease-in-out;
-}
-
-@keyframes progress-animation {
+@keyframes progress-fill {
   from {
     width: 0%;
   }
 }
 
 .progress-animated {
-  animation: progress-animation 1s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation: progress-fill 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* Marquee for recent donors */
-@keyframes marquee {
-  0% {
-    transform: translateX(100%);
+/* Print styling for receipts & reports */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
   }
-  100% {
-    transform: translateX(-100%);
+  .no-print {
+    display: none !important;
   }
-}
-
-html[dir="rtl"] @keyframes marquee {
-  0% {
-    transform: translateX(-100%);
-  }
-  100% {
-    transform: translateX(100%);
-  }
-}
-
-.animate-marquee {
-  animation: marquee 25s linear infinite;
-}
-
-.animate-marquee:hover {
-  animation-play-state: paused;
 }

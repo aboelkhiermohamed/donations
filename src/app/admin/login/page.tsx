@@ -4,8 +4,9 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useLanguage } from '@/context/LanguageContext';
-import { Lock, Mail, Heart, ArrowLeft, Loader2 } from 'lucide-react';
+import { Lock, Mail, HeartHandshake, ArrowLeft, Loader2, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
+import ThemeToggle from '@/components/ThemeToggle';
 
 export default function AdminLoginPage() {
   const { language, dir, t } = useLanguage();
@@ -50,115 +51,119 @@ export default function AdminLoginPage() {
         .maybeSingle();
 
       if (profileError || !adminProfile) {
-        // If not found in admins, sign them out and throw error
         await supabase.auth.signOut();
-        throw new Error(language === 'ar' ? 'ليس لديك صلاحية الوصول إلى هذه اللوحة.' : 'You do not have access permissions for this dashboard.');
+        throw new Error(language === 'ar' ? 'ليس لديك صلاحية الوصول إلى هذه اللوحة.' : 'You do not have administrative permissions.');
       }
 
       router.replace('/admin/dashboard');
     } catch (err: any) {
       console.error('Login error:', err);
-      setErrorMsg(err.message || 'Invalid credentials');
+      setErrorMsg(err.message || 'بيانات الدخول غير صحيحة');
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen relative flex items-center justify-center p-4 font-sans" dir={dir}>
-      {/* Background Orbs */}
-      <div className="absolute top-1/4 left-1/3 w-[400px] h-[400px] bg-emerald-500/5 rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-1/4 right-1/3 w-[300px] h-[300px] bg-teal-500/5 rounded-full blur-[100px] pointer-events-none" />
+    <div className="min-h-screen bg-[#FAF9F5] dark:bg-[#0B1220] flex items-center justify-center p-4 font-arabic relative transition-colors duration-200" dir={dir}>
+      
+      {/* Top Controls */}
+      <div className="absolute top-6 start-6 end-6 flex items-center justify-between">
+        <Link 
+          href="/"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white dark:bg-[#172436] border border-[#DDD9CC] dark:border-[#283849] text-xs font-bold text-[#153C32] dark:text-[#F3F5F4] hover:bg-[#F4F3ED] dark:hover:bg-[#1f3047] shadow-subtle transition-colors"
+        >
+          <ArrowLeft className="w-3.5 h-3.5 rtl-flip" />
+          <span>{language === 'ar' ? 'العودة للمنصة' : 'Back to Site'}</span>
+        </Link>
+        <ThemeToggle />
+      </div>
 
-      {/* Back button */}
-      <Link 
-        href="/"
-        className="absolute top-6 left-6 md:left-8 flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-900/60 border border-slate-800 text-sm font-semibold hover:bg-slate-850 hover:text-white transition-all text-slate-350"
-      >
-        <ArrowLeft className="w-4 h-4 rtl-flip text-emerald-400" />
-        <span>{language === 'ar' ? 'العودة للرئيسية' : 'Back to Home'}</span>
-      </Link>
-
-      <div className="w-full max-w-md glass-panel rounded-3xl p-8 space-y-8 relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-500/10 rounded-full blur-xl pointer-events-none" />
+      <div className="w-full max-w-md bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] rounded-3xl p-8 sm:p-10 shadow-editorial space-y-8 relative">
         
-        {/* Branding header */}
+        {/* Brand header */}
         <div className="text-center space-y-3">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center shadow-lg shadow-emerald-500/20 mx-auto">
-            <Heart className="w-6 h-6 text-slate-950 fill-slate-950" />
+          <div className="w-14 h-14 rounded-2xl bg-[#153C32] dark:bg-[#111C2D] border border-[#153C32] dark:border-[#283849] text-white flex items-center justify-center shadow-subtle mx-auto">
+            <HeartHandshake className="w-7 h-7 text-[#E2F3EE] dark:text-[#24B58A]" />
           </div>
-          <h2 className="text-2xl font-black text-white tracking-tight">{t('login_title')}</h2>
-          <p className="text-slate-400 text-xs">
-            {language === 'ar' ? 'أدخل بيانات الاعتماد الخاصة بك للوصول للوحة التحكم' : 'Enter your credentials to access control panel'}
-          </p>
+
+          <div className="space-y-1">
+            <span className="text-xs font-bold uppercase tracking-wider text-[#B79B68] dark:text-[#C5A876]">
+              {language === 'ar' ? 'بوابة مسؤولي الحملة' : 'Organizers Portal'}
+            </span>
+            <h1 className="text-2xl font-black text-[#153C32] dark:text-[#F3F5F4]">
+              {language === 'ar' ? 'تسجيل دخول الإدارة' : 'Admin Authentication'}
+            </h1>
+            <p className="text-xs text-[#738079] dark:text-[#A7B4B0]">
+              {language === 'ar' ? 'صدقة جارية — الدفعة التاسعة طب كفر الشيخ' : 'Sadaqah Jariyah — 9th Batch Medicine'}
+            </p>
+          </div>
         </div>
 
         {/* Error notification */}
         {errorMsg && (
-          <div className="p-4 bg-red-950/40 border border-red-900/40 text-red-300 text-xs rounded-xl text-center leading-relaxed">
+          <div className="p-4 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 text-red-800 dark:text-red-300 text-xs rounded-xl text-center leading-relaxed">
             {errorMsg}
           </div>
         )}
 
-        {/* Form */}
-        <form onSubmit={handleLogin} className="space-y-5">
-          {/* Email */}
+        {/* Login Form */}
+        <form onSubmit={handleLogin} className="space-y-4">
           <div className="space-y-1.5">
-            <label className="text-slate-300 text-xs font-semibold">
+            <label className="block text-xs font-bold text-[#191F1C] dark:text-[#F3F5F4]">
               {language === 'ar' ? 'البريد الإلكتروني' : 'Email Address'}
             </label>
             <div className="relative">
-              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
               <input 
-                type="email" 
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                type="email"
                 required
-                className="w-full glass-input pl-11 pr-4 py-3 rounded-xl text-sm"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
                 placeholder="admin@charity.org"
-                dir="ltr"
+                className="w-full py-3 ps-10 pe-4 rounded-xl bg-[#FAF9F5] dark:bg-[#111C2D] border border-[#DDD9CC] dark:border-[#283849] text-sm text-[#191F1C] dark:text-[#F3F5F4] focus:bg-white dark:focus:bg-[#172436] focus:outline-none focus:border-[#153C32] dark:focus:border-[#24B58A] transition-colors"
               />
+              <Mail className="w-4 h-4 text-[#738079] dark:text-[#A7B4B0] absolute top-1/2 -translate-y-1/2 start-3.5" />
             </div>
           </div>
 
-          {/* Password */}
           <div className="space-y-1.5">
-            <label className="text-slate-300 text-xs font-semibold">
+            <label className="block text-xs font-bold text-[#191F1C] dark:text-[#F3F5F4]">
               {language === 'ar' ? 'كلمة المرور' : 'Password'}
             </label>
             <div className="relative">
-              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
               <input 
-                type="password" 
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                type="password"
                 required
-                className="w-full glass-input pl-11 pr-4 py-3 rounded-xl text-sm"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
                 placeholder="••••••••"
-                dir="ltr"
+                className="w-full py-3 ps-10 pe-4 rounded-xl bg-[#FAF9F5] dark:bg-[#111C2D] border border-[#DDD9CC] dark:border-[#283849] text-sm text-[#191F1C] dark:text-[#F3F5F4] focus:bg-white dark:focus:bg-[#172436] focus:outline-none focus:border-[#153C32] dark:focus:border-[#24B58A] transition-colors"
               />
+              <Lock className="w-4 h-4 text-[#738079] dark:text-[#A7B4B0] absolute top-1/2 -translate-y-1/2 start-3.5" />
             </div>
           </div>
 
-          {/* Submit */}
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full mt-4 bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 font-extrabold text-sm py-3.5 rounded-xl shadow-lg shadow-emerald-500/20 hover:brightness-105 active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            className="w-full py-3.5 rounded-xl bg-[#153C32] dark:bg-[#217A61] text-white text-sm font-bold shadow-elevated hover:bg-[#1C4E41] dark:hover:bg-[#24B58A] disabled:opacity-70 transition-all flex items-center justify-center gap-2 transform active:scale-[0.99] mt-2"
           >
             {isLoading ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                <span>{language === 'ar' ? 'جاري التحقق...' : 'Verifying...'}</span>
+                <span>{language === 'ar' ? 'جارٍ التحقق...' : 'Signing in...'}</span>
               </>
             ) : (
-              <>
-                <Lock className="w-4 h-4" />
-                <span>{t('login_btn')}</span>
-              </>
+              <span>{language === 'ar' ? 'دخول لوحة التحكم' : 'Sign In'}</span>
             )}
           </button>
         </form>
+
+        <div className="pt-2 text-center text-[11px] text-[#738079] dark:text-[#A7B4B0]">
+          <span>{language === 'ar' ? 'مخصص فقط للمنسقين المعتمدين لمتابعة الحسابات.' : 'Restricted to authorized coordinators.'}</span>
+        </div>
+
       </div>
+
     </div>
   );
 }

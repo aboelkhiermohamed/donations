@@ -1,67 +1,97 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useLanguage } from '@/context/LanguageContext';
 import { supabase } from '@/lib/supabase';
-import { Campaign, PaymentMethod } from '@/types';
+import { Campaign, PaymentMethod, PaymentMethodConfig, WalletConfig } from '@/types';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { getActivePaymentMethods, DEFAULT_PAYMENT_METHODS } from '@/lib/paymentService';
+import { uploadScreenshotDirectly } from '@/lib/imageUpload';
+import ThemeToggle from '@/components/ThemeToggle';
 import {
   Heart,
-  Coins,
-  Users,
-  TrendingUp,
-  Clock,
-  Award,
-  Copy,
+  HeartHandshake,
   Check,
+  Copy,
   Globe,
-  Image as ImageIcon,
-  CheckCircle2,
-  AlertCircle,
+  Share2,
+  Download,
   Search,
-  Trash2,
-  Loader2,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  HelpCircle,
+  Upload,
+  X,
+  ArrowRight,
+  ShieldCheck,
+  Menu,
   ExternalLink,
-  Share2
+  Loader2,
+  FileText,
+  UserCheck,
+  Layers,
+  ChevronDown,
+  Smartphone,
+  CreditCard
 } from 'lucide-react';
 import canvasConfetti from 'canvas-confetti';
 import Link from 'next/link';
 // @ts-ignore
 import { jsPDF } from 'jspdf';
 
-// --- MOCK FALLBACKS ---
-const MOCK_CAMPAIGN: Campaign = {
-  id: 'c580436d-9654-4720-bc2f-a9cb6bf0f7a0',
-  name: 'Medical Ventilator for Kafr El-Sheikh University Hospital - 9th Batch',
-  name_ar: 'جهاز تنفس صناعي لمستشفى كفر الشيخ الجامعي - الدفعة التاسعة',
-  description: 'Donations campaign by the 9th Batch of Kafr El-Sheikh Medicine to purchase and provide a state-of-the-art ventilator to Kafr El-Sheikh University Hospital ICU.',
-  description_ar: 'حملة تبرعات الدفعة التاسعة طب كفر الشيخ لتوفير جهاز تنفس صناعي حديث لدعم وحدة العناية المركزة بمستشفيات جامعة كفر الشيخ وتأمين رعاية فائقة للمرضى.',
-  target_amount: 500000,
-  collected_amount: 0,
-  organizer: 'Kafr El-Sheikh Medicine - 9th Batch',
-  organizer_ar: 'طب كفر الشيخ - الدفعة التاسعة',
-  cover_image: '/ventilator_campaign_cover.png',
-  created_at: new Date().toISOString(),
-  updated_at: new Date().toISOString(),
+const fireConfetti = (options?: canvasConfetti.Options) => {
+  try {
+    const fn = typeof canvasConfetti === 'function'
+      ? canvasConfetti
+      : (canvasConfetti as any)?.default;
+    if (typeof fn === 'function') {
+      fn(options);
+    }
+  } catch (err) {
+    console.warn('Confetti trigger failed:', err);
+  }
 };
 
-// const MOCK_DONATIONS = [
-//   { name: 'Mohamed A.', amount: 5000, created_at: new Date(Date.now() - 1000 * 60 * 15).toISOString() },
-//   { name: 'Ahmed M.', amount: 250, created_at: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString() },
-//   { name: 'Samer B.', amount: 1000, created_at: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString() },
-//   { name: 'Sara K.', amount: 460, created_at: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString() },
-//   { name: 'Tarek Y.', amount: 1500, created_at: new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString() },
-// ];
+// Fallback campaign data if offline or schema cache warming up
+const CANONICAL_CAMPAIGN: Campaign = {
+  id: 'c580436d-9654-4720-bc2f-a9cb6bf0f7a0',
+  name: 'Sadaqah Jariyah — In Loving Memory of Dr. Hussein Ali El-Amir & Dr. Nada Hani Hamed',
+  name_ar: 'صدقة جارية — إهداء لروح د. حسين علي الأمير ود. ندى هاني حامد',
+  description: 'An enduring charity with lasting impact. Uniting to provide an advanced ICU ventilator for Kafr El-Sheikh University Hospitals, dedicated in memory of Dr. Hussein Ali El-Amir & Dr. Nada Hani Hamed.',
+  description_ar: 'بأثرٍ يبقى، وخيرٍ يمتد. نشارك معًا في توفير جهاز تنفس صناعي لدعم وحدة العناية المركزة بمستشفيات جامعة كفر الشيخ، صدقةً جارية عن روح فقيدينا الدكتور حسين علي الأمير والدكتورة ندى هاني حامد.',
+  target_amount: 350000,
+  collected_amount: 0,
+  organizer: '9th Batch Physicians — Kafr El-Sheikh Medicine',
+  organizer_ar: 'أطباء الدفعة التاسعة — طب كفر الشيخ',
+  cover_image: '/ventilator_campaign_cover.png',
+  created_at: '2026-06-24T13:47:41.527Z',
+  updated_at: '2026-11-22T20:00:00.000Z',
+};
+
+const PRESET_AMOUNTS = [100, 250, 500, 1000, 2500, 5000];
+
+// Fisher-Yates array shuffle for randomizing wallet order per visitor / refresh
+function shuffleWallets<T>(items: T[]): T[] {
+  const arr = [...items];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
 
 export default function PublicDonationPage() {
   const { language, dir, toggleLanguage, t } = useLanguage();
   const queryClient = useQueryClient();
 
-  // State
+  // Mounting state
   const [isMounted, setIsMounted] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Form State
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('vodafone_cash');
-  const [copiedType, setCopiedType] = useState<string | null>(null);
+  const [selectedPreset, setSelectedPreset] = useState<number | null>(500);
   const [amount, setAmount] = useState<string>('500');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -69,1427 +99,291 @@ export default function PublicDonationPage() {
   const [digits, setDigits] = useState('');
   const [notes, setNotes] = useState('');
   const [screenshot, setScreenshot] = useState<File | null>(null);
-  const [activeMobileTab, setActiveMobileTab] = useState<'campaign' | 'donate' | 'ledger'>('campaign');
-
+  const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [submittedDonation, setSubmittedDonation] = useState<{ id: string; amount: number; name: string; ref: string } | null>(null);
 
-  // Share Card State
-  const [shareImage, setShareImage] = useState<string | null>(null);
-  const [isGeneratingShare, setIsGeneratingShare] = useState(false);
-  const [showShareModal, setShowShareModal] = useState(false);
+  // Shuffled Vodafone Cash wallets: randomized on every page refresh/load to distribute incoming transfers evenly
+  const [shuffledWallets, setShuffledWallets] = useState<WalletConfig[]>([]);
 
-  // Receipt State
-  const [selectedReceiptDonation, setSelectedReceiptDonation] = useState<any | null>(null);
-  const [showReceiptModal, setShowReceiptModal] = useState(false);
-  const [receiptImage, setReceiptImage] = useState<string | null>(null);
-  const [isGeneratingReceipt, setIsGeneratingReceipt] = useState(false);
+  // Copy feedback
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
-  // Tracking State
+  // Tracking state
+  const [trackingQuery, setTrackingQuery] = useState('');
   const [trackedDonations, setTrackedDonations] = useState<any[]>([]);
-  const [trackingRef, setTrackingRef] = useState('');
   const [isTrackingLoading, setIsTrackingLoading] = useState(false);
-  const [trackingError, setTrackingError] = useState('');
-  const [showDedicationToast, setShowDedicationToast] = useState(false);
-  const [lastTrackedUpdate, setLastTrackedUpdate] = useState<Date | null>(null);
+  const [trackingSearched, setTrackingSearched] = useState(false);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
-  // Fetch status for stored/polled IDs
-  const fetchTrackedStatus = async (ids: string[], isManual = false) => {
-    if (ids.length === 0) {
-      setTrackedDonations([]);
-      return;
-    }
-    if (isManual) setIsTrackingLoading(true);
-    try {
-      const res = await fetch(`/api/donations/status?ids=${ids.join(',')}`);
-      if (!res.ok) throw new Error('Failed to fetch status');
-      const data = await res.json();
-
-      // Check if any donation transitioned from pending to verified
-      setTrackedDonations(prev => {
-        if (prev.length > 0) {
-          data.forEach((newDonation: any) => {
-            const oldDonation = prev.find(p => p.id === newDonation.id);
-            if (oldDonation && oldDonation.status === 'pending' &&
-              (newDonation.status === 'auto_verified' || newDonation.status === 'manual_verified')) {
-              // Trigger confetti!
-              canvasConfetti({
-                particleCount: 80,
-                spread: 50,
-                origin: { y: 0.7 }
-              });
-            }
-          });
-        }
-        return data;
-      });
-      setLastTrackedUpdate(new Date());
-      setTrackingError('');
-    } catch (err: any) {
-      console.error('Error fetching tracked status:', err);
-      if (isManual) setTrackingError(language === 'ar' ? 'فشل تحديث الحالة' : 'Failed to update status');
-    } finally {
-      if (isManual) setIsTrackingLoading(false);
-    }
-  };
-
-  // Track by Phone Number Handler
-  const handleTrackByRef = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!trackingRef.trim()) return;
-    setIsTrackingLoading(true);
-    setTrackingError('');
-    try {
-      const res = await fetch(`/api/donations/status?ref=${encodeURIComponent(trackingRef.trim())}`);
-      if (!res.ok) throw new Error('Query failed');
-      const data = await res.json();
-
-      setTrackedDonations(data);
-      setLastTrackedUpdate(new Date());
-
-      if (data.length === 0) {
-        setTrackingError(t('track_no_results'));
-      } else {
-        const newIds = data.map((d: any) => d.id);
-        const storedIds = localStorage.getItem('my_donation_ids');
-        const existingIds = storedIds ? storedIds.split(',').filter(Boolean) : [];
-        const mergedIds = Array.from(new Set([...existingIds, ...newIds]));
-        localStorage.setItem('my_donation_ids', mergedIds.join(','));
-      }
-    } catch (err: any) {
-      console.error('Tracking by ref error:', err);
-      setTrackingError(language === 'ar' ? 'حدث خطأ أثناء البحث.' : 'Error occurred while tracking.');
-    } finally {
-      setIsTrackingLoading(false);
-    }
-  };
-
-  const handleClearTracking = () => {
-    localStorage.removeItem('my_donation_ids');
-    setTrackedDonations([]);
-    setLastTrackedUpdate(null);
-    setTrackingRef('');
-  };
-
-  // Fetch payment accounts from DB settings
-  const { data: dbSettings, isLoading: isSettingsLoading } = useQuery({
-    queryKey: ['publicSettings'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('settings')
-        .select('*')
-        .eq('key', 'payment_accounts')
-        .maybeSingle();
-
-      if (error) {
-        if (error.message && (error.message.includes('JWT expired') || error.message.includes('expired'))) {
-          console.warn("JWT expired in settings query, signing out...");
-          await supabase.auth.signOut();
-          if (typeof window !== 'undefined') window.location.reload();
-        }
-        throw error;
-      }
-      return data?.value || {
-        vodafone_cash: '01015339426',
-        vodafone_cash_2: '',
-        instapay_address: '01015339426@instapay',
-        instapay_phone: '01015339426',
-        instapay_payment_link: '',
-        instapay_qr_url: ''
-      };
-    }
-  });
-
-  const VFC_NUMBER = dbSettings?.vodafone_cash || '01015339426';
-  const VFC_NUMBER_2 = dbSettings?.vodafone_cash_2 || '';
-  const INSTAPAY_ADDRESS = dbSettings?.instapay_address || '01015339426';
-  const INSTAPAY_PHONE = dbSettings?.instapay_phone || '01015339426';
-  const INSTAPAY_LINK = dbSettings?.instapay_payment_link || '';
-  const INSTAPAY_QR_URL = dbSettings?.instapay_qr_url || '';
-  const VFC_ENABLED = dbSettings?.vodafone_cash_enabled !== false;
-  const VFC_2_ENABLED = dbSettings?.vodafone_cash_2_enabled !== false;
-  const INSTAPAY_ENABLED = dbSettings?.instapay_enabled !== false;
-  const displayInstapayAddress = INSTAPAY_ADDRESS.includes('@')
-    ? INSTAPAY_ADDRESS
-    : `${INSTAPAY_ADDRESS}@instapay`;
-
-  // 1. Fetch Campaign Details
-  const { data: campaign, isLoading: isCampaignLoading, error: campaignError } = useQuery<Campaign>({
-    queryKey: ['campaign'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('campaigns')
-        .select('*')
-        .limit(1)
-        .maybeSingle();
-
-      if (error) {
-        if (error.message && (error.message.includes('JWT expired') || error.message.includes('expired'))) {
-          console.warn("JWT expired in campaign query, signing out...");
-          await supabase.auth.signOut();
-          if (typeof window !== 'undefined') window.location.reload();
-        }
-        console.error("Supabase campaign query error:", error);
-        throw error;
-      }
-      return data || MOCK_CAMPAIGN;
-    }
-  });
-
-  const activeCampaign = campaign || MOCK_CAMPAIGN;
-
-  // 2. Fetch Transparency / Aggregates
-  const { data: stats } = useQuery({
-    queryKey: ['stats'],
-    queryFn: async () => {
-      const { data: donations, error } = await supabase
-        .from('donations')
-        .select('amount, status, created_at');
-
-      if (error) {
-        if (error.message && (error.message.includes('JWT expired') || error.message.includes('expired'))) {
-          console.warn("JWT expired in stats query, signing out...");
-          await supabase.auth.signOut();
-          if (typeof window !== 'undefined') window.location.reload();
-        }
-        throw error;
-      }
-
-      const items = donations || [];
-      const approved = items.filter(d => d.status === 'auto_verified' || d.status === 'manual_verified');
-      const pending = items.filter(d => d.status === 'pending');
-
-      const totalReceived = approved.reduce((sum, d) => sum + Number(d.amount), 0);
-      const pendingSum = pending.reduce((sum, d) => sum + Number(d.amount), 0);
-
-      const largest = approved.length > 0 ? Math.max(...approved.map(d => Number(d.amount))) : 0;
-      const latestTimestamp = approved.length > 0
-        ? approved.reduce((max, d) => d.created_at > max ? d.created_at : max, approved[0].created_at)
-        : null;
-
-      // Uniq donors
-      const uniqueDonorsCount = approved.length; // Simplified proxy
-
-      return {
-        totalReceived,
-        approvedCount: approved.length,
-        pendingCount: pending.length,
-        pendingSum,
-        totalDonors: uniqueDonorsCount,
-        largestDonation: largest,
-        latestTimestamp,
-      };
-    },
-    refetchInterval: 10000, // Background fallback polling
-  });
-
-  // 3. Fetch Recent Verified Donors (from public_donations database view)
-  const { data: recentDonations, error: recentDonationsError } = useQuery<any[]>({
-    queryKey: ['recentDonations'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('public_donations')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(10);
-
-      if (error) {
-        if (error.message && (error.message.includes('JWT expired') || error.message.includes('expired'))) {
-          console.warn("JWT expired in public donations query, signing out...");
-          await supabase.auth.signOut();
-          if (typeof window !== 'undefined') window.location.reload();
-        }
-        console.error("Error fetching public donations:", error);
-        throw error;
-      }
-      return data || [];
-    }
-  });
-
-  // Mount state setup
   useEffect(() => {
     setIsMounted(true);
+    try {
+      const stored = localStorage.getItem('my_donation_ids');
+      if (stored) {
+        const ids = stored.split(',').filter(Boolean);
+        if (ids.length > 0) {
+          fetchStatusByIds(ids);
+        }
+      }
+    } catch {}
+  }, []);
 
-    // Check initial session
-    const checkSession = async () => {
+  // 1. Fetch Campaign Details
+  const { data: campaign } = useQuery<Campaign>({
+    queryKey: ['campaignPublic'],
+    queryFn: async () => {
       try {
-        const { data: { session }, error } = await supabase.auth.getSession();
+        const { data, error } = await supabase
+          .from('campaigns')
+          .select('*')
+          .limit(1)
+          .maybeSingle();
+
         if (error) {
-          if (error.message && (error.message.includes('JWT expired') || error.message.includes('expired'))) {
-            console.warn("JWT expired in getSession, signing out...");
-            await supabase.auth.signOut();
-            if (typeof window !== 'undefined') window.location.reload();
-          }
+          return CANONICAL_CAMPAIGN;
         }
-        setIsLoggedIn(!!session);
+        return data || CANONICAL_CAMPAIGN;
       } catch (err) {
-        console.error("checkSession error:", err);
+        return CANONICAL_CAMPAIGN;
       }
-    };
-    checkSession();
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setIsLoggedIn(!!session);
-    });
-
-    // Load initial IDs from URL parameters (QR code scans) or localStorage (history)
-    const urlParams = new URLSearchParams(window.location.search);
-    const idParam = urlParams.get('id');
-    const phoneParam = urlParams.get('phone');
-
-    if (idParam) {
-      fetchTrackedStatus([idParam], true);
-      setActiveMobileTab('ledger');
-      setTimeout(() => {
-        const trackingElement = document.getElementById('tracking-card');
-        if (trackingElement) {
-          trackingElement.scrollIntoView({ behavior: 'smooth' });
-        }
-      }, 500);
-    } else if (phoneParam) {
-      setTrackingRef(phoneParam);
-      setActiveMobileTab('ledger');
-      setTimeout(async () => {
-        setIsTrackingLoading(true);
-        try {
-          const res = await fetch(`/api/donations/status?phone=${phoneParam}`);
-          if (res.ok) {
-            const data = await res.json();
-            setTrackedDonations(data);
-          }
-        } catch (e) {
-          console.error(e);
-        } finally {
-          setIsTrackingLoading(false);
-        }
-      }, 100);
-    } else {
-      const storedIds = localStorage.getItem('my_donation_ids');
-      if (storedIds) {
-        const ids = storedIds.split(',').filter(Boolean);
-        fetchTrackedStatus(ids, true);
-      }
-    }
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, []);
-
-  // Dedication Toast timer
-  useEffect(() => {
-    const isMobile = window.innerWidth < 768;
-    const displayDuration = isMobile ? 4000 : 10000;
-
-    const showTimer = setTimeout(() => {
-      setShowDedicationToast(true);
-    }, 1500);
-
-    const hideTimer = setTimeout(() => {
-      setShowDedicationToast(false);
-    }, 1500 + displayDuration);
-
-    return () => {
-      clearTimeout(showTimer);
-      clearTimeout(hideTimer);
-    };
-  }, []);
-
-  // Polling effect for pending tracked donations
-  useEffect(() => {
-    if (!isMounted) return;
-
-    // Check if we have any pending donations
-    const hasPending = trackedDonations.some(d => d.status === 'pending');
-    if (!hasPending) return;
-
-    const interval = setInterval(() => {
-      const storedIds = localStorage.getItem('my_donation_ids');
-      if (storedIds) {
-        const ids = storedIds.split(',').filter(Boolean);
-        fetchTrackedStatus(ids);
-      }
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [trackedDonations, isMounted]);
-
-  // 4. Supabase Realtime Listener setup
-  useEffect(() => {
-    const channel = supabase
-      .channel('realtime_donations')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'donations' }, () => {
-        // Invalidate and refetch queries immediately on changes
-        queryClient.invalidateQueries({ queryKey: ['campaign'] });
-        queryClient.invalidateQueries({ queryKey: ['stats'] });
-        queryClient.invalidateQueries({ queryKey: ['recentDonations'] });
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [queryClient]);
-
-  // Copy Handler
-  const handleCopy = (text: string, type: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedType(type);
-    setTimeout(() => setCopiedType(null), 2000);
-  };
-
-  // Generate a share card on a canvas
-  const generateShareCard = async () => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 1080;
-    canvas.height = 1080;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return null;
-
-    // Helper for drawing rounded rectangles
-    const drawRoundedRect = (
-      c: CanvasRenderingContext2D,
-      x: number,
-      y: number,
-      w: number,
-      h: number,
-      r: number,
-      fill = true,
-      stroke = true
-    ) => {
-      c.beginPath();
-      c.moveTo(x + r, y);
-      c.lineTo(x + w - r, y);
-      c.quadraticCurveTo(x + w, y, x + w, y + r);
-      c.lineTo(x + w, y + h - r);
-      c.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-      c.lineTo(x + r, y + h);
-      c.quadraticCurveTo(x, y + h, x, y + h - r);
-      c.lineTo(x, y + r);
-      c.quadraticCurveTo(x, y, x + r, y);
-      c.closePath();
-      if (fill) c.fill();
-      if (stroke) c.stroke();
-    };
-
-    // Load device image first
-    let deviceImg: HTMLImageElement | null = null;
-    try {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      const loadImg = new Promise((res, rej) => {
-        img.onload = res;
-        img.onerror = rej;
-      });
-      img.src = '/vent%20png.png';
-      await loadImg;
-      deviceImg = img;
-    } catch (e) {
-      console.error("Failed to load device image", e);
-    }
-
-    // Load QR code image
-    let qrImg: HTMLImageElement | null = null;
-    try {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      const loadQR = new Promise((res, rej) => {
-        img.onload = res;
-        img.onerror = rej;
-      });
-      img.src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&color=020617&bgcolor=f8fafc&data=${encodeURIComponent(window.location.href)}`;
-      await loadQR;
-      qrImg = img;
-    } catch (e) {
-      console.error("Canvas QR drawing failed", e);
-    }
-
-    // 1. Background Fill
-    ctx.fillStyle = '#020617'; // Deep space slate-950
-    ctx.fillRect(0, 0, 1080, 1080);
-
-    // 2. High-Tech Diagonal Grid Lines
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.012)';
-    ctx.lineWidth = 1.5;
-    const gridSpacing = 60;
-    for (let x = -1080; x < 1080 * 2; x += gridSpacing) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x + 1080, 1080);
-      ctx.stroke();
-    }
-
-    // 3. Dynamic layout configuration based on language (RTL/LTR)
-    const isRTL = language === 'ar';
-    const textColX = isRTL ? 560 : 80;       // X start for text stats
-    const textColAlign = isRTL ? 'right' : 'left';
-    const textColAnchor = isRTL ? 1000 : 80; // text drawing X coordinate
-    
-    const prodColX = isRTL ? 80 : 560;       // X start for product visual
-    const prodColCenter = prodColX + 220;    // Center X of product column (col width is 440)
-
-    // 4. Ambient Glows behind sections
-    // Device Glow
-    const devGlow = ctx.createRadialGradient(
-      prodColCenter, 480, 50,
-      prodColCenter, 480, 450
-    );
-    devGlow.addColorStop(0, 'rgba(45, 212, 191, 0.16)'); // teal glow
-    devGlow.addColorStop(1, 'rgba(2, 6, 23, 0)');
-    ctx.fillStyle = devGlow;
-    ctx.beginPath();
-    ctx.arc(prodColCenter, 480, 450, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Stats Glow
-    const statsGlow = ctx.createRadialGradient(
-      textColX + 220, 540, 50,
-      textColX + 220, 540, 400
-    );
-    statsGlow.addColorStop(0, 'rgba(16, 185, 129, 0.08)'); // emerald glow
-    statsGlow.addColorStop(1, 'rgba(2, 6, 23, 0)');
-    ctx.fillStyle = statsGlow;
-    ctx.beginPath();
-    ctx.arc(textColX + 220, 540, 400, 0, Math.PI * 2);
-    ctx.fill();
-
-    // 5. Header and Logo
-    const logoGrad = ctx.createLinearGradient(80, 80, 160, 160);
-    logoGrad.addColorStop(0, '#10b981');
-    logoGrad.addColorStop(1, '#2dd4bf');
-    ctx.fillStyle = logoGrad;
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-    ctx.lineWidth = 1;
-    drawRoundedRect(ctx, 80, 80, 80, 80, 20, true, true);
-
-    // Heart Emoji inside logo
-    ctx.font = '40px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('❤️', 120, 120);
-
-    // Platform title next to or aligned with logo
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 36px sans-serif';
-    ctx.textBaseline = 'middle';
-    if (language === 'ar') {
-      ctx.textAlign = 'right';
-      ctx.fillText('منصة تبرع الدفعة التاسعة', 1000, 120);
-    } else {
-      ctx.textAlign = 'left';
-      ctx.fillText('donations 9th Batch', 185, 120);
-    }
-
-    // 6. Wrapped Campaign Title (Text Column)
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 44px sans-serif';
-    ctx.textBaseline = 'top';
-
-    const drawWrappedText = (
-      text: string,
-      x: number,
-      y: number,
-      maxWidth: number,
-      lineHeight: number,
-      align: 'left' | 'right' | 'center'
-    ) => {
-      ctx.textAlign = align;
-      const words = text.split(' ');
-      let line = '';
-      let currentY = y;
-      
-      for (let n = 0; n < words.length; n++) {
-        let testLine = line + words[n] + ' ';
-        let metrics = ctx.measureText(testLine);
-        let testWidth = metrics.width;
-        if (testWidth > maxWidth && n > 0) {
-          ctx.fillText(line.trim(), x, currentY);
-          line = words[n] + ' ';
-          currentY += lineHeight;
-        } else {
-          line = testLine;
-        }
-      }
-      ctx.fillText(line.trim(), x, currentY);
-      return currentY + lineHeight;
-    };
-
-    const displayTitle = language === 'ar' ? displayCampaignName : displayCampaignName;
-    const nextY = drawWrappedText(displayTitle, textColAnchor, 210, 440, 58, textColAlign);
-
-    // 7. Stats and Progress Block (Text Column)
-    const statsStartY = nextY + 35;
-
-    // Large Percentage Progress text
-    const pctGrad = ctx.createLinearGradient(textColX, statsStartY, textColX + 440, statsStartY);
-    pctGrad.addColorStop(0, '#10b981');
-    pctGrad.addColorStop(1, '#2dd4bf');
-    ctx.fillStyle = pctGrad;
-    ctx.font = '900 120px sans-serif';
-    ctx.textAlign = textColAlign;
-    ctx.textBaseline = 'top';
-    
-    // Add glow shadow to percentage text
-    ctx.shadowColor = 'rgba(45, 212, 191, 0.4)';
-    ctx.shadowBlur = 15;
-    ctx.fillText(`${percentVal}%`, textColAnchor, statsStartY);
-    ctx.shadowBlur = 0; // reset shadow
-
-    // Progress Subtitle
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = 'bold 22px sans-serif';
-    ctx.fillText(
-      language === 'ar' ? 'نسبة إنجاز الحملة' : 'Campaign Progress Completed',
-      textColAnchor,
-      statsStartY + 140
-    );
-
-    // Slider-Style Progress bar
-    const barW = 440;
-    const barH = 14;
-    const barY = statsStartY + 195;
-    const fillW = Math.min(barW, Math.max(0, (percentVal / 100) * barW));
-    
-    // Draw track (dark grey rounded track)
-    ctx.fillStyle = '#1e293b';
-    drawRoundedRect(ctx, textColX, barY, barW, barH, 7, true, false);
-    
-    // Draw fill
-    if (fillW > 0) {
-      const barGrad = ctx.createLinearGradient(textColX, 0, textColX + barW, 0);
-      barGrad.addColorStop(0, '#10b981');
-      barGrad.addColorStop(1, '#2dd4bf');
-      ctx.fillStyle = barGrad;
-      
-      // Draw progress fill (flipping direction for RTL/LTR)
-      const fillX = isRTL ? (textColX + barW - fillW) : textColX;
-      ctx.shadowColor = 'rgba(16, 185, 129, 0.5)';
-      ctx.shadowBlur = 12;
-      drawRoundedRect(ctx, fillX, barY, fillW, barH, 7, true, false);
-      ctx.shadowBlur = 0; // reset
-      
-      // Glowing White Knob
-      const knobX = isRTL ? (textColX + barW - fillW) : (textColX + fillW);
-      ctx.fillStyle = '#ffffff';
-      ctx.shadowColor = 'rgba(255, 255, 255, 0.8)';
-      ctx.shadowBlur = 10;
-      ctx.beginPath();
-      ctx.arc(knobX, barY + 7, 10, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.shadowBlur = 0; // reset
-    }
-
-    // Side-by-side Collected vs Target Stats (under progress slider)
-    const statsNumY = statsStartY + 240;
-    const currencySuffix = language === 'ar' ? ' ج.م' : ' EGP';
-    
-    // Collected Amount (Always aligns to textColX / outer edge depending on RTL)
-    ctx.textAlign = isRTL ? 'right' : 'left';
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = 'bold 20px sans-serif';
-    const colX = isRTL ? (textColX + 440) : textColX;
-    ctx.fillText(language === 'ar' ? 'المبلغ المجمع' : 'Collected', colX, statsNumY);
-    
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '900 32px sans-serif';
-    ctx.fillText(`${collectedVal.toLocaleString()}${currencySuffix}`, colX, statsNumY + 42);
-
-    // Target Goal (Aligns to inner edge)
-    ctx.textAlign = isRTL ? 'left' : 'right';
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = 'bold 20px sans-serif';
-    const targX = isRTL ? textColX : (textColX + 440);
-    ctx.fillText(language === 'ar' ? 'المستهدف الكلي' : 'Target Goal', targX, statsNumY);
-    
-    ctx.fillStyle = '#64748b';
-    ctx.font = '900 32px sans-serif';
-    ctx.fillText(`${targetVal.toLocaleString()}${currencySuffix}`, targX, statsNumY + 42);
-
-    // Urgency Badge (Remaining target)
-    const badgeY = statsStartY + 325;
-    ctx.fillStyle = 'rgba(249, 115, 22, 0.06)'; // Soft orange
-    ctx.strokeStyle = 'rgba(249, 115, 22, 0.22)';
-    ctx.lineWidth = 1.5;
-    drawRoundedRect(ctx, textColX, badgeY, 440, 54, 12, true, true);
-    
-    ctx.fillStyle = '#fb923c'; // orange-400
-    ctx.font = 'bold 20px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    const urgencyText = language === 'ar' 
-      ? `متبقي ${remainingVal.toLocaleString()} ج.م فقط وتكتمل الحملة` 
-      : `Only ${remainingVal.toLocaleString()} EGP left to complete!`;
-    ctx.fillText(urgencyText, textColX + 220, badgeY + 27);
-
-    // 8. Hero Product Showcase Column (visual pedestal and device img)
-    const cardY = nextY + 35;
-
-    // Glowing Pedestal Platform (in 3D perspective)
-    ctx.save();
-    const pedGrad = ctx.createRadialGradient(
-      prodColCenter, cardY + 320, 10,
-      prodColCenter, cardY + 320, 170
-    );
-    pedGrad.addColorStop(0, 'rgba(45, 212, 191, 0.38)'); // glowing teal light
-    pedGrad.addColorStop(1, 'rgba(2, 6, 23, 0)');
-    ctx.fillStyle = pedGrad;
-    ctx.beginPath();
-    ctx.translate(prodColCenter, cardY + 320);
-    ctx.scale(1, 0.2); // flatten circle into perspective ellipse
-    ctx.arc(0, 0, 170, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-
-    // Draw Device Image
-    if (deviceImg) {
-      const imgRatio = deviceImg.width / deviceImg.height;
-      const maxW = 390;
-      const maxH = 340;
-      let dWidth = maxW;
-      let dHeight = maxW / imgRatio;
-      if (dHeight > maxH) {
-        dHeight = maxH;
-        dWidth = maxH * imgRatio;
-      }
-      const dx = prodColCenter - dWidth / 2;
-      const dy = (cardY + 160) - dHeight / 2; // center visually on upper column
-      
-      // Floating drop shadow for the physical equipment
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
-      ctx.shadowBlur = 20;
-      ctx.shadowOffsetY = 12;
-      ctx.drawImage(deviceImg, dx, dy, dWidth, dHeight);
-      ctx.shadowBlur = 0; // reset
-      ctx.shadowOffsetY = 0;
-    } else {
-      ctx.fillStyle = '#475569';
-      ctx.font = 'italic 24px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(language === 'ar' ? 'صورة جهاز التنفس الصناعي' : 'Medical Ventilator Image', prodColCenter, cardY + 160);
-    }
-
-    // Equipment Label Text
-    ctx.fillStyle = '#2dd4bf'; // teal
-    ctx.font = 'bold 22px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(
-      language === 'ar' ? 'جهاز التنفس الصناعي الحديث' : 'Medical Ventilator',
-      prodColCenter,
-      cardY + 395
-    );
-
-    // 9. Footer section
-    // Separator line
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(80, 820);
-    ctx.lineTo(1000, 820);
-    ctx.stroke();
-
-    // Layout values for QR code and text alignment
-    const qrX = isRTL ? 80 : 840;
-    const textX = isRTL ? 1000 : 80;
-    const tAlign = isRTL ? 'right' : 'left';
-
-    // Draw QR Code
-    if (qrImg) {
-      ctx.fillStyle = '#f8fafc';
-      drawRoundedRect(ctx, qrX, 850, 160, 160, 16, true, false);
-      ctx.drawImage(qrImg, qrX + 10, 860, 140, 140);
-    } else {
-      ctx.fillStyle = 'rgba(255,255,255,0.05)';
-      drawRoundedRect(ctx, qrX, 850, 160, 160, 16, true, false);
-    }
-
-    // Footer Text
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 32px sans-serif';
-    ctx.textBaseline = 'middle';
-    ctx.textAlign = tAlign;
-    
-    ctx.fillText(
-      language === 'ar' ? 'تبرع الآن لتجهيز غرف العناية المركزة وإنقاذ الأرواح' : 'Donate now to equip ICU beds & save lives',
-      textX,
-      905
-    );
-    
-    ctx.fillStyle = '#10b981';
-    ctx.font = 'bold 24px sans-serif';
-    ctx.fillText(
-      language === 'ar' ? `مسح الرمز أو زيارة: ${window.location.host}` : `Scan QR or visit: ${window.location.host}`,
-      textX,
-      960
-    );
-
-    return canvas.toDataURL('image/png');
-  };
-
-  const handleShareClick = async () => {
-    setIsGeneratingShare(true);
-    try {
-      const dataUrl = await generateShareCard();
-      if (dataUrl) {
-        setShareImage(dataUrl);
-        setShowShareModal(true);
-      }
-    } catch (e) {
-      console.error(e);
-      alert(language === 'ar' ? 'حدث خطأ أثناء توليد الصورة' : 'Error generating share card');
-    } finally {
-      setIsGeneratingShare(false);
-    }
-  };
-
-  const handleDownloadShareImage = () => {
-    if (!shareImage) return;
-    const a = document.createElement('a');
-    a.href = shareImage;
-    a.download = `donations-progress-${new Date().toISOString().split('T')[0]}.png`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  };
-
-  const handleNativeShare = async () => {
-    if (!shareImage) return;
-    try {
-      const response = await fetch(shareImage);
-      const blob = await response.blob();
-      const file = new File([blob], 'campaign-progress.png', { type: 'image/png' });
-      
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: language === 'ar' ? 'حملة الدفعة التاسعة طب كفر الشيخ' : '9th Batch Donations Campaign',
-          text: language === 'ar' 
-            ? `ادعم معنا حملة توفير جهاز التنفس الصناعي:\n${window.location.origin}` 
-            : `Support our medical ventilator campaign:\n${window.location.origin}`,
-        });
-      } else {
-        await navigator.clipboard.writeText(window.location.href);
-        alert(language === 'ar' ? 'تم نسخ رابط الحمله لمشاركتها!' : 'Campaign link copied to clipboard!');
-      }
-    } catch (e) {
-      console.error("Native share failed", e);
-      await navigator.clipboard.writeText(window.location.href);
-      alert(language === 'ar' ? 'تم نسخ رابط الحمله لمشاركتها!' : 'Campaign link copied to clipboard!');
-    }
-  };
-
-  // Generate a receipt certificate on canvas
-  const generateReceiptCard = async (donation: any) => {
-    if (!donation) return null;
-    const canvas = document.createElement('canvas');
-    canvas.width = 1080;
-    canvas.height = 1080;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return null;
-
-    // Background Gradient
-    const bgGrad = ctx.createRadialGradient(540, 540, 100, 540, 540, 800);
-    bgGrad.addColorStop(0, '#0f172a'); // slate-900
-    bgGrad.addColorStop(1, '#020617'); // slate-950
-    ctx.fillStyle = bgGrad;
-    ctx.fillRect(0, 0, 1080, 1080);
-
-    // Glowing border frame
-    const frameGrad = ctx.createLinearGradient(0, 0, 1080, 1080);
-    frameGrad.addColorStop(0, 'rgba(16, 185, 129, 0.4)'); // emerald
-    frameGrad.addColorStop(0.5, 'rgba(45, 212, 191, 0.1)'); // teal
-    frameGrad.addColorStop(1, 'rgba(16, 185, 129, 0.4)');
-    ctx.strokeStyle = frameGrad;
-    ctx.lineWidth = 16;
-    ctx.strokeRect(20, 20, 1040, 1040);
-
-    // Glowing corners
-    ctx.fillStyle = '#10b981';
-    ctx.fillRect(16, 16, 40, 8);
-    ctx.fillRect(16, 16, 8, 40);
-    
-    ctx.fillRect(1024, 16, 40, 8);
-    ctx.fillRect(1056, 16, 8, 40);
-    
-    ctx.fillRect(16, 1056, 40, 8);
-    ctx.fillRect(16, 1024, 8, 40);
-    
-    ctx.fillRect(1024, 1056, 40, 8);
-    ctx.fillRect(1056, 1024, 8, 40);
-
-    // Logo & Title
-    const logoGrad = ctx.createLinearGradient(80, 80, 150, 150);
-    logoGrad.addColorStop(0, '#10b981');
-    logoGrad.addColorStop(1, '#2dd4bf');
-    ctx.fillStyle = logoGrad;
-    ctx.beginPath();
-    const r = 16;
-    const rx = 80, ry = 80, rw = 70, rh = 70;
-    ctx.moveTo(rx + r, ry);
-    ctx.lineTo(rx + rw - r, ry);
-    ctx.quadraticCurveTo(rx + rw, ry, rx + rw, ry + r);
-    ctx.lineTo(rx + rw, ry + rh - r);
-    ctx.quadraticCurveTo(rx + rw, ry + rh, rx + rw - r, ry + rh);
-    ctx.lineTo(rx + r, ry + rh);
-    ctx.quadraticCurveTo(rx, ry + rh, rx, ry + rh - r);
-    ctx.lineTo(rx, ry + r);
-    ctx.quadraticCurveTo(rx, ry, rx + r, ry);
-    ctx.closePath();
-    ctx.fill();
-
-    // Heart inside logo
-    ctx.font = '36px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('❤️', 115, 115);
-
-    // Brand Label
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 32px sans-serif';
-    ctx.textBaseline = 'middle';
-    if (language === 'ar') {
-      ctx.textAlign = 'right';
-      ctx.fillText('منصة تبرع الدفعة التاسعة', 1000, 115);
-    } else {
-      ctx.textAlign = 'left';
-      ctx.fillText('donations 9th Batch', 170, 115);
-    }
-
-    // Main Certificate Header
-    const headGrad = ctx.createLinearGradient(540, 200, 540, 300);
-    headGrad.addColorStop(0, '#fbbf24'); // amber-400
-    headGrad.addColorStop(1, '#d97706'); // amber-600
-    ctx.fillStyle = headGrad;
-    ctx.font = '900 64px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(language === 'ar' ? 'شهادة مساهمة وتبرع' : 'Donation Certificate', 540, 240);
-
-    ctx.fillStyle = '#e2e8f0';
-    ctx.font = '24px sans-serif';
-    ctx.fillText(
-      language === 'ar' 
-        ? 'تتقدم إدارة منصة التبرعات بخالص الشكر والتقدير للمتبرع الكريم' 
-        : 'The Campaign Administration extends its sincere gratitude to the donor',
-      540, 310
-    );
-
-    // Donor Name Display
-    ctx.fillStyle = '#10b981';
-    ctx.font = 'bold 48px sans-serif';
-    ctx.fillText(donation.masked_name || donation.name || (language === 'ar' ? 'متبرع فاعل خير' : 'Anonymous Donor'), 540, 380);
-
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '24px sans-serif';
-    ctx.fillText(
-      language === 'ar'
-        ? 'لمساهمته الطيبة والموثقة في دعم الحملة الطبية لمستشفى كفر الشيخ الجامعي'
-        : 'for their kind verified contribution supporting Kafr El-Sheikh University Hospital campaign',
-      540, 440
-    );
-
-    // Stats Card (Details Box)
-    const cardY = 490;
-    const cardH = 340;
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.6)';
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
-    ctx.lineWidth = 2;
-    
-    ctx.beginPath();
-    const cr = 24;
-    const cx = 100, cy = cardY, cw = 880, ch = cardH;
-    ctx.moveTo(cx + cr, cy);
-    ctx.lineTo(cx + cw - cr, cy);
-    ctx.quadraticCurveTo(cx + cw, cy, cx + cw, cy + cr);
-    ctx.lineTo(cx + cw, cy + ch - cr);
-    ctx.quadraticCurveTo(cx + cw, cy + ch, cx + cw - cr, cy + ch);
-    ctx.lineTo(cx + cr, cy + ch);
-    ctx.quadraticCurveTo(cx, cy + ch, cx, cy + ch - r);
-    ctx.lineTo(cx, cy + r);
-    ctx.quadraticCurveTo(cx, cy, cx + cr, cy);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-
-    // Large Amount Render
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '900 80px sans-serif';
-    ctx.fillText(`${Number(donation.amount).toLocaleString()} ${language === 'ar' ? 'ج.م' : 'EGP'}`, 540, cardY + 90);
-
-    // Receipt details rows
-    ctx.font = 'bold 22px sans-serif';
-    
-    const drawRow = (label: string, value: string, yPos: number) => {
-      ctx.fillStyle = '#64748b';
-      if (language === 'ar') {
-        ctx.textAlign = 'right';
-        ctx.fillText(label, 900, yPos);
-        ctx.fillStyle = '#cbd5e1';
-        ctx.textAlign = 'left';
-        ctx.fillText(value, 180, yPos);
-      } else {
-        ctx.textAlign = 'left';
-        ctx.fillText(label, 180, yPos);
-        ctx.fillStyle = '#cbd5e1';
-        ctx.textAlign = 'right';
-        ctx.fillText(value, 900, yPos);
-      }
-    };
-
-    const formattedDate = new Date(donation.created_at).toLocaleString(language === 'ar' ? 'ar-EG' : 'en-US', {
-      dateStyle: 'long',
-      timeStyle: 'short'
-    });
-
-    drawRow(language === 'ar' ? 'تاريخ التبرع المعتمد' : 'Verified Date', formattedDate, cardY + 180);
-    drawRow(
-      language === 'ar' ? 'طريقة الدفع والتحويل' : 'Payment Method', 
-      donation.payment_method === 'vodafone_cash' 
-        ? (language === 'ar' ? 'فودافون كاش' : 'Vodafone Cash') 
-        : (language === 'ar' ? 'إنستاباي' : 'InstaPay'),
-      cardY + 230
-    );
-    drawRow(language === 'ar' ? 'رقم المعاملة الفريد' : 'Receipt ID', donation.id.substring(0, 18).toUpperCase(), cardY + 280);
-
-    // Footer Verified Seal & QR code
-    const footerY = cardY + cardH + 40;
-    
-    // Draw Verified Seal Stamp
-    ctx.fillStyle = 'rgba(16, 185, 129, 0.1)';
-    ctx.strokeStyle = '#10b981';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(220, footerY + 70, 60, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle = '#10b981';
-    ctx.font = 'bold 20px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(language === 'ar' ? 'موثق ومعتمد' : 'VERIFIED', 220, footerY + 55);
-    ctx.fillText('✓', 220, footerY + 85);
-
-    // Draw QR Code
-    try {
-      const qrImg = new Image();
-      qrImg.crossOrigin = 'anonymous';
-      
-      const loadQR = new Promise((res, rej) => {
-        qrImg.onload = res;
-        qrImg.onerror = rej;
-      });
-
-      const verUrl = `${window.location.origin}/?phone=${donation.phone || ''}&id=${donation.id}`;
-      qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&color=020617&bgcolor=f8fafc&data=${encodeURIComponent(verUrl)}`;
-      await loadQR;
-
-      ctx.fillStyle = '#f8fafc';
-      ctx.beginPath();
-      const qrr = 8;
-      const qx = 840, qy = footerY, qw = 140, qh = 140;
-      ctx.moveTo(qx + qrr, qy);
-      ctx.lineTo(qx + qw - qrr, qy);
-      ctx.quadraticCurveTo(qx + qw, qy, qx + qw, qy + qrr);
-      ctx.lineTo(qx + qw, qy + qh - qrr);
-      ctx.quadraticCurveTo(qx + qw, qy + qh, qx + qw - qrr, qy + qh);
-      ctx.lineTo(qx + qrr, qy + qh);
-      ctx.quadraticCurveTo(qx, qy + qh, qx, qy + qh - qrr);
-      ctx.lineTo(qx, qy + qrr);
-      ctx.quadraticCurveTo(qx, qy, qx + qrr, qy);
-      ctx.closePath();
-      ctx.fill();
-
-      ctx.drawImage(qrImg, 850, footerY + 10, 120, 120);
-    } catch (e) {
-      console.error("Canvas receipt QR failed", e);
-    }
-
-    ctx.fillStyle = '#64748b';
-    ctx.font = 'italic 18px sans-serif';
-    ctx.textBaseline = 'middle';
-    if (language === 'ar') {
-      ctx.textAlign = 'right';
-      ctx.fillText('امسح رمز الـ QR للتحقق من صحة الفاتورة من السجل المباشر للمنصة', 810, footerY + 70);
-    } else {
-      ctx.textAlign = 'left';
-      ctx.fillText('Scan QR to verify receipt on the live ledger', 320, footerY + 70);
-    }
-
-    return canvas.toDataURL('image/png');
-  };
-
-  const handleReceiptClick = async (donation: any) => {
-    setSelectedReceiptDonation(donation);
-    setIsGeneratingReceipt(true);
-    setShowReceiptModal(true);
-    setReceiptImage(null); // Clear previous
-    try {
-      const dataUrl = await generateReceiptCard(donation);
-      if (dataUrl) {
-        setReceiptImage(dataUrl);
-      }
-    } catch (e) {
-      console.error(e);
-      alert(language === 'ar' ? 'حدث خطأ أثناء توليد الفاتورة' : 'Error generating receipt card');
-    } finally {
-      setIsGeneratingReceipt(false);
-    }
-  };
-
-  const handleDownloadReceiptImage = () => {
-    if (!receiptImage || !selectedReceiptDonation) return;
-    const a = document.createElement('a');
-    a.href = receiptImage;
-    a.download = `receipt-${selectedReceiptDonation.id.substring(0, 8)}-${new Date().toISOString().split('T')[0]}.png`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  };
-
-  const handleReceiptNativeShare = async () => {
-    if (!receiptImage || !selectedReceiptDonation) return;
-    try {
-      const response = await fetch(receiptImage);
-      const blob = await response.blob();
-      const file = new File([blob], `receipt-${selectedReceiptDonation.id.substring(0, 8)}.png`, { type: 'image/png' });
-      
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: language === 'ar' ? 'فاتورة تبرع معتمدة' : 'Verified Donation Receipt',
-          text: language === 'ar' 
-            ? `الحمد لله، تم توثيق تبرعي بقيمة ${selectedReceiptDonation.amount} ج.م لمستشفى كفر الشيخ الجامعي. الرابط للتبرع:\n${window.location.origin}`
-            : `My donation of ${selectedReceiptDonation.amount} EGP has been verified. Support the campaign here:\n${window.location.origin}`,
-        });
-      } else {
-        await navigator.clipboard.writeText(`${window.location.origin}/?phone=${selectedReceiptDonation.phone || ''}`);
-        alert(language === 'ar' ? 'تم نسخ رابط التحقق من التبرع!' : 'Donation tracking link copied!');
-      }
-    } catch (e) {
-      console.error("Receipt share failed", e);
-      await navigator.clipboard.writeText(`${window.location.origin}/?phone=${selectedReceiptDonation.phone || ''}`);
-      alert(language === 'ar' ? 'تم نسخ رابط التحقق من التبرع!' : 'Donation tracking link copied!');
-    }
-  };
-
-  const handleDownloadReceiptPDF = async () => {
-    if (!selectedReceiptDonation) return;
-    setIsGeneratingReceipt(true);
-    try {
-      const donation = selectedReceiptDonation;
-
-      // Draw A4 canvas (1200 x 1696 px @ 72dpi → 210mm x 297mm)
-      const canvas = document.createElement('canvas');
-      canvas.width = 1200;
-      canvas.height = 1696;
-      const ctx = canvas.getContext('2d')!;
-
-      // 1. Background
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, 1200, 1696);
-
-      // 2. Outer Borders (double frame)
-      ctx.strokeStyle = '#10b981';
-      ctx.lineWidth = 10;
-      ctx.strokeRect(20, 20, 1160, 1656);
-      ctx.strokeStyle = '#0f172a';
-      ctx.lineWidth = 3;
-      ctx.strokeRect(40, 40, 1120, 1616);
-
-      // 3. Header Section
-      ctx.fillStyle = '#10b981';
-      ctx.beginPath();
-      ctx.arc(120, 120, 35, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 36px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('❤️', 120, 120);
-
-      ctx.fillStyle = '#0f172a';
-      ctx.font = 'bold 32px sans-serif';
-      ctx.textBaseline = 'middle';
-      if (language === 'ar') {
-        ctx.textAlign = 'right';
-        ctx.fillText('منصة تبرع الدفعة التاسعة', 1100, 110);
-        ctx.font = 'normal 18px sans-serif';
-        ctx.fillStyle = '#64748b';
-        ctx.fillText('لوحة التحكم المالي وإيصالات التبرع الرسمية للحملة', 1100, 145);
-      } else {
-        ctx.textAlign = 'left';
-        ctx.fillText('Donations 9th Batch Platform', 180, 110);
-        ctx.font = 'normal 18px sans-serif';
-        ctx.fillStyle = '#64748b';
-        ctx.fillText('Official Campaign Financial & Receipts Portal', 180, 145);
-      }
-
-      ctx.strokeStyle = '#e2e8f0';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(60, 200);
-      ctx.lineTo(1140, 200);
-      ctx.stroke();
-
-      // 4. Document Title & Serial
-      ctx.fillStyle = '#0f172a';
-      ctx.font = 'bold 42px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'alphabetic';
-      ctx.fillText(language === 'ar' ? 'فاتورة تبرع رسمية معتمدة' : 'Official Certified Donation Invoice', 600, 280);
-
-      ctx.fillStyle = '#10b981';
-      ctx.font = 'bold 18px sans-serif';
-      ctx.fillText(language === 'ar' ? `رقم الفاتورة: ${donation.id.substring(0, 8).toUpperCase()}-${donation.id.substring(9, 13).toUpperCase()}` : `Invoice ID: ${donation.id.substring(0, 8).toUpperCase()}-${donation.id.substring(9, 13).toUpperCase()}`, 600, 325);
-
-      ctx.fillStyle = '#94a3b8';
-      ctx.font = 'normal 14px sans-serif';
-      ctx.fillText(language === 'ar' ? `تاريخ الإصدار: ${new Date().toLocaleDateString('ar-EG', { dateStyle: 'long' })}` : `Issued: ${new Date().toLocaleDateString('en-US', { dateStyle: 'long' })}`, 600, 358);
-
-      // 5. Grid Table (6 rows)
-      const tableY = 390;
-      ctx.strokeStyle = '#cbd5e1';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(100, tableY, 1000, 480);
-
-      ctx.beginPath();
-      ctx.moveTo(380, tableY);
-      ctx.lineTo(380, tableY + 480);
-      ctx.stroke();
-
-      for (let i = 1; i < 6; i++) {
-        ctx.beginPath();
-        ctx.moveTo(100, tableY + i * 80);
-        ctx.lineTo(1100, tableY + i * 80);
-        ctx.stroke();
-      }
-
-      const drawTableCell = (rowIdx: number, col1Label: string, col2Value: string) => {
-        const yCenter = tableY + rowIdx * 80 + 40;
-        ctx.font = 'bold 20px sans-serif';
-        ctx.fillStyle = '#475569';
-        if (language === 'ar') {
-          ctx.textAlign = 'right';
-          ctx.fillText(col1Label, 1060, yCenter);
-          ctx.fillStyle = '#0f172a';
-          ctx.font = 'normal 20px sans-serif';
-          ctx.textAlign = 'right';
-          ctx.fillText(col2Value, 350, yCenter);
-        } else {
-          ctx.textAlign = 'left';
-          ctx.fillText(col1Label, 120, yCenter);
-          ctx.fillStyle = '#0f172a';
-          ctx.font = 'normal 20px sans-serif';
-          ctx.textAlign = 'left';
-          ctx.fillText(col2Value, 410, yCenter);
-        }
-      };
-
-      const dateString = new Date(donation.created_at).toLocaleString(language === 'ar' ? 'ar-EG' : 'en-US', {
-        dateStyle: 'long', timeStyle: 'short'
-      });
-
-      let targetAccount = '';
-      if (donation.payment_method === 'vodafone_cash') {
-        targetAccount = VFC_NUMBER_2 ? `${VFC_NUMBER} / ${VFC_NUMBER_2}` : VFC_NUMBER;
-      } else {
-        targetAccount = displayInstapayAddress;
-      }
-
-      let verifierLabel = '';
-      if (donation.status === 'auto_verified') {
-        verifierLabel = language === 'ar' ? 'نظام المطابقة التلقائي (بوابة SMS)' : 'Automated matching system (SMS Gateway)';
-      } else if (donation.status === 'manual_verified') {
-        verifierLabel = language === 'ar'
-          ? `توثيق مشرف الحملة (${donation.verified_by?.name || 'مشرف معتمد'})`
-          : `Manual admin review (Verified by: ${donation.verified_by?.name || 'System Admin'})`;
-      } else {
-        verifierLabel = language === 'ar' ? 'قيد التحقق والمطابقة' : 'Pending verification';
-      }
-
-      drawTableCell(0, language === 'ar' ? 'اسم المتبرع الكريم' : 'Donor Name', donation.masked_name || donation.name || (language === 'ar' ? 'فاعل خير (مجهول)' : 'Anonymous Benefactor'));
-      drawTableCell(1, language === 'ar' ? 'رقم الهاتف المسجل' : 'Donor Phone Number', donation.phone || donation.masked_phone || '—');
-      drawTableCell(2, language === 'ar' ? 'الحملة المستهدفة للدعم' : 'Targeted Campaign', language === 'ar' ? 'مستشفى كفر الشيخ الجامعي - الدفعة التاسعة' : 'Kafr El-Sheikh University Hospital ICU Support (9th Batch)');
-      drawTableCell(3, language === 'ar' ? 'تاريخ وتوقيت المعاملة' : 'Donation Date & Time', dateString);
-      drawTableCell(4, language === 'ar' ? 'المسؤول الموثق للاعتماد' : 'Verified By / Auditor', verifierLabel);
-      drawTableCell(5, language === 'ar' ? 'رقم محفظة/حساب الاستلام' : 'Campaign Destination Account', targetAccount);
-
-      // 6. Financial Highlight
-      const finY = 900;
-      ctx.fillStyle = '#f8fafc';
-      ctx.fillRect(100, finY, 1000, 180);
-      ctx.strokeRect(100, finY, 1000, 180);
-
-      ctx.fillStyle = '#1e293b';
-      ctx.font = 'bold 22px sans-serif';
-      if (language === 'ar') {
-        ctx.textAlign = 'right';
-        ctx.fillText('القيمة الإجمالية للمساهمة', 1060, finY + 45);
-        ctx.fillStyle = '#0f172a';
-        ctx.font = 'bold 48px sans-serif';
-        ctx.fillText(`${Number(donation.amount).toLocaleString()} ج.م`, 1060, finY + 115);
-      } else {
-        ctx.textAlign = 'left';
-        ctx.fillText('Total Contribution Amount', 140, finY + 45);
-        ctx.fillStyle = '#0f172a';
-        ctx.font = 'bold 48px sans-serif';
-        ctx.fillText(`${Number(donation.amount).toLocaleString()} EGP`, 140, finY + 115);
-      }
-
-      ctx.font = 'bold 18px sans-serif';
-      ctx.fillStyle = '#475569';
-      if (language === 'ar') {
-        ctx.textAlign = 'left';
-        ctx.fillText(`قناة التحويل: ${donation.payment_method === 'vodafone_cash' ? 'فودافون كاش' : 'إنستاباي'}`, 300, finY + 50);
-        ctx.fillText(`المرجع المالي: ${donation.transaction_ref || '—'}`, 300, finY + 95);
-        ctx.fillText(`حالة التوثيق: معتمدة ومطابقة`, 300, finY + 140);
-      } else {
-        ctx.textAlign = 'right';
-        ctx.fillText(`Method: ${donation.payment_method === 'vodafone_cash' ? 'Vodafone Cash' : 'InstaPay'}`, 1060, finY + 50);
-        ctx.fillText(`Tx Ref: ${donation.transaction_ref || '—'}`, 1060, finY + 95);
-        ctx.fillText(`Status: Verified & Approved`, 1060, finY + 140);
-      }
-
-      // 7. Official Legal Statement
-      const noteY = 1120;
-      ctx.fillStyle = '#0f172a';
-      ctx.font = 'bold 22px sans-serif';
-      ctx.textAlign = language === 'ar' ? 'right' : 'left';
-      ctx.fillText(language === 'ar' ? 'إقرار الاستلام والاعتماد الرسمي المضمون:' : 'Official Ledger Confirmation & Guarantee Statement:', language === 'ar' ? 1100 : 100, noteY);
-
-      ctx.fillStyle = '#334155';
-      ctx.font = 'normal 18px sans-serif';
-      ctx.textAlign = language === 'ar' ? 'right' : 'left';
-      ctx.fillText(language === 'ar' ? 'تشهد إدارة حملة التبرعات بأن المبلغ المذكور أعلاه قد تم استلامه وتوثيقه ومطابقته نظامياً وإدراجه في السجل' : 'This document certifies that the donation amount listed above has been officially received, audited,', language === 'ar' ? 1100 : 100, noteY + 45);
-      ctx.fillText(language === 'ar' ? 'المالي الرسمي المخصص لدعم الأجهزة الطبية لمستشفى كفر الشيخ الجامعي. هذا الإيصال يضمن الحقوق الكاملة للمتبرع.' : 'and ledgered into the Kafr El-Sheikh University Hospital ICU support campaign accounts. All donor rights guaranteed.', language === 'ar' ? 1100 : 100, noteY + 80);
-      ctx.fillText(language === 'ar' ? 'للتحقق الفوري من صحة البيانات، يرجى مسح رمز الـ QR أدناه، وفي حال وجود أي استفسار يرجى التواصل برقم الفاتورة.' : 'For instant verification, scan the QR code below. For support inquiries, reference the unique invoice ID above.', language === 'ar' ? 1100 : 100, noteY + 115);
-
-      // 8. QR Code
-      const sealY = 1290;
+    },
+    staleTime: 60000,
+  });
+
+  const activeCampaign = campaign || CANONICAL_CAMPAIGN;
+
+  // 2. Fetch Active Payment Methods (Dynamic & Extensible)
+  const { data: activeMethods = [] } = useQuery<PaymentMethodConfig[]>({
+    queryKey: ['activePaymentMethodsPublic'],
+    queryFn: async () => {
       try {
-        const qrImg = new Image();
-        qrImg.crossOrigin = 'anonymous';
-        await new Promise((res, rej) => { qrImg.onload = res; qrImg.onerror = rej; qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&color=020617&bgcolor=ffffff&data=${encodeURIComponent(`${window.location.origin}/?phone=${donation.phone || ''}&id=${donation.id}`)}`; });
-        ctx.drawImage(qrImg, 100, sealY, 150, 150);
+        const methods = await getActivePaymentMethods(supabase);
+        return methods;
+      } catch {
+        return DEFAULT_PAYMENT_METHODS;
+      }
+    },
+    staleTime: 30000,
+  });
+
+  // Auto-select first active payment method if current is not available
+  useEffect(() => {
+    if (activeMethods.length > 0) {
+      const isCurrentActive = activeMethods.some(m => m.method_key === paymentMethod);
+      if (!isCurrentActive) {
+        setPaymentMethod(activeMethods[0].method_key as PaymentMethod);
+      }
+    }
+  }, [activeMethods, paymentMethod]);
+
+  const activeVfcMethod = useMemo(() => {
+    return activeMethods.find(m => m.method_key === 'vodafone_cash');
+  }, [activeMethods]);
+
+  // Randomize Vodafone Cash wallet order on every page refresh/load to distribute incoming transfers evenly
+  useEffect(() => {
+    if (activeVfcMethod?.wallets && activeVfcMethod.wallets.length > 0) {
+      setShuffledWallets(prev => {
+        // Keep order stable during background React Query refetches within the same page session
+        const currentIds = prev.map(w => w.id).sort().join(',');
+        const newIds = activeVfcMethod.wallets!.map(w => w.id).sort().join(',');
+        if (currentIds === newIds && prev.length > 0) {
+          return prev;
+        }
+        return shuffleWallets(activeVfcMethod.wallets!);
+      });
+    }
+  }, [activeVfcMethod]);
+
+  const activeIpnMethod = useMemo(() => {
+    return activeMethods.find(m => m.method_key === 'instapay');
+  }, [activeMethods]);
+
+  // 1. Fetch Campaign Aggregates & Statistics (High-Performance Cached Edge/Server API)
+  // Eliminates downloading the full donations database on every visitor page load
+  const { data: summaryData } = useQuery({
+    queryKey: ['campaignSummaryPublic'],
+    queryFn: async () => {
+      try {
+        const res = await fetch('/api/campaign/summary');
+        if (res.ok) {
+          return await res.json();
+        }
       } catch {}
+      return null;
+    },
+    staleTime: 60000, // 1 minute fresh
+    refetchOnWindowFocus: false,
+  });
 
-      ctx.fillStyle = '#64748b';
-      ctx.font = 'italic 16px sans-serif';
-      ctx.textAlign = 'left';
-      ctx.fillText(language === 'ar' ? 'امسح الرمز ضوئياً للتحقق من صحة الإيصال مباشرة في السجل المالي العام للحملة' : 'Scan the QR code to verify this official invoice on the live public ledger', 270, sealY + 80);
+  const aggregates = useMemo(() => {
+    const target = Number(activeCampaign.target_amount) || 350000;
+    if (summaryData) {
+      return {
+        totalCollected: Number(summaryData.totalCollected) || 0,
+        target: Number(summaryData.target) || target,
+        remaining: Number(summaryData.remaining) ?? Math.max(0, target - (Number(summaryData.totalCollected) || 0)),
+        progressPercent: Number(summaryData.progressPercent) || 0,
+        verifiedDonorsCount: Number(summaryData.verifiedDonorsCount) || 0,
+        totalDonationsCount: Number(summaryData.totalDonationsCount) || 0,
+        maxDonation: Number(summaryData.maxDonation) || 0,
+        latest: summaryData.latestConfirmedAt ? { created_at: summaryData.latestConfirmedAt } : null,
+      };
+    }
 
-      // Official Seal
-      ctx.fillStyle = 'rgba(16, 185, 129, 0.08)';
-      ctx.strokeStyle = '#10b981';
-      ctx.lineWidth = 4;
-      ctx.beginPath(); ctx.arc(950, sealY + 70, 75, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-      ctx.setLineDash([5, 5]);
-      ctx.beginPath(); ctx.arc(950, sealY + 70, 67, 0, Math.PI * 2); ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.fillStyle = '#10b981';
-      ctx.font = 'bold 18px sans-serif'; ctx.textAlign = 'center';
-      ctx.fillText(language === 'ar' ? 'الاعتماد المالي' : 'FINANCE DEPT', 950, sealY + 45);
-      ctx.font = 'bold 36px sans-serif'; ctx.fillText('✓', 950, sealY + 85);
-      ctx.font = 'bold 14px sans-serif'; ctx.fillText(language === 'ar' ? 'موثق ومطابق' : 'VERIFIED', 950, sealY + 115);
+    return {
+      totalCollected: 0,
+      target,
+      remaining: target,
+      progressPercent: 0,
+      verifiedDonorsCount: 0,
+      totalDonationsCount: 0,
+      maxDonation: 0,
+      latest: null,
+    };
+  }, [summaryData, activeCampaign]);
 
-      // 9. Signatures
-      const sigY = 1470;
-      ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(100, sigY + 60); ctx.lineTo(350, sigY + 60); ctx.stroke();
-      ctx.fillStyle = '#475569'; ctx.font = 'bold 18px sans-serif'; ctx.textAlign = 'center';
-      ctx.fillText(language === 'ar' ? 'توقيع المنسق المالي للحملة' : 'Financial Coordinator', 225, sigY + 95);
-      ctx.beginPath(); ctx.moveTo(850, sigY + 60); ctx.lineTo(1100, sigY + 60); ctx.stroke();
-      ctx.fillText(language === 'ar' ? 'توقيع واعتماد إدارة الحملة' : 'Authorized Campaign Stamp', 975, sigY + 95);
+  // 2. Fetch Latest Confirmed Donations for Public Transparency Ledger
+  // Paginated/limited to 15 latest rows, requesting strictly necessary columns (zero donor phone PII transferred)
+  const { data: donationsList = [], isLoading: isDonationsLoading } = useQuery({
+    queryKey: ['publicConfirmedDonationsLedger'],
+    queryFn: async () => {
+      try {
+        const { data, error } = await supabase
+          .from('donations')
+          .select(`
+            id,
+            amount,
+            payment_method,
+            created_at,
+            donor:donors (
+              name
+            )
+          `)
+          .in('status', ['auto_verified', 'manual_verified'])
+          .order('created_at', { ascending: false })
+          .limit(15);
 
-      ctx.fillStyle = '#94a3b8'; ctx.font = '14px sans-serif';
-      ctx.fillText(language === 'ar' ? 'تم توليد هذه الوثيقة آلياً وهي معتمدة ومحمية بموجب معايير التحقق الرقمي لحملة التبرعات.' : 'This document was digitally generated and verified under the campaign cryptographic integrity standards.', 600, 1630);
+        if (error) return [];
+        return data || [];
+      } catch {
+        return [];
+      }
+    },
+    staleTime: 60000, // 1 minute
+    refetchOnWindowFocus: false,
+  });
 
-      // 10. Export to PDF
-      const imgData = canvas.toDataURL('image/jpeg', 1.0);
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
-      pdf.save(`Donation_Receipt_${donation.id.substring(0, 8)}.pdf`);
-    } catch (pdfErr: any) {
-      console.error('PDF download failed', pdfErr);
-      alert(language === 'ar' ? 'حدث خطأ أثناء تحميل الفاتورة' : 'Error downloading invoice PDF');
-    } finally {
-      setIsGeneratingReceipt(false);
+  // Copy handler with tactile feedback
+  const handleCopy = (text?: string | null, key: string = '') => {
+    if (!text) return;
+    try {
+      navigator.clipboard.writeText(text);
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey(null), 2500);
+    } catch {}
+  };
+
+  // Preset amount click handler
+  const handleSelectPreset = (val: number) => {
+    setSelectedPreset(val);
+    setAmount(String(val));
+    if (formErrors.amount) {
+      setFormErrors(prev => ({ ...prev, amount: '' }));
+    }
+  };
+
+  // Custom amount change handler
+  const handleCustomAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value.replace(/\D/g, '');
+    setAmount(val);
+    const num = Number(val);
+    if (PRESET_AMOUNTS.includes(num)) {
+      setSelectedPreset(num);
+    } else {
+      setSelectedPreset(null);
+    }
+    if (formErrors.amount) {
+      setFormErrors(prev => ({ ...prev, amount: '' }));
+    }
+  };
+
+  // Screenshot handler
+  const handleScreenshotChange = (file: File | null) => {
+    setScreenshot(file);
+    if (file) {
+      const url = URL.createObjectURL(file);
+      setScreenshotPreview(url);
+    } else {
+      setScreenshotPreview(null);
     }
   };
 
   // Form Validation
   const validateForm = () => {
     const errors: Record<string, string> = {};
-    if (!name.trim()) errors.name = language === 'ar' ? 'الاسم مطلوب' : 'Name is required';
 
-    const phoneRegex = /^01[0125]\d{8}$/;
-    if (!phone.trim()) {
+    if (!name.trim()) {
+      errors.name = language === 'ar' ? 'الاسم مطلوب (يمكن كتابة فاعل خير)' : 'Name is required (or Anonymous)';
+    }
+
+    const cleanPhone = phone.trim().replace(/\s+/g, '');
+    const egPhoneRegex = /^01[0125]\d{8}$/;
+    if (!cleanPhone) {
       errors.phone = language === 'ar' ? 'رقم الهاتف مطلوب' : 'Phone number is required';
-    } else if (!phoneRegex.test(phone.trim())) {
-      errors.phone = language === 'ar' ? 'رقم هاتف مصري غير صالح (مثال: 01012345678)' : 'Invalid Egyptian phone number (e.g. 01012345678)';
+    } else if (!egPhoneRegex.test(cleanPhone)) {
+      errors.phone = language === 'ar' ? 'يرجى إدخال رقم هاتف مصري صحيح (مثال: 01012345678)' : 'Please enter a valid Egyptian phone number (e.g. 01012345678)';
     }
 
     const numAmount = Number(amount);
-    if (!amount) {
-      errors.amount = language === 'ar' ? 'المبلغ مطلوب' : 'Amount is required';
-    } else if (isNaN(numAmount) || numAmount <= 0) {
-      errors.amount = language === 'ar' ? 'المبلغ يجب أن يكون أكبر من الصفر' : 'Amount must be greater than zero';
+    if (!amount || isNaN(numAmount) || numAmount <= 0) {
+      errors.amount = language === 'ar' ? 'يرجى تحديد مبلغ التبرع' : 'Please specify a valid donation amount';
     }
 
     if (!refNum.trim()) {
-      errors.refNum = language === 'ar' ? 'رقم العملية مطلوب لإتمام التسجيل' : 'Transaction reference number is required';
-    }
-
-    if (!screenshot) {
-      errors.screenshot = language === 'ar' ? 'لقطة شاشة الإيصال مطلوبة للتحقق' : 'Receipt screenshot is required for verification';
+      errors.refNum = language === 'ar' ? 'الرقم المرجعي مطلوب للتحقق من العملية' : 'Transaction reference number is required';
     }
 
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
-  // Form Submit Handler
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Submit Donation Handler
+  const handleSubmitDonation = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) return;
 
     setIsSubmitting(true);
+    let screenshotUrl: string | null = null;
+    setUploadProgress(null);
+
     try {
-      // 1. Upload Screenshot if exists
-      let screenshotUrl = null;
       if (screenshot) {
-        const fileExt = screenshot.name.split('.').pop();
-        const fileName = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${fileExt}`;
-        const filePath = `receipts/${fileName}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from('receipts')
-          .upload(filePath, screenshot);
-
-        if (!uploadError) {
-          const { data: urlData } = supabase.storage
-            .from('receipts')
-            .getPublicUrl(filePath);
-          screenshotUrl = urlData.publicUrl;
-        } else {
-          console.warn('Screenshot upload failed, proceeding without upload:', uploadError.message);
+        try {
+          // Direct-to-Cloudflare R2 Upload: Browser uploads directly via presigned PUT URL
+          // Client-side image compression downscales and compresses to WebP, saving ~85% bandwidth
+          setUploadProgress(15);
+          const { objectKey } = await uploadScreenshotDirectly(screenshot, (percent) => {
+            setUploadProgress(percent);
+          });
+          screenshotUrl = objectKey;
+        } catch (uploadException) {
+          console.warn('Screenshot upload notice, continuing without screenshot:', uploadException);
         }
       }
 
-      // 2. Call new Backend API to create donation and run matching
       const res = await fetch('/api/donations', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: name.trim(),
-          phone: phone.trim(),
+          phone: phone.trim().replace(/\s+/g, ''),
           campaignId: activeCampaign.id,
           amount: Number(amount),
-          paymentMethod: paymentMethod,
+          paymentMethod,
           transactionRef: refNum.trim() || null,
           last4Digits: digits.trim() || null,
           notes: notes.trim() || null,
@@ -1497,1544 +391,1313 @@ export default function PublicDonationPage() {
         }),
       });
 
+      const result = await res.json();
       if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || 'Failed to submit donation');
+        throw new Error(result.error || 'Failed to submit donation');
       }
 
-      const responseData = await res.json();
-      const donationId = responseData.donationId;
-
-      // Save ID to localStorage
-      if (donationId) {
-        const storedIds = localStorage.getItem('my_donation_ids');
-        const ids = storedIds ? storedIds.split(',').filter(Boolean) : [];
-        ids.push(donationId);
-        localStorage.setItem('my_donation_ids', ids.join(','));
-        // Trigger status fetch
-        fetchTrackedStatus(ids);
+      if (result.donationId) {
+        try {
+          const existing = localStorage.getItem('my_donation_ids');
+          const ids = existing ? existing.split(',').filter(Boolean) : [];
+          if (!ids.includes(result.donationId)) {
+            ids.unshift(result.donationId);
+            localStorage.setItem('my_donation_ids', ids.slice(0, 15).join(','));
+          }
+        } catch {}
       }
 
-      // Success sequence
-      setIsSubmitting(false);
-      setSubmitSuccess(true);
-
-      // Trigger canvas confetti
-      canvasConfetti({
-        particleCount: 120,
-        spread: 70,
-        origin: { y: 0.6 }
+      fireConfetti({
+        particleCount: 70,
+        spread: 60,
+        origin: { y: 0.65 },
+        colors: ['#153C32', '#217A61', '#24B58A', '#B79B68'],
       });
 
-      // Clear Form Fields
+      setSubmittedDonation({
+        id: result.donationId,
+        amount: Number(amount),
+        name: name.trim(),
+        ref: refNum.trim(),
+      });
+
       setName('');
       setPhone('');
       setRefNum('');
       setDigits('');
       setNotes('');
       setScreenshot(null);
+      setScreenshotPreview(null);
+      setUploadProgress(null);
+      setSelectedPreset(500);
+      setAmount('500');
 
+      queryClient.invalidateQueries({ queryKey: ['publicConfirmedDonationsLedger'] });
+      queryClient.invalidateQueries({ queryKey: ['campaignSummaryPublic'] });
     } catch (err: any) {
-      console.error('Error submitting donation:', err);
+      console.error('Submission error:', err);
+      alert(language === 'ar' ? `تعذر تسجيل التبرع: ${err.message}` : `Submission error: ${err.message}`);
+    } finally {
       setIsSubmitting(false);
-      alert(language === 'ar' ? `خطأ أثناء إرسال البيانات: ${err.message}` : `Submission error: ${err.message}`);
+      setUploadProgress(null);
     }
   };
 
-  // Mask Phone and Names for Privacy
-  // const maskName = (val: string) => {
-  //   if (!val) return t('anonymous');
-  //   const parts = val.trim().split(' ');
-  //   if (parts.length === 1) {
-  //     return parts[0].substring(0, 3) + '...';
-  //   }
-  //   return `${parts[0]} ${parts[1].charAt(0)}.`;
-  // };
+  // Lookup Tracking Status
+  const handleTrackSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const query = trackingQuery.trim();
+    if (!query) return;
 
-  // Calculations for Progress Bar
-  const displayCampaignName = language === 'ar' ? activeCampaign.name_ar : activeCampaign.name;
-  const displayCampaignDesc = language === 'ar' ? activeCampaign.description_ar : activeCampaign.description;
-  const displayOrganizer = language === 'ar' ? activeCampaign.organizer_ar : activeCampaign.organizer;
-  const targetVal = Number(activeCampaign.target_amount ?? MOCK_CAMPAIGN.target_amount);
+    setIsTrackingLoading(true);
+    setTrackingSearched(true);
 
-  // Real-time values or fallback to MOCK
-  const collectedVal = stats
-    ? stats.totalReceived
-    : Number(activeCampaign.collected_amount);
+    try {
+      const isRef = query.length < 9 || /[a-zA-Z]/.test(query);
+      const url = isRef
+        ? `/api/donations/status?ref=${encodeURIComponent(query)}`
+        : `/api/donations/status?phone=${encodeURIComponent(query)}`;
 
-  const remainingVal = Math.max(0, targetVal - collectedVal);
-  const percentVal = Math.min(100, Math.round((collectedVal / targetVal) * 100));
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('Query failed');
+      const data = await res.json();
+      setTrackedDonations(data || []);
+    } catch (err) {
+      console.error('Tracking fetch error:', err);
+      setTrackedDonations([]);
+    } finally {
+      setIsTrackingLoading(false);
+    }
+  };
 
-  // InstaPay QR Code Generation details
-  const instapayQRUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&color=020617&bgcolor=f8fafc&data=instapay://payment?address=${encodeURIComponent(displayInstapayAddress)}%26amount=${amount}`;
+  const fetchStatusByIds = async (ids: string[]) => {
+    if (!ids || ids.length === 0) return;
+    try {
+      const res = await fetch(`/api/donations/status?ids=${ids.join(',')}`);
+      if (res.ok) {
+        const data = await res.json();
+        setTrackedDonations(data || []);
+        setTrackingSearched(true);
+      }
+    } catch {}
+  };
 
-  if (!isMounted || isCampaignLoading || isSettingsLoading) {
-    return (
-      <div className="min-h-screen bg-slate-950 text-slate-50 flex flex-col font-sans" dir={dir}>
-        {/* Navbar skeleton */}
-        <header className="w-full max-w-7xl mx-auto px-4 md:px-8 py-6 flex items-center justify-between z-10">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center animate-pulse" />
-            <div className="h-6 w-32 bg-slate-900 rounded animate-pulse" />
-          </div>
-          <div className="h-10 w-24 bg-slate-900 rounded-lg animate-pulse" />
-        </header>
+  // Generate Digital Receipt PDF
+  const handleGenerateReceiptPdf = async (donation: any) => {
+    if (!donation) return;
+    setIsGeneratingPdf(true);
 
-        {/* Main Grid skeleton */}
-        <main className="flex-1 w-full max-w-7xl mx-auto px-4 md:px-8 space-y-12">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1200;
+      canvas.height = 1600;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Canvas context unavailable');
 
-            {/* Left column skeleton */}
-            <div className="lg:col-span-8 space-y-6">
-              <div className="space-y-3">
-                <div className="h-4 w-40 bg-slate-900 rounded-full animate-pulse" />
-                <div className="h-10 w-3/4 bg-slate-900 rounded animate-pulse" />
-                <div className="h-4 w-48 bg-slate-900 rounded animate-pulse" />
-              </div>
-              <div className="w-full h-64 md:h-[400px] bg-slate-900 rounded-2xl animate-pulse" />
-              <div className="h-32 bg-slate-900/50 rounded-2xl animate-pulse" />
-            </div>
+      ctx.fillStyle = '#FAF9F5';
+      ctx.fillRect(0, 0, 1200, 1600);
 
-            {/* Right column skeleton */}
-            <div className="lg:col-span-4 space-y-6">
-              <div className="bg-slate-900/30 border border-slate-900 rounded-2xl p-6 space-y-6">
-                <div className="space-y-3">
-                  <div className="h-4 w-20 bg-slate-900 rounded animate-pulse" />
-                  <div className="h-8 w-36 bg-slate-900 rounded animate-pulse" />
-                  <div className="h-2.5 w-full bg-slate-900 rounded-full animate-pulse" />
-                </div>
-                <div className="space-y-3 pt-4 border-t border-slate-900">
-                  <div className="h-4 w-full bg-slate-900 rounded animate-pulse" />
-                  <div className="h-4 w-full bg-slate-900 rounded animate-pulse" />
-                </div>
-                <div className="h-12 w-full bg-slate-900 rounded-xl animate-pulse" />
-              </div>
-            </div>
+      ctx.strokeStyle = '#DDD9CC';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(40, 40, 1120, 1520);
 
-          </div>
-        </main>
-      </div>
-    );
-  }
+      ctx.strokeStyle = '#B79B68';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(48, 48, 1104, 1504);
+
+      ctx.fillStyle = '#153C32';
+      ctx.font = 'bold 44px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('صدقة جارية', 600, 140);
+
+      ctx.fillStyle = '#B79B68';
+      ctx.font = '600 20px sans-serif';
+      ctx.fillText('الدفعة التاسعة — كلية الطب البشري، جامعة كفر الشيخ', 600, 180);
+
+      ctx.fillStyle = '#F4F3ED';
+      ctx.fillRect(120, 220, 960, 120);
+      ctx.strokeStyle = '#EAE8DE';
+      ctx.strokeRect(120, 220, 960, 120);
+
+      ctx.fillStyle = '#7A6230';
+      ctx.font = 'bold 18px sans-serif';
+      ctx.fillText('إهداء إلى روح الزميلين العزيزين', 600, 260);
+
+      ctx.fillStyle = '#191F1C';
+      ctx.font = 'bold 24px sans-serif';
+      ctx.fillText('د. حسين علي الأمير   •   د. ندى هاني حامد', 600, 305);
+
+      ctx.fillStyle = '#153C32';
+      ctx.font = 'bold 30px sans-serif';
+      ctx.fillText('إيصال توثيق مساهمة صدقة جارية', 600, 410);
+
+      ctx.fillStyle = '#738079';
+      ctx.font = '16px sans-serif';
+      ctx.fillText('مشروع توفير جهاز تنفس صناعي لدعم وحدة العناية المركزة بمستشفيات جامعة كفر الشيخ', 600, 445);
+
+      ctx.strokeStyle = '#EAE8DE';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(120, 480);
+      ctx.lineTo(1080, 480);
+      ctx.stroke();
+
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(120, 520, 960, 480);
+      ctx.strokeStyle = '#DDD9CC';
+      ctx.strokeRect(120, 520, 960, 480);
+
+      const rows = [
+        { label: 'اسم المساهم:', value: donation.donor?.name || 'فاعل خير' },
+        { label: 'قيمة المساهمة:', value: `${Number(donation.amount).toLocaleString('en-US')} جنيه مصري` },
+        { label: 'وسيلة التحويل:', value: donation.payment_method === 'vodafone_cash' ? 'فودافون كاش' : 'إنستاباي (InstaPay)' },
+        { label: 'رقم العملية / المرجع:', value: donation.transaction_ref || '—' },
+        { label: 'تاريخ التوثيق:', value: new Date(donation.created_at).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }) },
+        { label: 'حالة المساهمة:', value: 'معتمد وموثق رسميًا في السجل العام للحملة' },
+      ];
+
+      ctx.textAlign = 'right';
+      rows.forEach((r, idx) => {
+        const y = 580 + (idx * 65);
+        ctx.fillStyle = '#738079';
+        ctx.font = 'bold 18px sans-serif';
+        ctx.fillText(r.label, 1020, y);
+
+        ctx.fillStyle = idx === 1 ? '#153C32' : '#191F1C';
+        ctx.font = idx === 1 ? 'bold 24px sans-serif' : '600 19px sans-serif';
+        ctx.fillText(r.value, 650, y);
+
+        if (idx < rows.length - 1) {
+          ctx.strokeStyle = '#F4F3ED';
+          ctx.beginPath();
+          ctx.moveTo(150, y + 25);
+          ctx.lineTo(1020, y + 25);
+          ctx.stroke();
+        }
+      });
+
+      const sealY = 1100;
+      ctx.fillStyle = '#F0F9F6';
+      ctx.strokeStyle = '#217A61';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(600, sealY, 70, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#153C32';
+      ctx.font = 'bold 18px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('معتمد رسميًا', 600, sealY - 10);
+      ctx.font = 'bold 15px sans-serif';
+      ctx.fillText('الدفعة التاسعة', 600, sealY + 15);
+      ctx.fillStyle = '#B79B68';
+      ctx.font = '13px sans-serif';
+      ctx.fillText('طب كفر الشيخ', 600, sealY + 35);
+
+      ctx.fillStyle = '#55625B';
+      ctx.font = 'italic 18px sans-serif';
+      ctx.fillText('«مَا نَقَصَتْ صَدَقَةٌ مِنْ مَالٍ» — نسأل الله أن يتقبلها صدقةً جارية لا تنقطع.', 600, 1260);
+
+      ctx.fillStyle = '#94A099';
+      ctx.font = '14px sans-serif';
+      ctx.fillText('تم إصدار هذا الإيصال رقميًا من منصة الصدقة الجارية الرسمية لأطباء الدفعة التاسعة.', 600, 1480);
+      ctx.fillText(`معرف الوثيقة: ${donation.id || 'N/A'}`, 600, 1505);
+
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
+      pdf.save(`Sadaqah_Receipt_${(donation.id || 'donation').substring(0, 8)}.pdf`);
+    } catch (err: any) {
+      console.error('PDF export failed:', err);
+      alert(language === 'ar' ? 'تعذر توليد الإيصال' : 'Failed to generate receipt PDF');
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
 
   return (
-    <div className="min-h-screen relative pb-16 flex flex-col font-sans overflow-x-hidden" dir={dir}>
-      {/* Background Orbs */}
-      <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-[120px] pointer-events-none -z-10" />
-      <div className="absolute top-1/3 right-1/4 w-[400px] h-[400px] bg-teal-500/10 rounded-full blur-[100px] pointer-events-none -z-10" />
+    <div className="min-h-screen flex flex-col font-arabic bg-[#FAF9F5] dark:bg-[#0B1220] text-[#191F1C] dark:text-[#F3F5F4] relative transition-colors duration-200" dir={dir} suppressHydrationWarning>
 
-      {/* HEADER NAVBAR */}
-      <header className="w-full max-w-7xl mx-auto px-4 md:px-8 py-4 md:py-6 flex flex-row items-center justify-between z-10 gap-2">
-        <div className="flex items-center gap-1.5 md:gap-3">
-          <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg md:rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center shadow-lg shadow-emerald-500/20 flex-shrink-0">
-            <Heart className="w-4 h-4 md:w-5 md:h-5 text-slate-950 fill-slate-950" />
+      {/* ======================================================== */}
+      {/* 1. TOP EDITORIAL NAVIGATION                              */}
+      {/* ======================================================== */}
+      <header className="sticky top-0 z-40 bg-[#FAF9F5]/90 dark:bg-[#0B1220]/90 backdrop-blur-md border-b border-[#EAE8DE] dark:border-[#283849] transition-colors">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between gap-4">
+          
+          {/* Brand Mark */}
+          <Link href="/" className="flex items-center gap-3.5 group">
+            <div className="w-11 h-11 rounded-xl bg-[#153C32] dark:bg-[#24B58A] text-white dark:text-[#0B1220] flex items-center justify-center shadow-subtle group-hover:bg-[#1C4E41] dark:group-hover:bg-[#1fa37b] transition-colors flex-shrink-0">
+              <HeartHandshake className="w-6 h-6 text-[#E2F3EE] dark:text-[#0B1220]" />
+            </div>
+            <div className="flex flex-col">
+              <span className="font-extrabold text-lg text-[#153C32] dark:text-[#24B58A] tracking-tight leading-tight">
+                {t('brand_title')}
+              </span>
+              <span className="text-xs text-[#738079] dark:text-[#A7B4B0] font-medium">
+                {t('brand_batch')}
+              </span>
+            </div>
+          </Link>
+
+          {/* Desktop Navigation Links */}
+          <nav className="hidden md:flex items-center gap-6 text-sm font-semibold text-[#55625B] dark:text-[#A7B4B0]">
+            <a href="#about" className="hover:text-[#153C32] dark:hover:text-[#24B58A] transition-colors">
+              {t('nav_about')}
+            </a>
+            <a href="#progress" className="hover:text-[#153C32] dark:hover:text-[#24B58A] transition-colors">
+              {t('nav_progress')}
+            </a>
+            <a href="#donate" className="hover:text-[#153C32] dark:hover:text-[#24B58A] transition-colors">
+              {t('nav_donate')}
+            </a>
+            <a href="#tracking" className="hover:text-[#153C32] dark:hover:text-[#24B58A] transition-colors">
+              {t('nav_tracking')}
+            </a>
+            <a href="#transparency" className="hover:text-[#153C32] dark:hover:text-[#24B58A] transition-colors">
+              {t('nav_transparency')}
+            </a>
+          </nav>
+
+          {/* Action CTAs */}
+          <div className="flex items-center gap-2">
+            
+            {/* Dark / Light Theme Toggle */}
+            <ThemeToggle />
+
+            {/* Language Switcher */}
+            <button
+              onClick={toggleLanguage}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-[#DDD9CC] dark:border-[#283849] bg-white dark:bg-[#172436] text-xs font-semibold text-[#3D4742] dark:text-[#F3F5F4] hover:bg-[#F4F3ED] dark:hover:bg-[#1f3047] shadow-subtle transition-colors"
+              title="تغيير اللغة / Switch Language"
+            >
+              <Globe className="w-3.5 h-3.5 text-[#153C32] dark:text-[#24B58A]" />
+              <span>{language === 'ar' ? 'English' : 'العربية'}</span>
+            </button>
+
+            {/* Quick Donation Link */}
+            <a
+              href="#donate"
+              className="hidden sm:inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#153C32] dark:bg-[#24B58A] text-white dark:text-[#0B1220] text-xs md:text-sm font-bold shadow-subtle hover:bg-[#1C4E41] dark:hover:bg-[#1fa37b] transition-all transform active:scale-[0.98]"
+            >
+              <Heart className="w-4 h-4 fill-white/20 text-white dark:text-[#0B1220] dark:fill-[#0B1220]/20" />
+              <span>{t('hero_cta_donate')}</span>
+            </a>
+
+            {/* Mobile Menu Trigger */}
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="md:hidden p-2 rounded-xl border border-[#DDD9CC] dark:border-[#283849] bg-white dark:bg-[#172436] text-[#3D4742] dark:text-[#F3F5F4]"
+              aria-label="القائمة"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
           </div>
-          <span className="text-base md:text-xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400 whitespace-nowrap">
-            donations 9th Batch
-          </span>
         </div>
 
-        <div className="flex items-center gap-1.5 md:gap-3 flex-shrink-0">
-          <button
-            onClick={toggleLanguage}
-            className="flex items-center gap-1.5 px-2 md:px-4 py-1.5 md:py-2 rounded-lg bg-slate-900/60 border border-slate-800 text-xs md:text-sm font-semibold hover:bg-slate-800 transition-colors"
-          >
-            <Globe className="w-3.5 h-3.5 text-emerald-450" />
-            <span>{language === 'ar' ? 'English' : 'العربية'}</span>
-          </button>
-
-          {isMounted && (
-            isLoggedIn ? (
-              <Link
-                href="/admin/dashboard"
-                className="flex items-center gap-1.5 px-2.5 md:px-4 py-1.5 md:py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 text-xs md:text-sm font-extrabold shadow-md hover:brightness-105 transition-all"
-              >
-                <span>{language === 'ar' ? 'لوحة التحكم' : 'Dashboard'}</span>
-              </Link>
-            ) : (
-              <Link
-                href="/admin/login"
-                className="flex items-center gap-1.5 px-2.5 md:px-4 py-1.5 md:py-2 rounded-lg bg-slate-900/60 border border-slate-800 text-xs md:text-sm font-semibold hover:bg-slate-800 transition-colors text-slate-300"
-              >
-                <span>{language === 'ar' ? 'دخول المشرف' : 'Admin Login'}</span>
-              </Link>
-            )
-          )}
-        </div>
+        {/* Mobile Dropdown Menu */}
+        {mobileMenuOpen && (
+          <div className="md:hidden border-t border-[#EAE8DE] dark:border-[#283849] bg-[#FAF9F5] dark:bg-[#111C2D] px-4 py-4 space-y-3 shadow-card animate-fadeIn">
+            <a
+              href="#about"
+              onClick={() => setMobileMenuOpen(false)}
+              className="block px-3 py-2 rounded-lg text-sm font-semibold text-[#191F1C] dark:text-[#F3F5F4] hover:bg-white dark:hover:bg-[#172436]"
+            >
+              {t('nav_about')}
+            </a>
+            <a
+              href="#progress"
+              onClick={() => setMobileMenuOpen(false)}
+              className="block px-3 py-2 rounded-lg text-sm font-semibold text-[#191F1C] dark:text-[#F3F5F4] hover:bg-white dark:hover:bg-[#172436]"
+            >
+              {t('nav_progress')}
+            </a>
+            <a
+              href="#donate"
+              onClick={() => setMobileMenuOpen(false)}
+              className="block px-3 py-2 rounded-lg text-sm font-semibold text-[#153C32] dark:text-[#24B58A] font-bold hover:bg-white dark:hover:bg-[#172436]"
+            >
+              {t('nav_donate')}
+            </a>
+            <a
+              href="#tracking"
+              onClick={() => setMobileMenuOpen(false)}
+              className="block px-3 py-2 rounded-lg text-sm font-semibold text-[#191F1C] dark:text-[#F3F5F4] hover:bg-white dark:hover:bg-[#172436]"
+            >
+              {t('nav_tracking')}
+            </a>
+            <a
+              href="#transparency"
+              onClick={() => setMobileMenuOpen(false)}
+              className="block px-3 py-2 rounded-lg text-sm font-semibold text-[#191F1C] dark:text-[#F3F5F4] hover:bg-white dark:hover:bg-[#172436]"
+            >
+              {t('nav_transparency')}
+            </a>
+          </div>
+        )}
       </header>
 
-      {/* HERO / CAMPAIGN COVER SECTION */}
-      <main className="flex-1 w-full max-w-7xl mx-auto px-4 md:px-8 space-y-8 md:space-y-12">
-        {/* Mobile Tab Segmented Navigation (Only visible on mobile/tablet) */}
-        {isMounted && (
-          <div className="lg:hidden w-full bg-slate-900/80 backdrop-blur-md p-1 rounded-xl border border-slate-800/60 sticky top-2 z-30 flex gap-1 shadow-lg">
-            <button
-              type="button"
-              onClick={() => setActiveMobileTab('campaign')}
-              className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-all text-center ${activeMobileTab === 'campaign'
-                  ? 'bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 shadow-md font-extrabold'
-                  : 'text-slate-400 hover:text-white'
-                }`}
-            >
-              {t('tab_campaign')}
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveMobileTab('donate')}
-              className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-all text-center ${activeMobileTab === 'donate'
-                  ? 'bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 shadow-md font-extrabold'
-                  : 'text-slate-400 hover:text-white'
-                }`}
-            >
-              {t('tab_donate')}
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveMobileTab('ledger')}
-              className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-all text-center ${activeMobileTab === 'ledger'
-                  ? 'bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 shadow-md font-extrabold'
-                  : 'text-slate-400 hover:text-white'
-                }`}
-            >
-              {t('tab_ledger')}
-            </button>
-          </div>
-        )}
+      <main className="flex-1">
 
-        {campaignError && (
-          <div className="p-4 bg-red-950/20 border border-red-900/20 text-red-300 text-xs rounded-xl flex items-center gap-2">
-            <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
-            <span>Failed to load campaign settings: {campaignError.message || JSON.stringify(campaignError)}</span>
-          </div>
-        )}
-        {/* Campaign Main Grid */}
-        <div className={`grid grid-cols-1 lg:grid-cols-12 gap-8 items-start ${activeMobileTab === 'campaign' ? 'block' : 'hidden lg:grid'}`}>
+        {/* ======================================================== */}
+        {/* 2. HERO SECTION — EDITORIAL, RESPECTFUL, MEMORIAL        */}
+        {/* ======================================================== */}
+        <section className="relative pt-12 pb-16 md:pt-20 md:pb-24 border-b border-[#EAE8DE] dark:border-[#283849] overflow-hidden">
+          <div className="absolute top-0 inset-x-0 h-96 bg-gradient-to-b from-[#F4F3ED] dark:from-[#111C2D] to-transparent pointer-events-none -z-10" />
 
-          {/* LEFT COLUMN: Campaign Content (col-span-8) */}
-          <div className="lg:col-span-8 space-y-6">
-
-            {/* Title & Organizer Info */}
-            <div className="space-y-3">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                <span>{language === 'ar' ? 'حملة تبرع معتمدة وموثقة' : 'Verified Donation Campaign'}</span>
-              </div>
-
-              <h1 className="text-2xl md:text-4xl font-extrabold text-white tracking-tight leading-tight">
-                {displayCampaignName}
-              </h1>
-
-              <div className="text-xs text-slate-400 font-medium">
-                {language === 'ar' ? 'بإشراف وتنظيم:' : 'Organized by:'} <span className="text-white font-bold">{displayOrganizer}</span>
-              </div>
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-6 md:space-y-8">
+            
+            {/* Eyebrow Badge */}
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white dark:bg-[#172436] border border-[#DDD9CC] dark:border-[#283849] text-xs font-bold text-[#153C32] dark:text-[#24B58A] shadow-subtle mx-auto">
+              <span className="w-2 h-2 rounded-full bg-[#B79B68] dark:bg-[#C5A876]" />
+              <span>{t('hero_eyebrow')}</span>
             </div>
 
-            {/* Cover Image */}
-            <div className="w-full h-64 md:h-[400px] rounded-2xl overflow-hidden border border-slate-900 shadow-md">
-              <img
-                src={activeCampaign.cover_image || "/campaign_cover.png"}
-                alt={displayCampaignName}
-                className="w-full h-full object-cover"
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none';
-                  const parent = e.currentTarget.parentElement;
-                  if (parent) {
-                    const div = document.createElement('div');
-                    div.className = "w-full h-full bg-gradient-to-tr from-slate-900 to-slate-950 flex flex-col items-center justify-center p-6 text-center";
-                    div.innerHTML = `<span class="text-slate-400 text-sm font-semibold">${displayCampaignName}</span>`;
-                    parent.appendChild(div);
-                  }
-                }}
-              />
+            {/* Primary Headline */}
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-[#153C32] dark:text-[#F3F5F4] tracking-tight leading-[1.15]">
+              {t('hero_title')}
+            </h1>
+
+            {/* Memorial Tribute Container */}
+            <div className="p-6 md:p-8 rounded-3xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-editorial space-y-2 border-r-4 rtl:border-r-4 rtl:border-l-0 ltr:border-l-4 ltr:border-r-0 border-[#B79B68] dark:border-[#C5A876] max-w-2xl mx-auto">
+              <p className="text-xs font-bold uppercase tracking-wider text-[#9E8047] dark:text-[#C5A876]">
+                {t('hero_dedication_to')}
+              </p>
+              <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-2xl sm:text-3xl font-extrabold text-[#191F1C] dark:text-[#F3F5F4]">
+                <span className="text-[#153C32] dark:text-[#24B58A]">{t('hero_doctor_1')}</span>
+                <span className="text-[#B79B68] font-light hidden sm:inline">•</span>
+                <span className="text-[#153C32] dark:text-[#24B58A]">{t('hero_doctor_2')}</span>
+              </div>
+              <p className="text-xs sm:text-sm text-[#738079] dark:text-[#A7B4B0] pt-1">
+                رحمة الله عليهما وجعل هذا العمل في ميزان حسناتهما ونورًا لقبورهما.
+              </p>
             </div>
 
-            {/* Description Card */}
-            <div className="bg-slate-900/10 border border-slate-900/60 p-6 rounded-2xl space-y-5">
-              <div className="space-y-3">
-                <h3 className="text-white font-bold text-base border-b border-slate-800 pb-2 flex items-center gap-2">
-                  <Heart className="w-4 h-4 text-emerald-450 fill-emerald-450/20" />
-                  <span>{language === 'ar' ? 'عن الحملة وغايتها' : 'About the Campaign'}</span>
+            {/* Mission Subtitle */}
+            <p className="text-base sm:text-lg text-[#3D4742] dark:text-[#A7B4B0] leading-relaxed font-normal max-w-3xl mx-auto">
+              {t('hero_subtitle')}
+            </p>
+
+            {/* Hadith Quote */}
+            <blockquote className="text-xs sm:text-sm text-[#7A6230] dark:text-[#C5A876] italic font-medium max-w-2xl mx-auto py-2.5 px-4 rounded-xl bg-[#FAF9F5] dark:bg-[#111C2D] border border-[#EAE8DE] dark:border-[#283849]">
+              {t('hero_verse')}
+            </blockquote>
+
+            {/* CTAs */}
+            <div className="pt-2 flex flex-wrap items-center justify-center gap-4">
+              <a
+                href="#donate"
+                className="inline-flex items-center justify-center gap-2.5 px-8 py-4 rounded-xl bg-[#153C32] dark:bg-[#24B58A] text-white dark:text-[#0B1220] text-base font-bold shadow-elevated hover:bg-[#1C4E41] dark:hover:bg-[#1fa37b] transition-all transform active:scale-[0.98]"
+              >
+                <Heart className="w-5 h-5 fill-white/20 dark:fill-[#0B1220]/20" />
+                <span>{t('hero_cta_donate')}</span>
+              </a>
+
+              <a
+                href="#about"
+                className="inline-flex items-center justify-center gap-2 px-6 py-4 rounded-xl bg-white dark:bg-[#172436] border border-[#DDD9CC] dark:border-[#283849] text-[#3D4742] dark:text-[#F3F5F4] text-base font-semibold hover:bg-[#F4F3ED] dark:hover:bg-[#1f3047] transition-colors"
+              >
+                <span>{t('hero_cta_about')}</span>
+                <ArrowRight className="w-4 h-4 rtl-flip" />
+              </a>
+            </div>
+
+          </div>
+        </section>
+
+        {/* ======================================================== */}
+        {/* 3. CAMPAIGN PROGRESS SECTION — LIVE & TRANSPARENT        */}
+        {/* ======================================================== */}
+        <section id="progress" className="py-16 md:py-20 border-b border-[#EAE8DE] dark:border-[#283849] bg-white dark:bg-[#111C2D] transition-colors">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10">
+            
+            <div className="max-w-2xl mx-auto text-center space-y-3">
+              <span className="inline-block text-xs font-bold uppercase tracking-wider text-[#B79B68] dark:text-[#C5A876]">
+                {language === 'ar' ? 'الشفافية المالية' : 'Financial Transparency'}
+              </span>
+              <h2 className="text-2xl sm:text-3xl font-extrabold text-[#153C32] dark:text-[#F3F5F4]">
+                {t('progress_title')}
+              </h2>
+              <p className="text-sm text-[#55625B] dark:text-[#A7B4B0] leading-relaxed">
+                {t('progress_subtitle')}
+              </p>
+            </div>
+
+            <div className="max-w-4xl mx-auto p-6 sm:p-8 rounded-3xl bg-[#FAF9F5] dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-subtle space-y-6">
+              
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <span className="text-xs font-semibold text-[#738079] dark:text-[#A7B4B0] block mb-1">
+                    {t('collected')}
+                  </span>
+                  <div className="text-3xl sm:text-4xl font-black text-[#153C32] dark:text-[#24B58A]">
+                    {aggregates.totalCollected.toLocaleString('en-US')}{' '}
+                    <span className="text-lg font-bold text-[#55625B] dark:text-[#A7B4B0]">{t('egp')}</span>
+                  </div>
+                </div>
+
+                <div className="text-start sm:text-end">
+                  <span className="text-xs font-semibold text-[#738079] dark:text-[#A7B4B0] block mb-1">
+                    {t('target')}
+                  </span>
+                  <div className="text-2xl sm:text-3xl font-bold text-[#191F1C] dark:text-[#F3F5F4]">
+                    {aggregates.target.toLocaleString('en-US')}{' '}
+                    <span className="text-sm font-semibold text-[#738079] dark:text-[#A7B4B0]">{t('egp')}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Progress Track */}
+              <div className="space-y-2">
+                <div className="h-4 w-full bg-[#EAE8DE] dark:bg-[#0B1220] rounded-full overflow-hidden p-0.5">
+                  <div
+                    className="h-full bg-gradient-to-r from-[#153C32] to-[#217A61] dark:from-[#24B58A] dark:to-[#3CB895] rounded-full transition-all duration-1000 ease-out"
+                    style={{ width: `${Math.max(2, aggregates.progressPercent)}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-xs font-semibold text-[#738079] dark:text-[#A7B4B0]">
+                  <span>{aggregates.progressPercent}% {language === 'ar' ? 'مكتمل' : 'completed'}</span>
+                  <span>{t('remaining')}: {aggregates.remaining.toLocaleString('en-US')} {t('egp')}</span>
+                </div>
+              </div>
+
+              {/* Stats Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-4 border-t border-[#EAE8DE] dark:border-[#283849]">
+                <div className="text-center p-3 rounded-xl bg-white dark:bg-[#111C2D] border border-[#EAE8DE] dark:border-[#283849]">
+                  <span className="block text-xs text-[#738079] dark:text-[#A7B4B0] mb-1">{t('verified_donors_count')}</span>
+                  <span className="text-lg font-bold text-[#153C32] dark:text-[#24B58A]">{aggregates.verifiedDonorsCount}</span>
+                </div>
+
+                <div className="text-center p-3 rounded-xl bg-white dark:bg-[#111C2D] border border-[#EAE8DE] dark:border-[#283849]">
+                  <span className="block text-xs text-[#738079] dark:text-[#A7B4B0] mb-1">{language === 'ar' ? 'إجمالي العمليات' : 'Total Gifts'}</span>
+                  <span className="text-lg font-bold text-[#153C32] dark:text-[#24B58A]">{aggregates.totalDonationsCount}</span>
+                </div>
+
+                <div className="text-center p-3 rounded-xl bg-white dark:bg-[#111C2D] border border-[#EAE8DE] dark:border-[#283849]">
+                  <span className="block text-xs text-[#738079] dark:text-[#A7B4B0] mb-1">{t('largest_donation')}</span>
+                  <span className="text-lg font-bold text-[#153C32] dark:text-[#24B58A]">
+                    {aggregates.maxDonation > 0 ? `${aggregates.maxDonation.toLocaleString('en-US')} ${t('egp')}` : '—'}
+                  </span>
+                </div>
+
+                <div className="text-center p-3 rounded-xl bg-white dark:bg-[#111C2D] border border-[#EAE8DE] dark:border-[#283849]">
+                  <span className="block text-xs text-[#738079] dark:text-[#A7B4B0] mb-1">{language === 'ar' ? 'الهدف المالي' : 'Goal Status'}</span>
+                  <span className="text-lg font-bold text-[#217A61] dark:text-[#24B58A]">
+                    {aggregates.progressPercent >= 100 ? (language === 'ar' ? 'اكتمل بنجاح' : 'Achieved') : (language === 'ar' ? 'حملة جارية' : 'In Progress')}
+                  </span>
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+        </section>
+
+        {/* ======================================================== */}
+        {/* 4. ABOUT THE CAMPAIGN — PURPOSE & MEDICAL IMPACT        */}
+        {/* ======================================================== */}
+        <section id="about" className="py-16 md:py-24 border-b border-[#EAE8DE] dark:border-[#283849] bg-[#FAF9F5] dark:bg-[#0B1220] transition-colors">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
+            
+            <div className="max-w-3xl mx-auto text-center space-y-3">
+              <span className="inline-block text-xs font-bold uppercase tracking-wider text-[#B79B68] dark:text-[#C5A876]">
+                {t('story_badge')}
+              </span>
+              <h2 className="text-3xl sm:text-4xl font-extrabold text-[#153C32] dark:text-[#F3F5F4]">
+                {t('story_title')}
+              </h2>
+            </div>
+
+            <div className="max-w-4xl mx-auto bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] rounded-3xl p-8 sm:p-12 shadow-subtle space-y-6 text-[#3D4742] dark:text-[#A7B4B0] text-base sm:text-lg leading-relaxed font-normal">
+              <p>{t('story_p1')}</p>
+              <p>{t('story_p2')}</p>
+              <p className="font-semibold text-[#153C32] dark:text-[#24B58A]">{t('story_p3')}</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+              
+              <div className="p-6 rounded-2xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-subtle space-y-3">
+                <div className="w-12 h-12 rounded-xl bg-[#F0F9F6] dark:bg-[#111C2D] border border-[#153C32]/10 dark:border-[#24B58A]/20 flex items-center justify-center text-[#153C32] dark:text-[#24B58A]">
+                  <Layers className="w-6 h-6" />
+                </div>
+                <h3 className="font-bold text-lg text-[#153C32] dark:text-[#F3F5F4]">
+                  {t('story_feature_1_title')}
                 </h3>
-                <p className="text-slate-300 text-[14.5px] leading-relaxed whitespace-pre-wrap font-normal">
-                  {displayCampaignDesc}
+                <p className="text-sm text-[#55625B] dark:text-[#A7B4B0] leading-relaxed">
+                  {t('story_feature_1_desc')}
                 </p>
               </div>
 
-              {/* Target Equipment (Compact Inline Badge Row) */}
-              <div className="flex flex-wrap items-center gap-2.5 pt-3.5 border-t border-slate-800/60">
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-                  {language === 'ar' ? 'الأجهزة الطبية المستهدفة:' : 'Target Equipment:'}
-                </span>
-
-                {/* Device 1 */}
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-950/20 border border-emerald-900/25 text-xs text-white">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-450 animate-pulse" />
-                  <span className="font-bold text-[11px]">{language === 'ar' ? 'جهاز تنفس صناعي حديث' : 'Ventilator'}</span>
-                  <span className="text-[9px] font-bold bg-rose-950/40 text-rose-450 px-1 py-0.2 rounded border border-rose-900/10">
-                    {language === 'ar' ? 'عاجل' : 'Urgent'}
-                  </span>
+              <div className="p-6 rounded-2xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-subtle space-y-3">
+                <div className="w-12 h-12 rounded-xl bg-[#FAF8F2] dark:bg-[#111C2D] border border-[#B79B68]/30 dark:border-[#C5A876]/30 flex items-center justify-center text-[#9E8047] dark:text-[#C5A876]">
+                  <Heart className="w-6 h-6" />
                 </div>
-              </div>
-            </div>
-
-          </div>
-
-          {/* RIGHT COLUMN: Sticky Progress Widget (col-span-4) */}
-          <div className="lg:col-span-4 lg:sticky lg:top-6 space-y-6">
-
-            <div className="bg-slate-900/30 border border-slate-800/60 rounded-2xl p-6 space-y-6 shadow-xl">
-
-              {/* Collected and Progress */}
-              <div className="space-y-3">
-                <div className="space-y-1">
-                  <span className="text-slate-500 text-[11px] font-bold block uppercase tracking-wider">{t('collected')}</span>
-                  <span className="text-3xl font-black text-emerald-400 flex items-baseline gap-1.5">
-                    {collectedVal.toLocaleString()}
-                    <span className="text-sm font-bold text-slate-400">{t('egp')}</span>
-                  </span>
-                </div>
-
-                {/* Progress bar */}
-                <div className="space-y-1">
-                  <div className="w-full h-2.5 bg-slate-950 rounded-full overflow-hidden border border-slate-900 relative">
-                    <div
-                      className="h-full bg-emerald-500 rounded-full"
-                      style={{ width: `${percentVal}%` }}
-                    />
-                  </div>
-                  <div className="flex justify-between text-[11px] font-semibold text-slate-400 pt-1">
-                    <span>{percentVal}% {t('progress')}</span>
-                    <span>{language === 'ar' ? 'مستمر حتى تحقيق الهدف' : 'Ongoing'}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Stats key-value list */}
-              <div className="space-y-3 pt-4 border-t border-slate-800/60 text-xs text-slate-300">
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-500 font-semibold">{t('target')}</span>
-                  <span className="font-bold text-white">{targetVal.toLocaleString()} {t('egp')}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-500 font-semibold">{language === 'ar' ? 'المتبقي لتحقيق الهدف' : 'Remaining to goal'}</span>
-                  <span className="font-bold text-slate-200">{remainingVal.toLocaleString()} {t('egp')}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-500 font-semibold">{language === 'ar' ? 'عدد التبرعات المعتمدة' : 'Total donations'}</span>
-                  <span className="font-bold text-white">{stats?.approvedCount ?? 0}</span>
-                </div>
-              </div>
-
-              {/* Call-to-action Button */}
-              <div className="flex flex-col gap-2.5">
-                <button
-                  onClick={() => {
-                    setActiveMobileTab('donate');
-                    setTimeout(() => {
-                      const formElement = document.querySelector('form');
-                      if (formElement) {
-                        formElement.scrollIntoView({ behavior: 'smooth' });
-                      }
-                    }, 100);
-                  }}
-                  className="w-full py-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:brightness-105 active:scale-[0.98] transition-all text-slate-950 font-black text-center text-sm shadow-lg shadow-emerald-500/10 cursor-pointer flex items-center justify-center gap-2"
-                >
-                  <Heart className="w-4 h-4 fill-slate-950" />
-                  <span>{language === 'ar' ? 'تبرع الآن للحملة' : 'Donate to Campaign'}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleShareClick}
-                  disabled={isGeneratingShare}
-                  className="w-full py-3 rounded-xl bg-slate-900 border border-slate-800 hover:bg-slate-800 active:scale-[0.98] transition-all text-slate-300 font-bold text-center text-xs flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                >
-                  {isGeneratingShare ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>{language === 'ar' ? 'جاري توليد الصورة...' : 'Generating Image...'}</span>
-                    </>
-                  ) : (
-                    <>
-                      <Share2 className="w-3.5 h-3.5 text-emerald-450" />
-                      <span>{language === 'ar' ? 'مشاركة تقدم الحملة (صورة)' : 'Share Campaign Progress (Image)'}</span>
-                    </>
-                  )}
-                </button>
-              </div>
-
-              {/* Safety/Trust Badge */}
-              <div className="flex items-center justify-center gap-2 text-[10px] text-slate-500 font-medium">
-                <svg className="w-3.5 h-3.5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
-                </svg>
-                <span>{language === 'ar' ? 'جميع التحويلات آمنة وتتم مراجعتها تلقائياً' : 'All transfers are secure and auto-matched'}</span>
-              </div>
-
-            </div>
-
-          </div>
-
-        </div>
-
-        {/* RECENT DONORS MARQUEE */}
-        <div className={`w-full bg-slate-900/30 border border-slate-900 rounded-2xl overflow-hidden py-3 flex items-center relative ${activeMobileTab !== 'donate' ? 'flex' : 'hidden lg:flex'}`}>
-          <div className="absolute left-0 top-0 bottom-0 w-24 bg-gradient-to-r from-slate-950 to-transparent z-10 pointer-events-none" />
-          <div className="absolute right-0 top-0 bottom-0 w-24 bg-gradient-to-l from-slate-950 to-transparent z-10 pointer-events-none" />
-
-          <div className="flex-shrink-0 px-4 font-bold text-xs uppercase tracking-wider text-emerald-400 border-e border-slate-800 flex items-center gap-1.5 z-20">
-            <Coins className="w-4 h-4" />
-            {t('recent_donors_title')}
-          </div>
-
-          <div className="flex overflow-hidden w-full select-none">
-            <div className="flex gap-12 whitespace-nowrap animate-marquee">
-              {recentDonations && recentDonations.length > 0 ? (
-                recentDonations.map((item) => (
-                  <div key={item.id} className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-emerald-400 glow-green" />
-                    <span className="text-sm font-semibold text-slate-350">
-                      <bdi>{item.masked_name || t('anonymous')}</bdi>
-                    </span>
-                    <span className="text-[10px] font-mono text-slate-500" dir="ltr">
-                      ({item.masked_phone})
-                    </span>
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 font-bold border border-emerald-900/40">
-                      {item.amount} {t('egp')}
-                    </span>
-                    <span className="text-[11px] text-slate-500">
-                      {isMounted ? new Date(item.created_at).toLocaleTimeString(language === 'ar' ? 'ar-EG' : 'en-US', { hour: '2-digit', minute: '2-digit' }) : '...'}
-                    </span>
-                  </div>
-                ))
-              ) : (
-                <div className="text-sm font-semibold text-slate-450 px-4">
-                  {language === 'ar' ? 'بانتظار أول تبرع موثق لدعم الحملة...' : 'Awaiting the first verified donation to support the campaign...'}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* BOTTOM SPLIT SECTION */}
-        <div className={`grid grid-cols-1 lg:grid-cols-12 gap-8 ${activeMobileTab !== 'campaign' ? 'block' : 'hidden lg:grid'}`}>
-
-          {/* LEFT: DONATION INSTRUCTIONS & FORM */}
-          <div className={`lg:col-span-7 space-y-6 ${activeMobileTab === 'donate' ? 'block' : 'hidden lg:block'}`}>
-
-            {/* Payment Instructions Card */}
-            <div className="glass-panel rounded-2xl p-6 space-y-6">
-              <div className="space-y-1">
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <Award className="w-5 h-5 text-emerald-400" />
-                  {t('inst_title')}
+                <h3 className="font-bold text-lg text-[#153C32] dark:text-[#F3F5F4]">
+                  {t('story_feature_2_title')}
                 </h3>
-                <p className="text-slate-400 text-xs">{t('inst_sub')}</p>
+                <p className="text-sm text-[#55625B] dark:text-[#A7B4B0] leading-relaxed">
+                  {t('story_feature_2_desc')}
+                </p>
               </div>
 
-              {/* Tabs for Payment method selection */}
-              <div className={`grid ${INSTAPAY_ENABLED ? 'grid-cols-2' : 'grid-cols-1'} gap-2 bg-slate-950/80 p-1 rounded-xl border border-slate-900`}>
-                <button
-                  onClick={() => setPaymentMethod('vodafone_cash')}
-                  className={`py-3 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2.5 ${paymentMethod === 'vodafone_cash'
-                      ? 'bg-slate-900 border border-slate-800 text-red-550 shadow-md'
-                      : 'text-slate-400 hover:text-white'
-                    }`}
-                >
-                  <img src="/vf_Logo.png" alt="Vodafone Cash" className="w-5 h-5 object-contain rounded-full bg-white p-0.5" />
-                  {t('vfc_label')}
-                </button>
-                {INSTAPAY_ENABLED && (
-                  <button
-                    onClick={() => setPaymentMethod('instapay')}
-                    className={`py-3 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2.5 ${paymentMethod === 'instapay'
-                        ? 'bg-slate-900 border border-slate-800 text-violet-400 shadow-md'
-                        : 'text-slate-400 hover:text-white'
-                      }`}
-                  >
-                    <img src="/InstaPay_Logo.png" alt="InstaPay" className="w-5 h-5 object-contain rounded bg-white p-0.5" />
-                    {t('instapay_label')}
-                  </button>
-                )}
+              <div className="p-6 rounded-2xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-subtle space-y-3">
+                <div className="w-12 h-12 rounded-xl bg-[#F0F9F6] dark:bg-[#111C2D] border border-[#217A61]/20 dark:border-[#24B58A]/20 flex items-center justify-center text-[#217A61] dark:text-[#24B58A]">
+                  <ShieldCheck className="w-6 h-6" />
+                </div>
+                <h3 className="font-bold text-lg text-[#153C32] dark:text-[#F3F5F4]">
+                  {t('story_feature_3_title')}
+                </h3>
+                <p className="text-sm text-[#55625B] dark:text-[#A7B4B0] leading-relaxed">
+                  {t('story_feature_3_desc')}
+                </p>
               </div>
 
-              {/* Vodafone Cash Details */}
-              {paymentMethod === 'vodafone_cash' && (
-                <div className="space-y-3 w-full">
-                  {VFC_ENABLED && (
-                    <div className="bg-slate-950/40 p-5 rounded-2xl border border-slate-900 flex flex-col md:flex-row items-center justify-between gap-4">
-                      <div className="space-y-1 text-center md:text-start">
-                        <span className="text-slate-500 text-xs uppercase tracking-wider">
-                          {language === 'ar' ? 'رقم محفظة فودافون كاش الأول' : 'Vodafone Cash Wallet 1'}
-                        </span>
-                        <p className="text-2xl font-black tracking-widest text-white font-mono">{VFC_NUMBER}</p>
-                      </div>
-                      <button
-                        onClick={() => handleCopy(VFC_NUMBER, 'vfc')}
-                        className="w-full md:w-auto flex items-center justify-center gap-2 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-sm font-semibold py-3 px-6 rounded-xl transition-all active:scale-95"
-                      >
-                        {copiedType === 'vfc' ? (
-                          <>
-                            <Check className="w-4 h-4 text-emerald-400 animate-scale-up" />
-                            <span className="text-emerald-400">{t('copied')}</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-4 h-4 text-slate-400" />
-                            <span>{t('copy')}</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  )}
-
-                  {VFC_NUMBER_2 && VFC_2_ENABLED && (
-                    <div className="bg-slate-950/40 p-5 rounded-2xl border border-slate-900 flex flex-col md:flex-row items-center justify-between gap-4 animate-fade-in">
-                      <div className="space-y-1 text-center md:text-start">
-                        <span className="text-slate-500 text-xs uppercase tracking-wider">
-                          {language === 'ar' ? 'رقم محفظة فودافون كاش الثاني' : 'Vodafone Cash Wallet 2'}
-                        </span>
-                        <p className="text-2xl font-black tracking-widest text-white font-mono">{VFC_NUMBER_2}</p>
-                      </div>
-                      <button
-                        onClick={() => handleCopy(VFC_NUMBER_2, 'vfc2')}
-                        className="w-full md:w-auto flex items-center justify-center gap-2 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-sm font-semibold py-3 px-6 rounded-xl transition-all active:scale-95"
-                      >
-                        {copiedType === 'vfc2' ? (
-                          <>
-                            <Check className="w-4 h-4 text-emerald-400 animate-scale-up" />
-                            <span className="text-emerald-400">{t('copied')}</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-4 h-4 text-slate-400" />
-                            <span>{t('copy')}</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* InstaPay Details */}
-              {paymentMethod === 'instapay' && INSTAPAY_ENABLED && (
-                <div className="space-y-6 bg-slate-950/20 p-5 rounded-2xl border border-slate-900 flex flex-col items-center">
-
-                  {/* Top: InstaPay Logo */}
-                  <div className="flex flex-col items-center space-y-2">
-                    <img
-                      src="/InstaPay_Logo.png"
-                      alt="InstaPay"
-                      className="h-10 object-contain rounded bg-white px-2.5 py-1"
-                    />
-                    <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">
-                      {language === 'ar' ? 'الدفع عبر تطبيق إنستاباي' : 'Pay via InstaPay App'}
-                    </span>
-                  </div>
-
-                  {/* Payment Button Link */}
-                  {INSTAPAY_LINK && (
-                    <a
-                      href={INSTAPAY_LINK}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="group w-full max-w-sm flex items-center justify-center gap-2 bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 hover:brightness-110 hover:shadow-[0_0_20px_rgba(139,92,246,0.4)] active:scale-[0.98] text-white font-black py-4 px-6 rounded-xl shadow-[0_0_15px_rgba(139,92,246,0.2)] border border-violet-500/35 transition-all text-center text-sm cursor-pointer"
-                    >
-                      <span>{language === 'ar' ? 'انقر هنا للدفع السريع عبر إنستاباي' : 'Quick Pay via InstaPay'}</span>
-                      <span className="text-xs font-bold transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5">↗</span>
-                    </a>
-                  )}
-
-                  {/* Phone Number Display with Copy */}
-                  <div className="w-full max-w-sm bg-slate-950/60 p-4 rounded-xl border border-slate-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-center sm:text-start">
-                    <div className="space-y-1">
-                      <span className="text-slate-500 text-[10px] uppercase tracking-wider font-semibold block">
-                        {language === 'ar' ? 'رقم الهاتف (إنستاباي)' : 'InstaPay Phone Number'}
-                      </span>
-                      <p className="text-xl font-black tracking-widest text-white font-mono select-all" dir="ltr">
-                        {INSTAPAY_PHONE}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleCopy(INSTAPAY_PHONE, 'instapay_phone')}
-                      className="flex items-center justify-center gap-1.5 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-sm font-semibold py-3 px-5 rounded-xl transition-all active:scale-95 text-slate-350 flex-shrink-0 w-full sm:w-auto"
-                    >
-                      {copiedType === 'instapay_phone' ? (
-                        <>
-                          <Check className="w-3.5 h-3.5 text-emerald-400" />
-                          <span className="text-emerald-400">{t('copied')}</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3.5 h-3.5 text-slate-400" />
-                          <span>{t('copy')}</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-
-                  {/* Address Display with Copy */}
-                  <div className="w-full max-w-sm bg-slate-950/60 p-4 rounded-xl border border-slate-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-center sm:text-start">
-                    <div className="space-y-1 w-full min-w-0">
-                      <span className="text-slate-500 text-[10px] uppercase tracking-wider font-semibold block">
-                        {language === 'ar' ? 'عنوان الدفع (إنستاباي)' : 'InstaPay VPA Address'}
-                      </span>
-                      <p className="text-sm sm:text-base font-black text-white font-mono select-all truncate max-w-full sm:max-w-none" dir="ltr">
-                        {displayInstapayAddress}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleCopy(displayInstapayAddress, 'instapay_address')}
-                      className="flex items-center justify-center gap-1.5 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-sm font-semibold py-3 px-5 rounded-xl transition-all active:scale-95 text-slate-350 flex-shrink-0 w-full sm:w-auto"
-                    >
-                      {copiedType === 'instapay_address' ? (
-                        <>
-                          <Check className="w-3.5 h-3.5 text-emerald-400" />
-                          <span className="text-emerald-400">{t('copied')}</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3.5 h-3.5 text-slate-400" />
-                          <span>{t('copy')}</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-
-                  {/* Open App Button on Mobile */}
-                  <a
-                    href="instapay://"
-                    className="lg:hidden w-full max-w-sm flex items-center justify-center gap-2 bg-slate-900 border border-slate-850 hover:bg-slate-800 text-white font-bold py-3.5 px-6 rounded-xl transition-all text-center text-sm cursor-pointer active:scale-[0.98]"
-                  >
-                    <span>{t('open_instapay_app')}</span>
-                    <span className="text-xs">⚡</span>
-                  </a>
-
-                  {/* QR Code Container */}
-                  <div className="w-full max-w-sm bg-slate-950/60 p-5 rounded-xl border border-slate-900 flex flex-col items-center text-center space-y-4">
-                    <div className="w-44 h-44 bg-white p-2.5 rounded-xl border border-slate-800 flex items-center justify-center overflow-hidden">
-                      <img
-                        src={INSTAPAY_QR_URL || instapayQRUrl}
-                        alt="InstaPay QR Code"
-                        className="w-full h-full object-contain"
-                        onError={(e) => {
-                          e.currentTarget.style.display = 'none';
-                        }}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <h4 className="text-white font-bold text-xs">{t('qr_title')}</h4>
-                      <p className="text-slate-400 text-[10px] max-w-[250px] leading-relaxed mx-auto">
-                        {language === 'ar'
-                          ? 'امسح الرمز ضوئياً عبر تطبيق إنستاباي لتجهيز معاملة التبرع مباشرة'
-                          : 'Scan the QR code in the InstaPay app to set up your transaction.'}
-                      </p>
-                      <div className="inline-block mt-2 px-3 py-0.5 bg-emerald-950/40 border border-emerald-900/30 rounded-lg text-emerald-400 text-[10px] font-bold">
-                        {amount || '0'} EGP
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
 
-            {/* Donation Submit Form */}
-            <div className="glass-panel rounded-2xl p-6 relative overflow-hidden">
-              {submitSuccess ? (
-                <div className="text-center py-10 space-y-4 animate-scale-up">
-                  <div className="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500 flex items-center justify-center mx-auto">
-                    <CheckCircle2 className="w-8 h-8 text-emerald-400" />
-                  </div>
-                  <h3 className="text-2xl font-extrabold text-white">{t('success_title')}</h3>
-                  <p className="text-slate-400 text-sm leading-relaxed max-w-md mx-auto">
-                    {t('success_desc')}
-                  </p>
+          </div>
+        </section>
 
-                  {/* Real-time Tracking Status for the donation just submitted */}
-                  {trackedDonations.length > 0 && (
-                    <div className="mt-6 border-t border-slate-800/80 pt-6 text-start space-y-3 max-w-md mx-auto">
-                      <div className="flex items-center justify-between">
-                        <h4 className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse glow-green" />
-                          <span>{language === 'ar' ? 'تتبع حالة تبرعك الحالي:' : 'Live Donation Tracking:'}</span>
-                        </h4>
-                        {lastTrackedUpdate && (
-                          <span className="text-[10px] text-slate-500 font-medium">
-                            {t('track_last_updated')}: {lastTrackedUpdate.toLocaleTimeString()}
-                          </span>
-                        )}
-                      </div>
+        {/* ======================================================== */}
+        {/* 5. DONATION SECTION — DYNAMIC PAYMENT CHANNELS           */}
+        {/* ======================================================== */}
+        <section id="donate" className="py-16 md:py-24 border-b border-[#EAE8DE] dark:border-[#283849] bg-white dark:bg-[#111C2D] transition-colors">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
+            
+            <div className="max-w-3xl mx-auto text-center space-y-3">
+              <span className="inline-block text-xs font-bold uppercase tracking-wider text-[#B79B68] dark:text-[#C5A876]">
+                {language === 'ar' ? 'المساهمة المباشرة' : 'Direct Contribution'}
+              </span>
+              <h2 className="text-3xl sm:text-4xl font-extrabold text-[#153C32] dark:text-[#F3F5F4]">
+                {t('form_title')}
+              </h2>
+              <p className="text-sm text-[#55625B] dark:text-[#A7B4B0] leading-relaxed">
+                {t('form_subtitle')}
+              </p>
+            </div>
 
-                      <div className="space-y-2.5 max-h-[220px] overflow-y-auto pr-1">
-                        {trackedDonations.map((d) => (
-                          <div key={d.id} className="p-3 bg-slate-950/60 border border-slate-900 rounded-xl text-xs space-y-2">
-                            <div className="flex justify-between items-center">
-                              <span className="font-bold text-white text-sm">{d.amount} {t('egp')}</span>
-                              <span className="text-slate-500 text-[10px]">
-                                {new Date(d.created_at).toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US')}
-                              </span>
-                            </div>
-                            <div className="flex justify-between items-center text-[11px]">
-                              <span className="text-slate-400 font-semibold">
-                                {d.payment_method === 'vodafone_cash' ? (
-                                  <span className="inline-flex items-center gap-1 text-red-500 font-bold">
-                                    <img src="/vf_Logo.png" alt="Vodafone Cash" className="w-3.5 h-3.5 object-contain bg-white rounded-full p-0.5" />
-                                    <span>{t('vfc_label')}</span>
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1 text-violet-400 font-bold">
-                                    <img src="/InstaPay_Logo.png" alt="InstaPay" className="w-3.5 h-3.5 object-contain bg-white rounded p-0.5" />
-                                    <span>{t('instapay_label')}</span>
-                                  </span>
-                                )}
-                              </span>
+            {/* Check if any payment method is active */}
+            {activeMethods.length === 0 ? (
+              <div className="max-w-lg mx-auto p-8 rounded-3xl bg-[#FAF9F5] dark:bg-[#172436] border border-[#DDD9CC] dark:border-[#283849] text-center space-y-3">
+                <AlertCircle className="w-10 h-10 text-[#B79B68] mx-auto" />
+                <h3 className="font-bold text-base text-[#191F1C] dark:text-[#F3F5F4]">
+                  {language === 'ar' ? 'وسائل التبرع معطلة مؤقتًا' : 'Donations Temporarily Unavailable'}
+                </h3>
+                <p className="text-xs text-[#738079] dark:text-[#A7B4B0] leading-relaxed">
+                  {language === 'ar' ? 'يقوم مسؤولو الدفعة حاليًا بتحديث حسابات التحويل. يرجى مراجعة الصفحة لاحقًا.' : 'The coordinators are currently updating payment accounts. Please check back shortly.'}
+                </p>
+              </div>
+            ) : (
+              <div className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                
+                {/* Dynamic Payment Channels (col-span-5) */}
+                <div className="lg:col-span-5 space-y-6">
+                  
+                  <div className="p-6 rounded-3xl bg-[#FAF9F5] dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-subtle space-y-6">
+                    <div>
+                      <h3 className="font-extrabold text-lg text-[#153C32] dark:text-[#F3F5F4]">
+                        {t('payment_inst_title')}
+                      </h3>
+                      <p className="text-xs text-[#738079] dark:text-[#A7B4B0] mt-1">
+                        {t('payment_inst_sub')}
+                      </p>
+                    </div>
 
-                              {/* Badge Status */}
-                              {d.status === 'pending' && (
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-900 border border-slate-800 text-slate-400 flex items-center gap-1 animate-pulse">
-                                  <Loader2 className="w-3 h-3 animate-spin text-emerald-450" />
-                                  <span>{t('track_status_pending')}</span>
-                                </span>
-                              )}
-                              {(d.status === 'auto_verified' || d.status === 'manual_verified') && (
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950/60 border border-emerald-900/40 text-emerald-400 flex items-center gap-1">
-                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 fill-transparent" />
-                                    <span>{t('track_status_verified')}</span>
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleReceiptClick(d)}
-                                    className="px-2.5 py-1 rounded bg-slate-900 border border-slate-800 hover:bg-slate-800 text-[10px] font-bold text-emerald-400 flex items-center gap-1 cursor-pointer active:scale-95 transition-all"
-                                  >
-                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                                    </svg>
-                                    <span>{language === 'ar' ? 'عرض الفاتورة' : 'View Receipt'}</span>
-                                  </button>
-                                </div>
-                              )}
-                              {d.status === 'rejected' && (
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-950/30 border border-red-900/20 text-red-300 flex items-center gap-1">
-                                  <AlertCircle className="w-3 h-3 text-red-400" />
-                                  <span>{t('track_status_rejected')}</span>
-                                </span>
-                              )}
-                              {d.status === 'refunded' && (
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-yellow-950/30 border border-yellow-900/20 text-yellow-300 flex items-center gap-1">
-                                  <AlertCircle className="w-3 h-3 text-yellow-400" />
-                                  <span>{t('track_status_refunded')}</span>
-                                </span>
-                              )}
-                            </div>
-                          </div>
+                    {/* Method Selector Tabs (Only show if multiple active methods) */}
+                    {activeMethods.length > 1 && (
+                      <div className="grid grid-cols-2 gap-2 p-1 bg-[#EAE8DE] dark:bg-[#111C2D] rounded-xl text-xs font-bold">
+                        {activeMethods.map(m => (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => setPaymentMethod(m.method_key as PaymentMethod)}
+                            className={`py-2.5 px-3 rounded-lg transition-all ${
+                              paymentMethod === m.method_key
+                                ? 'bg-white dark:bg-[#172436] text-[#153C32] dark:text-[#24B58A] shadow-subtle'
+                                : 'text-[#738079] dark:text-[#A7B4B0] hover:text-[#191F1C]'
+                            }`}
+                          >
+                            {language === 'ar' ? m.display_name_ar : m.display_name}
+                          </button>
                         ))}
                       </div>
-                    </div>
-                  )}
-
-                  <button
-                    onClick={() => setSubmitSuccess(false)}
-                    className="mt-6 px-6 py-2.5 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-sm font-semibold rounded-xl text-white transition-colors"
-                  >
-                    {language === 'ar' ? 'تقديم تبرع آخر' : 'Send Another Donation'}
-                  </button>
-                </div>
-              ) : (
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="space-y-1">
-                    <h3 className="text-lg font-bold text-white">{t('form_title')}</h3>
-                    <p className="text-slate-400 text-xs">{t('form_subtitle')}</p>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Name */}
-                    <div className="space-y-1.5">
-                      <label className="text-slate-300 text-xs font-semibold">{t('field_name')}</label>
-                      <input
-                        type="text"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        className={`w-full glass-input px-4 py-3 rounded-xl text-sm ${formErrors.name ? 'border-red-500' : ''}`}
-                        placeholder={language === 'ar' ? 'مثال: محمد أحمد' : 'e.g. John Doe'}
-                      />
-                      {formErrors.name && <span className="text-red-400 text-xs block">{formErrors.name}</span>}
-                    </div>
-
-                    {/* Phone */}
-                    <div className="space-y-1.5">
-                      <label className="text-slate-300 text-xs font-semibold">{t('field_phone')}</label>
-                      <input
-                        type="text"
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        className={`w-full glass-input px-4 py-3 rounded-xl text-sm ${formErrors.phone ? 'border-red-500' : ''}`}
-                        placeholder={language === 'ar' ? 'مثال: 01012345678' : 'e.g. 01012345678'}
-                        dir="ltr"
-                      />
-                      {formErrors.phone && <span className="text-red-400 text-xs block">{formErrors.phone}</span>}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Amount */}
-                    <div className="space-y-1.5">
-                      <label className="text-slate-300 text-xs font-semibold">{t('field_amount')}</label>
-                      <input
-                        type="number"
-                        value={amount}
-                        onChange={(e) => setAmount(e.target.value)}
-                        className={`w-full glass-input px-4 py-3 rounded-xl text-sm ${formErrors.amount ? 'border-red-500' : ''}`}
-                        placeholder="500"
-                        min="1"
-                      />
-                      {formErrors.amount && <span className="text-red-400 text-xs block">{formErrors.amount}</span>}
-                    </div>
-
-                    {/* Ref Number - Required */}
-                    <div className="space-y-1.5">
-                      <label className="text-slate-300 text-xs font-semibold flex items-center gap-1">
-                        {t('field_ref')}
-                        <span className="text-red-400">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={refNum}
-                        onChange={(e) => setRefNum(e.target.value)}
-                        className={`w-full glass-input px-4 py-3 rounded-xl text-sm ${formErrors.refNum ? 'border-red-500' : ''}`}
-                        placeholder={paymentMethod === 'vodafone_cash' ? 'مثال: 020493825433' : 'e.g. 4a36aa42'}
-                        dir="ltr"
-                      />
-                      {formErrors.refNum && <span className="text-red-400 text-xs block">{formErrors.refNum}</span>}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Last 4 digits */}
-                    <div className="space-y-1.5">
-                      <label className="text-slate-300 text-xs font-semibold">{t('field_digits')}</label>
-                      <input
-                        type="text"
-                        value={digits}
-                        onChange={(e) => setDigits(e.target.value)}
-                        maxLength={4}
-                        className="w-full glass-input px-4 py-3 rounded-xl text-sm"
-                        placeholder="e.g. 7425"
-                        dir="ltr"
-                      />
-                    </div>
-
-                    {/* Screenshot File Upload - Required */}
-                    <div className="space-y-1.5">
-                      <label className="text-slate-300 text-xs font-semibold flex items-center gap-1">
-                        {t('field_screenshot')}
-                        <span className="text-red-400">*</span>
-                      </label>
-                      <div className={`relative w-full h-[46px] rounded-xl glass-input border border-dashed hover:border-emerald-500 flex items-center justify-center transition-colors overflow-hidden ${formErrors.screenshot ? 'border-red-500' : 'border-slate-700'}`}>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => setScreenshot(e.target.files?.[0] || null)}
-                          className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                        />
-                        <div className="flex items-center gap-2 text-slate-400 text-xs">
-                          <ImageIcon className={`w-4 h-4 ${screenshot ? 'text-emerald-400' : formErrors.screenshot ? 'text-red-400' : 'text-emerald-400'}`} />
-                          <span className={screenshot ? 'text-emerald-400' : ''}>{screenshot ? screenshot.name : (language === 'ar' ? 'اختر صورة من جهازك' : 'Choose screenshot file')}</span>
-                        </div>
-                      </div>
-                      {formErrors.screenshot && <span className="text-red-400 text-xs block">{formErrors.screenshot}</span>}
-                    </div>
-                  </div>
-
-                  {/* Notes */}
-                  <div className="space-y-1.5">
-                    <label className="text-slate-300 text-xs font-semibold">{t('field_notes')}</label>
-                    <textarea
-                      value={notes}
-                      onChange={(e) => setNotes(e.target.value)}
-                      rows={2}
-                      className="w-full glass-input px-4 py-3 rounded-xl text-sm resize-none"
-                      placeholder={language === 'ar' ? 'دعاء أو كلمة شكر أو توجيه خاص بالحملة...' : 'Prayer, note, or dedication...'}
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="w-full bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 font-extrabold text-sm py-4 rounded-xl shadow-lg shadow-emerald-500/20 hover:brightness-105 active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:pointer-events-none"
-                  >
-                    <Heart className="w-4 h-4 fill-slate-950" />
-                    <span>{isSubmitting ? t('submitting') : t('btn_submit')}</span>
-                  </button>
-                </form>
-              )}
-            </div>
-          </div>
-
-          {/* RIGHT: TRANSPARENCY LIVE METRICS */}
-          <div className={`lg:col-span-5 space-y-6 ${activeMobileTab === 'ledger' ? 'block' : 'hidden lg:block'}`}>
-            <div className="glass-panel rounded-2xl p-6 space-y-6 relative overflow-hidden">
-              <div className="absolute -top-12 -right-12 w-24 h-24 bg-teal-500/10 rounded-full blur-xl pointer-events-none" />
-
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                    <TrendingUp className="w-5 h-5 text-emerald-400" />
-                    {t('transparency_title')}
-                  </h3>
-                  <div className="flex items-center gap-1.5 text-xs text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 glow-green" />
-                    <span>{language === 'ar' ? 'مباشر' : 'LIVE'}</span>
-                  </div>
-                </div>
-                <p className="text-slate-400 text-xs">{t('transparency_desc')}</p>
-              </div>
-
-              {/* KPI stats Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-
-                {/* Stat block: total received */}
-                <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-900">
-                  <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold">
-                    <Coins className="w-4 h-4 text-emerald-400" />
-                    <span>{t('stat_total_received')}</span>
-                  </div>
-                  <p className="text-lg font-black text-white mt-2">
-                    {(stats?.totalReceived ?? collectedVal).toLocaleString()} <span className="text-xs font-bold text-emerald-400">{t('egp')}</span>
-                  </p>
-                </div>
-
-                {/* Stat block: total approved donors */}
-                <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-900">
-                  <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold">
-                    <Users className="w-4 h-4 text-emerald-400" />
-                    <span>{t('stat_total_donors')}</span>
-                  </div>
-                  <p className="text-lg font-black text-white mt-2">
-                    {stats?.totalDonors ?? 0}
-                  </p>
-                </div>
-
-                {/* Stat block: approved count */}
-                <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-900">
-                  <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                    <span>{t('stat_approved')}</span>
-                  </div>
-                  <p className="text-lg font-black text-white mt-2">
-                    {stats?.approvedCount ?? 0}
-                  </p>
-                </div>
-
-                {/* Stat block: pending count */}
-                <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-900">
-                  <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold">
-                    <Clock className="w-4 h-4 text-emerald-400" />
-                    <span>{t('stat_pending')}</span>
-                  </div>
-                  <p className="text-lg font-black text-white mt-2">
-                    {stats?.pendingCount ?? 0}
-                  </p>
-                </div>
-              </div>
-
-              {/* Largest and Latest indicators */}
-              <div className="space-y-3 pt-3 border-t border-slate-900">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-400 font-semibold">{t('stat_largest_donation')}</span>
-                  <span className="text-white font-extrabold">
-                    {(stats?.largestDonation ?? 0).toLocaleString()} {t('egp')}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-400 font-semibold">{t('stat_latest_donation')}</span>
-                  <span className="text-white font-bold" dir="ltr">
-                    {isMounted ? (
-                      stats?.latestTimestamp
-                        ? new Date(stats.latestTimestamp).toLocaleTimeString(language === 'ar' ? 'ar-EG' : 'en-US', { hour: '2-digit', minute: '2-digit' })
-                        : '—'
-                    ) : (
-                      '...'
                     )}
-                  </span>
-                </div>
-              </div>
-            </div>
 
-            {/* TRACK YOUR DONATION CARD */}
-            <div id="tracking-card" className="glass-panel rounded-2xl p-6 space-y-6 relative overflow-hidden">
-              <div className="absolute -top-12 -left-12 w-24 h-24 bg-emerald-500/10 rounded-full blur-xl pointer-events-none" />
-
-              <div className="space-y-1">
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <Search className="w-5 h-5 text-emerald-400" />
-                  {t('track_title')}
-                </h3>
-                <p className="text-slate-400 text-xs">{t('track_desc')}</p>
-              </div>
-
-              {/* Form to query by transaction ref */}
-              <form onSubmit={handleTrackByRef} className="flex gap-2">
-                <div className="relative flex-1">
-                  <input
-                    type="text"
-                    value={trackingRef}
-                    onChange={(e) => setTrackingRef(e.target.value)}
-                    placeholder={language === 'ar' ? 'أدخل رقم العملية (مثال: 020493825433)' : 'Enter transaction ref (e.g. 020493825433)'}
-                    className="w-full glass-input px-3 py-2.5 rounded-xl text-xs"
-                    dir="ltr"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  disabled={isTrackingLoading || !trackingRef.trim()}
-                  className="px-4 py-2.5 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-xs font-bold rounded-xl text-white transition-all disabled:opacity-50"
-                >
-                  {isTrackingLoading ? (
-                    <Loader2 className="w-4 h-4 animate-spin text-emerald-450" />
-                  ) : (
-                    t('track_btn')
-                  )}
-                </button>
-              </form>
-
-              {trackingError && (
-                <div className="p-3 bg-red-950/20 border border-red-900/20 text-red-300 text-xs rounded-xl flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
-                  <span>{trackingError}</span>
-                </div>
-              )}
-
-              {/* Live list of tracked donations */}
-              {trackedDonations.length > 0 && (
-                <div className="space-y-3 pt-3 border-t border-slate-900">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-300">{t('track_my_donations')}</span>
-                    <button
-                      onClick={handleClearTracking}
-                      className="text-[10px] text-red-400 hover:underline flex items-center gap-1"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                      <span>{language === 'ar' ? 'مسح السجل' : 'Clear'}</span>
-                    </button>
-                  </div>
-
-                  <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
-                    {trackedDonations.map((d) => (
-                      <div key={d.id} className="p-3 bg-slate-950/55 border border-slate-900/80 rounded-xl text-xs space-y-2">
-                        <div className="flex justify-between items-center">
-                          <span className="font-bold text-white">{d.amount} {t('egp')}</span>
-                          <span className="text-slate-500 text-[10px]">
-                            {new Date(d.created_at).toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US')}
-                          </span>
-                        </div>
-                        <div className="flex justify-between items-center text-[11px]">
-                          <span className="text-slate-400 font-semibold capitalize">
-                            {d.payment_method === 'vodafone_cash' ? (
-                              <span className="inline-flex items-center gap-1">
-                                <img src="/vf_Logo.png" alt="Vodafone Cash" className="w-3.5 h-3.5 object-contain bg-white rounded-full p-0.5" />
-                                {t('vfc_label')}
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1">
-                                <img src="/InstaPay_Logo.png" alt="InstaPay" className="w-3.5 h-3.5 object-contain bg-white rounded p-0.5" />
-                                {t('instapay_label')}
-                              </span>
-                            )}
-                          </span>
-
-                          {/* Badge Status */}
-                          {d.status === 'pending' && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-900 border border-slate-800 text-slate-400 flex items-center gap-1 animate-pulse">
-                              <Loader2 className="w-3 h-3 animate-spin text-emerald-450" />
-                              <span>{t('track_status_pending')}</span>
+                    {/* VODAFONE CASH WALLETS (Dynamic Unlimited List with Shuffle on Refresh) */}
+                    {paymentMethod === 'vodafone_cash' && activeVfcMethod && (
+                      <div className="space-y-3 animate-fadeIn">
+                        
+                        {(shuffledWallets.length > 0 ? shuffledWallets : (activeVfcMethod.wallets || [])).map((w, idx) => (
+                          <div key={w.id} className="p-4 rounded-2xl bg-white dark:bg-[#111C2D] border border-[#DDD9CC] dark:border-[#283849] space-y-2">
+                            <span className="text-xs font-semibold text-[#738079] dark:text-[#A7B4B0] block">
+                              {w.label}
                             </span>
-                          )}
-                          {(d.status === 'auto_verified' || d.status === 'manual_verified') && (
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950/60 border border-emerald-900/40 text-emerald-400 flex items-center gap-1">
-                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 fill-transparent" />
-                                <span>{t('track_status_verified')}</span>
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="font-mono text-lg font-bold text-[#153C32] dark:text-[#24B58A] tracking-wider" dir="ltr">
+                                {w.phone_number}
                               </span>
                               <button
                                 type="button"
-                                onClick={() => handleReceiptClick(d)}
-                                className="px-2.5 py-1 rounded bg-slate-900 border border-slate-800 hover:bg-slate-800 text-[10px] font-bold text-emerald-400 flex items-center gap-1 cursor-pointer active:scale-95 transition-all"
+                                onClick={() => handleCopy(w.phone_number, w.id)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#FAF9F5] dark:bg-[#172436] border border-[#DDD9CC] dark:border-[#283849] text-xs font-bold text-[#153C32] dark:text-[#24B58A] hover:bg-[#F4F3ED]"
                               >
-                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                                </svg>
-                                <span>{language === 'ar' ? 'عرض الفاتورة' : 'View Receipt'}</span>
+                                {copiedKey === w.id ? (
+                                  <>
+                                    <Check className="w-3.5 h-3.5 text-green-600" />
+                                    <span>{t('copied')}</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy className="w-3.5 h-3.5" />
+                                    <span>{t('copy')}</span>
+                                  </>
+                                )}
                               </button>
                             </div>
-                          )}
-                          {d.status === 'rejected' && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-950/30 border border-red-900/20 text-red-300 flex items-center gap-1">
-                              <AlertCircle className="w-3 h-3 text-red-400" />
-                              <span>{t('track_status_rejected')}</span>
+                          </div>
+                        ))}
+
+                        <div className="text-xs text-[#738079] dark:text-[#A7B4B0] leading-relaxed pt-2">
+                          {language === 'ar'
+                            ? '• يرجى التحويل كـ (تحويل أموال فودافون كاش) لأي من الأرقام أعلاه، ثم نسخ رقم العملية من الرسالة لتأكيد التوثيق.'
+                            : '• Please transfer as Vodafone Cash funds to any of the numbers above, then copy the reference from your SMS.'}
+                        </div>
+
+                      </div>
+                    )}
+
+                    {/* INSTAPAY DETAILS */}
+                    {paymentMethod === 'instapay' && activeIpnMethod && (
+                      <div className="space-y-4 animate-fadeIn">
+                        
+                        {/* IPA Address */}
+                        {activeIpnMethod.configuration?.instapay_address && (
+                          <div className="p-4 rounded-2xl bg-white dark:bg-[#111C2D] border border-[#DDD9CC] dark:border-[#283849] space-y-2">
+                            <span className="text-xs font-semibold text-[#738079] dark:text-[#A7B4B0] block">
+                              {t('instapay_acc')}
                             </span>
-                          )}
-                          {d.status === 'refunded' && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-yellow-950/30 border border-yellow-900/20 text-yellow-300 flex items-center gap-1">
-                              <AlertCircle className="w-3 h-3 text-yellow-400" />
-                              <span>{t('track_status_refunded')}</span>
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="font-mono text-sm sm:text-base font-bold text-[#153C32] dark:text-[#24B58A] break-all" dir="ltr">
+                                {activeIpnMethod.configuration.instapay_address}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleCopy(activeIpnMethod.configuration?.instapay_address, 'ipa')}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#FAF9F5] dark:bg-[#172436] border border-[#DDD9CC] dark:border-[#283849] text-xs font-bold text-[#153C32] dark:text-[#24B58A]"
+                              >
+                                {copiedKey === 'ipa' ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* QR preview */}
+                        {activeIpnMethod.configuration?.instapay_qr_url && (
+                          <div className="p-4 rounded-2xl bg-white dark:bg-[#111C2D] border border-[#DDD9CC] dark:border-[#283849] text-center space-y-2">
+                            <span className="text-xs font-semibold text-[#738079] dark:text-[#A7B4B0] block">
+                              {t('scan_qr')}
                             </span>
+                            <img
+                              src={activeIpnMethod.configuration.instapay_qr_url}
+                              alt="InstaPay QR"
+                              className="w-36 h-36 mx-auto object-contain rounded-xl border border-[#EAE8DE] p-1 bg-white"
+                            />
+                          </div>
+                        )}
+
+                        {/* Direct Payment Link */}
+                        {activeIpnMethod.configuration?.instapay_payment_link && (
+                          <a
+                            href={activeIpnMethod.configuration.instapay_payment_link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-white dark:bg-[#111C2D] border border-[#DDD9CC] dark:border-[#283849] text-xs font-bold text-[#153C32] dark:text-[#24B58A] hover:bg-[#F4F3ED]"
+                          >
+                            <ExternalLink className="w-4 h-4 text-[#217A61]" />
+                            <span>{t('open_instapay_app')}</span>
+                          </a>
+                        )}
+
+                      </div>
+                    )}
+
+                  </div>
+
+                </div>
+
+                {/* Donation Form Container (col-span-7) */}
+                <div className="lg:col-span-7">
+                  
+                  {submittedDonation ? (
+                    <div className="p-8 sm:p-10 rounded-3xl bg-white dark:bg-[#172436] border border-[#217A61]/30 dark:border-[#24B58A]/30 shadow-editorial text-center space-y-6 animate-fadeIn">
+                      <div className="w-16 h-16 rounded-2xl bg-[#F0F9F6] dark:bg-[#111C2D] border border-[#217A61]/30 dark:border-[#24B58A]/30 mx-auto flex items-center justify-center text-[#217A61] dark:text-[#24B58A]">
+                        <CheckCircle2 className="w-8 h-8" />
+                      </div>
+
+                      <div className="space-y-2">
+                        <h3 className="text-2xl font-black text-[#153C32] dark:text-[#24B58A]">
+                          {t('success_title')}
+                        </h3>
+                        <p className="text-sm text-[#55625B] dark:text-[#A7B4B0] leading-relaxed max-w-md mx-auto">
+                          {t('success_desc')}
+                        </p>
+                      </div>
+
+                      <div className="p-4 rounded-2xl bg-[#FAF9F5] dark:bg-[#111C2D] border border-[#EAE8DE] dark:border-[#283849] text-sm space-y-2 max-w-sm mx-auto text-start">
+                        <div className="flex justify-between">
+                          <span className="text-[#738079] dark:text-[#A7B4B0]">{t('field_name')}:</span>
+                          <span className="font-bold text-[#191F1C] dark:text-[#F3F5F4]">{submittedDonation.name}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-[#738079] dark:text-[#A7B4B0]">{t('field_amount')}:</span>
+                          <span className="font-bold text-[#153C32] dark:text-[#24B58A]">{submittedDonation.amount.toLocaleString('en-US')} {t('egp')}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-[#738079] dark:text-[#A7B4B0]">{t('field_ref')}:</span>
+                          <span className="font-mono text-xs font-bold text-[#191F1C] dark:text-[#F3F5F4]">{submittedDonation.ref}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => handleGenerateReceiptPdf(submittedDonation)}
+                          disabled={isGeneratingPdf}
+                          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-[#153C32] dark:bg-[#24B58A] text-white dark:text-[#0B1220] text-xs font-bold hover:bg-[#1C4E41]"
+                        >
+                          {isGeneratingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+                          <span>{t('receipt_btn')}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setSubmittedDonation(null)}
+                          className="w-full sm:w-auto px-6 py-3 rounded-xl bg-white dark:bg-[#111C2D] border border-[#DDD9CC] dark:border-[#283849] text-xs font-semibold text-[#3D4742] dark:text-[#F3F5F4]"
+                        >
+                          {t('new_submission_btn')}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <form onSubmit={handleSubmitDonation} className="p-6 sm:p-10 rounded-3xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-editorial space-y-6">
+                      
+                      {/* Amount Preset Chips */}
+                      <div className="space-y-2.5">
+                        <label className="block text-xs font-bold text-[#191F1C] dark:text-[#F3F5F4]">
+                          {t('select_amount')}
+                        </label>
+                        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                          {PRESET_AMOUNTS.map(preset => (
+                            <button
+                              key={preset}
+                              type="button"
+                              onClick={() => handleSelectPreset(preset)}
+                              className={`py-2.5 px-2 rounded-xl text-xs font-bold border transition-all ${
+                                selectedPreset === preset
+                                  ? 'bg-[#153C32] dark:bg-[#24B58A] text-white dark:text-[#0B1220] border-[#153C32] dark:border-[#24B58A] shadow-subtle'
+                                  : 'bg-[#FAF9F5] dark:bg-[#111C2D] text-[#3D4742] dark:text-[#F3F5F4] border-[#DDD9CC] dark:border-[#283849] hover:bg-[#F4F3ED]'
+                              }`}
+                            >
+                              {preset}
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="pt-1">
+                          <div className="relative">
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={amount}
+                              onChange={handleCustomAmountChange}
+                              placeholder="500"
+                              className={`w-full py-3 px-4 rounded-xl bg-[#FAF9F5] dark:bg-[#111C2D] border text-sm font-bold text-[#153C32] dark:text-[#24B58A] focus:outline-none ${
+                                formErrors.amount ? 'border-red-400' : 'border-[#DDD9CC] dark:border-[#283849]'
+                              }`}
+                            />
+                            <span className="absolute inset-y-0 end-4 flex items-center text-xs font-bold text-[#738079] dark:text-[#A7B4B0]">
+                              {t('egp')}
+                            </span>
+                          </div>
+                          {formErrors.amount && (
+                            <p className="text-xs text-red-600 dark:text-red-400 mt-1">{formErrors.amount}</p>
                           )}
                         </div>
                       </div>
-                    ))}
-                  </div>
 
-                  {lastTrackedUpdate && (
-                    <p className="text-[10px] text-slate-500 text-end">
-                      {t('track_last_updated')}: {lastTrackedUpdate.toLocaleTimeString()}
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
+                      {/* Donor Name & Phone */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="block text-xs font-bold text-[#191F1C] dark:text-[#F3F5F4]">
+                            {t('field_name')} <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={name}
+                            onChange={e => {
+                              setName(e.target.value);
+                              if (formErrors.name) setFormErrors(prev => ({ ...prev, name: '' }));
+                            }}
+                            placeholder={t('field_name_placeholder')}
+                            className={`w-full py-2.5 px-3.5 rounded-xl bg-[#FAF9F5] dark:bg-[#111C2D] border text-sm text-[#191F1C] dark:text-[#F3F5F4] focus:outline-none ${
+                              formErrors.name ? 'border-red-400' : 'border-[#DDD9CC] dark:border-[#283849]'
+                            }`}
+                          />
+                          {formErrors.name && (
+                            <p className="text-xs text-red-600 dark:text-red-400">{formErrors.name}</p>
+                          )}
+                        </div>
 
+                        <div className="space-y-1.5">
+                          <label className="block text-xs font-bold text-[#191F1C] dark:text-[#F3F5F4]">
+                            {t('field_phone')} <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="tel"
+                            inputMode="tel"
+                            value={phone}
+                            onChange={e => {
+                              setPhone(e.target.value);
+                              if (formErrors.phone) setFormErrors(prev => ({ ...prev, phone: '' }));
+                            }}
+                            placeholder={t('field_phone_placeholder')}
+                            dir="ltr"
+                            className={`w-full py-2.5 px-3.5 rounded-xl bg-[#FAF9F5] dark:bg-[#111C2D] border text-sm text-[#191F1C] dark:text-[#F3F5F4] focus:outline-none ${
+                              formErrors.phone ? 'border-red-400' : 'border-[#DDD9CC] dark:border-[#283849]'
+                            }`}
+                          />
+                          {formErrors.phone && (
+                            <p className="text-xs text-red-600 dark:text-red-400">{formErrors.phone}</p>
+                          )}
+                        </div>
+                      </div>
 
-
-          </div>
-
-        </div>
-
-        {/* VERIFIED DONOR REGISTRY LEDGER */}
-        <div className={`glass-panel rounded-3xl p-6 md:p-8 space-y-6 ${activeMobileTab === 'ledger' ? 'block' : 'hidden lg:block'}`}>
-          <div className="space-y-2">
-            <h3 className="text-lg font-bold text-white flex items-center gap-2">
-              <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-              {language === 'ar' ? 'سجل المتبرعين الموثقين (الشفافية الكاملة)' : 'Verified Donors Live Ledger (Full Transparency)'}
-            </h3>
-            <p className="text-slate-400 text-xs leading-relaxed">
-              {language === 'ar'
-                ? 'سجل حي ومباشر للمدفوعات المعتمدة من واقع قاعدة البيانات لضمان الشفافية بنسبة 100%. يتم إخفاء أرقام الهواتف والأسماء لحماية الخصوصية.'
-                : 'Live log of verified donation payments connected to our ledger. Personal numbers and names are masked to respect privacy.'}
-            </p>
-          </div>
-
-          <div className="overflow-x-auto rounded-xl border border-slate-900 bg-slate-950/40 max-h-[350px] overflow-y-auto">
-            {/* Desktop Table View */}
-            <table className="w-full text-start border-collapse hidden md:table">
-              <thead>
-                <tr className="border-b border-slate-900 bg-slate-900/80 text-slate-400 text-xs font-bold sticky top-0 z-10">
-                  <th className="px-6 py-3.5 text-start sticky top-0 bg-slate-950/90 backdrop-blur-sm z-10">{language === 'ar' ? 'المتبرع' : 'Donor Name'}</th>
-                  <th className="px-6 py-3.5 text-start sticky top-0 bg-slate-950/90 backdrop-blur-sm z-10">{language === 'ar' ? 'رقم الهاتف' : 'Phone Number'}</th>
-                  <th className="px-6 py-3.5 text-start sticky top-0 bg-slate-950/90 backdrop-blur-sm z-10">{language === 'ar' ? 'المبلغ' : 'Amount'}</th>
-                  <th className="px-6 py-3.5 text-start sticky top-0 bg-slate-950/90 backdrop-blur-sm z-10">{language === 'ar' ? 'طريقة الدفع' : 'Payment Method'}</th>
-                  <th className="px-6 py-3.5 text-start sticky top-0 bg-slate-950/90 backdrop-blur-sm z-10">{language === 'ar' ? 'تاريخ التوثيق' : 'Verification Date'}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-900 text-xs text-slate-300">
-                {recentDonationsError ? (
-                  <tr>
-                    <td colSpan={5} className="text-center py-6 text-red-400 font-mono">
-                      Error: {(recentDonationsError as any).message || JSON.stringify(recentDonationsError)}
-                    </td>
-                  </tr>
-                ) : recentDonations && recentDonations.length > 0 ? (
-                  recentDonations.map((item) => (
-                    <tr key={item.id} className="hover:bg-slate-900/10 transition-colors">
-                      <td className="px-6 py-4 font-bold text-white">
-                        <bdi>{item.masked_name || t('anonymous')}</bdi>
-                      </td>
-                      <td className="px-6 py-4 font-mono text-slate-400">
-                        <span dir="ltr">{item.masked_phone || '—'}</span>
-                      </td>
-                      <td className="px-6 py-4 font-black text-emerald-400 text-sm">
-                        {item.amount} {t('egp')}
-                      </td>
-                      <td className="px-6 py-4 capitalize font-semibold">
-                        {item.payment_method === 'vodafone_cash' ? (
-                          <span className="inline-flex items-center gap-1.5 text-red-500 font-bold">
-                            <img src="/vf_Logo.png" alt="Vodafone Cash" className="w-5 h-5 object-contain rounded-full bg-white p-0.5" />
-                            <span>فودافون كاش</span>
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 text-violet-400 font-bold">
-                            <img src="/InstaPay_Logo.png" alt="InstaPay" className="w-5 h-5 object-contain rounded bg-white p-0.5" />
-                            <span>إنستاباي</span>
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-slate-500">
-                        {isMounted ? new Date(item.created_at).toLocaleString(language === 'ar' ? 'ar-EG' : 'en-US') : '...'}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={5} className="text-center py-6 text-slate-500">
-                      {language === 'ar' ? 'لا توجد تبرعات موثقة بعد.' : 'No verified donations found.'}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-
-            {/* Mobile Card List View */}
-            <div className="block md:hidden divide-y divide-slate-900/60 bg-slate-950/20">
-              {recentDonationsError ? (
-                <div className="text-center py-6 text-red-400 font-mono text-xs">
-                  Error: {(recentDonationsError as any).message || JSON.stringify(recentDonationsError)}
-                </div>
-              ) : recentDonations && recentDonations.length > 0 ? (
-                recentDonations.map((item) => (
-                  <div key={item.id} className="p-4 space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="font-bold text-white text-sm">
-                        <bdi>{item.masked_name || t('anonymous')}</bdi>
-                      </span>
-                      <span className="text-[10px] text-slate-500 font-mono" dir="ltr">
-                        {item.masked_phone || '—'}
-                      </span>
-                    </div>
-
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm font-black text-emerald-400">
-                        {item.amount} {t('egp')}
-                      </span>
-                      <div>
-                        {item.payment_method === 'vodafone_cash' ? (
-                          <span className="inline-flex items-center gap-1 text-[10px] text-red-500 font-bold bg-red-950/20 px-2.5 py-1 rounded-full border border-red-900/10">
-                            <img src="/vf_Logo.png" alt="Vodafone Cash" className="w-3.5 h-3.5 object-contain rounded-full bg-white p-0.5" />
-                            <span>فودافون كاش</span>
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-[10px] text-violet-400 font-bold bg-violet-950/20 px-2.5 py-1 rounded-full border border-violet-900/10">
-                            <img src="/InstaPay_Logo.png" alt="InstaPay" className="w-3.5 h-3.5 object-contain rounded bg-white p-0.5" />
-                            <span>إنستاباي</span>
-                          </span>
+                      {/* Transaction Reference (ID / Ref Number) */}
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-bold text-[#191F1C] dark:text-[#F3F5F4]">
+                          {t('field_ref')} <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={refNum}
+                          onChange={e => {
+                            setRefNum(e.target.value);
+                            if (formErrors.refNum) setFormErrors(prev => ({ ...prev, refNum: '' }));
+                          }}
+                          placeholder={t('field_ref_placeholder')}
+                          dir="ltr"
+                          className={`w-full py-2.5 px-3.5 rounded-xl bg-[#FAF9F5] dark:bg-[#111C2D] border text-sm font-mono text-[#191F1C] dark:text-[#F3F5F4] focus:outline-none ${
+                            formErrors.refNum ? 'border-red-400' : 'border-[#DDD9CC] dark:border-[#283849]'
+                          }`}
+                        />
+                        {formErrors.refNum && (
+                          <p className="text-xs text-red-600 dark:text-red-400">{formErrors.refNum}</p>
                         )}
                       </div>
-                    </div>
 
-                    <div className="flex justify-between items-center text-[10px] text-slate-500 pt-1.5 border-t border-slate-900/20">
-                      <span>{language === 'ar' ? 'تاريخ التوثيق:' : 'Verified at:'}</span>
-                      <span>
-                        {isMounted ? new Date(item.created_at).toLocaleString(language === 'ar' ? 'ar-EG' : 'en-US', { dateStyle: 'short', timeStyle: 'short' }) : '...'}
-                      </span>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="text-center py-8 text-xs text-slate-500">
-                  {language === 'ar' ? 'لا توجد تبرعات موثقة بعد.' : 'No verified donations found.'}
+                      {/* Screenshot Upload (Optional) */}
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-bold text-[#191F1C] dark:text-[#F3F5F4]">
+                          {t('field_screenshot')} <span className="text-xs font-normal text-[#738079] dark:text-[#A7B4B0]">({t('optional')})</span>
+                        </label>
+
+                        {screenshotPreview ? (
+                          <div className="relative inline-block border border-[#DDD9CC] dark:border-[#283849] rounded-xl overflow-hidden bg-[#FAF9F5] dark:bg-[#111C2D] p-2">
+                            <img
+                              src={screenshotPreview}
+                              alt="Screenshot Preview"
+                              className="max-h-36 max-w-full rounded-lg object-contain"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleScreenshotChange(null)}
+                              className="absolute top-3 end-3 p-1 rounded-full bg-red-600 text-white shadow-subtle hover:bg-red-700"
+                              title="إلغاء الصورة"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <label className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-[#DDD9CC] dark:border-[#283849] rounded-2xl bg-[#FAF9F5] dark:bg-[#111C2D] hover:bg-[#F4F3ED] dark:hover:bg-[#1f3047] cursor-pointer transition-colors text-center">
+                            <Upload className="w-7 h-7 text-[#738079] dark:text-[#A7B4B0] mb-2" />
+                            <span className="text-xs font-semibold text-[#153C32] dark:text-[#24B58A]">
+                              {t('drag_drop_screenshot')}
+                            </span>
+                            <span className="text-[11px] text-[#738079] dark:text-[#A7B4B0] mt-0.5">
+                              PNG, JPG, WEBP (حتى 5 ميجابايت)
+                            </span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={e => {
+                                if (e.target.files && e.target.files[0]) {
+                                  handleScreenshotChange(e.target.files[0]);
+                                }
+                              }}
+                              className="hidden"
+                            />
+                          </label>
+                        )}
+                      </div>
+
+                      {/* Prayer / Message Note */}
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-bold text-[#191F1C] dark:text-[#F3F5F4]">
+                          {t('field_notes')} <span className="text-xs font-normal text-[#738079] dark:text-[#A7B4B0]">({t('optional')})</span>
+                        </label>
+                        <textarea
+                          rows={2}
+                          value={notes}
+                          onChange={e => setNotes(e.target.value)}
+                          placeholder={t('field_notes_placeholder')}
+                          className="w-full py-2.5 px-3.5 rounded-xl bg-[#FAF9F5] dark:bg-[#111C2D] border border-[#DDD9CC] dark:border-[#283849] text-sm text-[#191F1C] dark:text-[#F3F5F4] focus:outline-none"
+                        />
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={isSubmitting}
+                        className="w-full py-4 rounded-xl bg-[#153C32] dark:bg-[#24B58A] text-white dark:text-[#0B1220] text-base font-bold shadow-elevated hover:bg-[#1C4E41] dark:hover:bg-[#1fa37b] disabled:opacity-70 transition-all flex items-center justify-center gap-2 transform active:scale-[0.99]"
+                      >
+                        {isSubmitting ? (
+                          <>
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                            <span>{t('submitting')}</span>
+                          </>
+                        ) : (
+                          <>
+                            <HeartHandshake className="w-5 h-5" />
+                            <span>{t('btn_submit')}</span>
+                          </>
+                        )}
+                      </button>
+
+                    </form>
+                  )}
+
                 </div>
+
+              </div>
+            )}
+
+          </div>
+        </section>
+
+        {/* ======================================================== */}
+        {/* 6. DONATION TRACKING SECTION                            */}
+        {/* ======================================================== */}
+        <section id="tracking" className="py-16 md:py-24 border-b border-[#EAE8DE] dark:border-[#283849] bg-[#FAF9F5] dark:bg-[#0B1220] transition-colors">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10">
+            
+            <div className="max-w-2xl mx-auto text-center space-y-3">
+              <span className="inline-block text-xs font-bold uppercase tracking-wider text-[#B79B68] dark:text-[#C5A876]">
+                {language === 'ar' ? 'التحقق والمتابعة' : 'Verification Status'}
+              </span>
+              <h2 className="text-3xl sm:text-4xl font-extrabold text-[#153C32] dark:text-[#F3F5F4]">
+                {t('track_title')}
+              </h2>
+              <p className="text-sm text-[#55625B] dark:text-[#A7B4B0] leading-relaxed">
+                {t('track_subtitle')}
+              </p>
+            </div>
+
+            <form onSubmit={handleTrackSubmit} className="max-w-xl mx-auto">
+              <div className="relative flex items-center">
+                <input
+                  type="text"
+                  value={trackingQuery}
+                  onChange={e => setTrackingQuery(e.target.value)}
+                  placeholder={t('track_input_placeholder')}
+                  className="w-full py-3.5 ps-4 pe-28 rounded-2xl bg-white dark:bg-[#172436] border border-[#DDD9CC] dark:border-[#283849] text-sm text-[#191F1C] dark:text-[#F3F5F4] shadow-subtle focus:outline-none"
+                />
+                <button
+                  type="submit"
+                  disabled={isTrackingLoading || !trackingQuery.trim()}
+                  className="absolute end-1.5 py-2 px-4 rounded-xl bg-[#153C32] dark:bg-[#24B58A] text-white dark:text-[#0B1220] text-xs font-bold hover:bg-[#1C4E41] disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                >
+                  {isTrackingLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                  <span>{t('track_btn')}</span>
+                </button>
+              </div>
+            </form>
+
+            {trackingSearched && (
+              <div className="max-w-2xl mx-auto space-y-4">
+                {trackedDonations.length === 0 ? (
+                  <div className="p-8 rounded-2xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] text-center text-sm text-[#738079] dark:text-[#A7B4B0]">
+                    <AlertCircle className="w-8 h-8 text-[#B79B68] mx-auto mb-2" />
+                    <span>{t('track_no_results')}</span>
+                  </div>
+                ) : (
+                  trackedDonations.map((d: any) => {
+                    const isVerified = d.status === 'auto_verified' || d.status === 'manual_verified';
+                    const isRejected = d.status === 'rejected';
+
+                    return (
+                      <div
+                        key={d.id}
+                        className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-subtle flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                      >
+                        <div className="space-y-1.5">
+                          <div className="flex items-center gap-2">
+                            <span className="font-extrabold text-lg text-[#153C32] dark:text-[#24B58A]">
+                              {Number(d.amount).toLocaleString('en-US')} {t('egp')}
+                            </span>
+                            <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-[#FAF9F5] dark:bg-[#111C2D] border border-[#DDD9CC] dark:border-[#283849] text-[#738079] dark:text-[#A7B4B0]">
+                              {d.payment_method === 'vodafone_cash' ? 'فودافون كاش' : 'InstaPay'}
+                            </span>
+                          </div>
+
+                          <div className="text-xs text-[#738079] dark:text-[#A7B4B0] space-x-2 rtl:space-x-reverse">
+                            <span suppressHydrationWarning>{new Date(d.created_at).toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                            {d.transaction_ref && (
+                              <span className="font-mono text-[#55625B] dark:text-[#A7B4B0]">Ref: {d.transaction_ref}</span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2.5">
+                          {isVerified ? (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#F0F9F6] dark:bg-[#24B58A]/10 border border-[#217A61]/30 dark:border-[#24B58A]/30 text-xs font-bold text-[#217A61] dark:text-[#24B58A]">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>{t('track_status_verified')}</span>
+                            </span>
+                          ) : isRejected ? (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/40 text-xs font-bold text-red-700 dark:text-red-300">
+                              <X className="w-3.5 h-3.5" />
+                              <span>{t('track_status_rejected')}</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/40 text-xs font-bold text-amber-800 dark:text-amber-300">
+                              <Clock className="w-3.5 h-3.5" />
+                              <span>{t('track_status_pending')}</span>
+                            </span>
+                          )}
+
+                          {isVerified && (
+                            <button
+                              type="button"
+                              onClick={() => handleGenerateReceiptPdf(d)}
+                              className="p-2 rounded-lg bg-[#FAF9F5] dark:bg-[#111C2D] border border-[#DDD9CC] dark:border-[#283849] text-[#153C32] dark:text-[#24B58A] hover:bg-[#F4F3ED]"
+                              title={t('receipt_btn')}
+                            >
+                              <FileText className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
+
+          </div>
+        </section>
+
+        {/* ======================================================== */}
+        {/* 7. DONOR TRANSPARENCY LEDGER                             */}
+        {/* ======================================================== */}
+        <section id="transparency" className="py-16 md:py-24 border-b border-[#EAE8DE] dark:border-[#283849] bg-white dark:bg-[#111C2D] transition-colors">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10">
+            
+            <div className="max-w-2xl mx-auto text-center space-y-3">
+              <span className="inline-block text-xs font-bold uppercase tracking-wider text-[#B79B68] dark:text-[#C5A876]">
+                {language === 'ar' ? 'سجل الشرف' : 'Public Ledger'}
+              </span>
+              <h2 className="text-3xl sm:text-4xl font-extrabold text-[#153C32] dark:text-[#F3F5F4]">
+                {t('transparency_title')}
+              </h2>
+              <p className="text-sm text-[#55625B] dark:text-[#A7B4B0] leading-relaxed">
+                {t('transparency_subtitle')}
+              </p>
+            </div>
+
+            {/* Desktop Table View */}
+            <div className="hidden sm:block max-w-4xl mx-auto bg-[#FAF9F5] dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] rounded-3xl overflow-hidden shadow-subtle">
+              <table className="w-full text-start text-xs sm:text-sm">
+                <thead>
+                  <tr className="border-b border-[#EAE8DE] dark:border-[#283849] bg-white dark:bg-[#111C2D] text-[#738079] dark:text-[#A7B4B0] font-bold">
+                    <th className="py-4 px-6 text-start">{t('col_donor')}</th>
+                    <th className="py-4 px-6 text-start">{t('col_amount')}</th>
+                    <th className="py-4 px-6 text-start">{t('col_method')}</th>
+                    <th className="py-4 px-6 text-start">{t('col_date')}</th>
+                    <th className="py-4 px-6 text-end">{t('col_status')}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#EAE8DE] dark:divide-[#283849]">
+                  {isDonationsLoading ? (
+                    <tr>
+                      <td colSpan={5} className="py-12 text-center text-[#738079] dark:text-[#A7B4B0]">
+                        <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-[#153C32] dark:text-[#24B58A]" />
+                        <span>{t('loading')}</span>
+                      </td>
+                    </tr>
+                  ) : donationsList.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-12 text-center text-[#738079] dark:text-[#A7B4B0]">
+                        {language === 'ar' ? 'لا توجد مساهمات موثقة حتى الآن. كن أول المساهمين!' : 'No verified gifts recorded yet.'}
+                      </td>
+                    </tr>
+                  ) : (
+                    donationsList.slice(0, 15).map((d: any) => {
+                      const rawName = d.donor?.name || 'فاعل خير';
+                      let maskedName = 'فاعل خير';
+                      if (rawName && rawName !== 'فاعل خير') {
+                        const parts = rawName.trim().split(' ');
+                        if (parts.length === 1) {
+                          maskedName = parts[0].substring(0, 3) + '...';
+                        } else {
+                          maskedName = `${parts[0]} ${parts[1].charAt(0)}.`;
+                        }
+                      }
+
+                      return (
+                        <tr key={d.id} className="hover:bg-white dark:hover:bg-[#111C2D] transition-colors">
+                          <td className="py-4 px-6 font-bold text-[#191F1C] dark:text-[#F3F5F4]">
+                            {maskedName}
+                          </td>
+                          <td className="py-4 px-6 font-extrabold text-[#153C32] dark:text-[#24B58A]">
+                            {Number(d.amount).toLocaleString('en-US')} {t('egp')}
+                          </td>
+                          <td className="py-4 px-6 text-[#738079] dark:text-[#A7B4B0]">
+                            {d.payment_method === 'vodafone_cash' ? 'فودافون كاش' : 'InstaPay'}
+                          </td>
+                          <td className="py-4 px-6 text-[#738079] dark:text-[#A7B4B0] text-xs" suppressHydrationWarning>
+                            {new Date(d.created_at).toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US', { month: 'short', day: 'numeric' })}
+                          </td>
+                          <td className="py-4 px-6 text-end">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#F0F9F6] dark:bg-[#24B58A]/10 text-[#217A61] dark:text-[#24B58A] text-xs font-bold border border-[#217A61]/20 dark:border-[#24B58A]/20">
+                              <Check className="w-3 h-3" />
+                              <span>{t('verified_badge')}</span>
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Compact Cards View */}
+            <div className="sm:hidden space-y-3">
+              {isDonationsLoading ? (
+                <div className="py-10 text-center text-[#738079]">
+                  <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-[#153C32] dark:text-[#24B58A]" />
+                  <span>{t('loading')}</span>
+                </div>
+              ) : donationsList.length === 0 ? (
+                <div className="p-6 rounded-2xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] text-center text-xs text-[#738079] dark:text-[#A7B4B0]">
+                  {language === 'ar' ? 'لا توجد مساهمات موثقة حتى الآن. كن أول المساهمين!' : 'No verified gifts recorded yet.'}
+                </div>
+              ) : (
+                donationsList.slice(0, 15).map((d: any) => {
+                  const rawName = d.donor?.name || 'فاعل خير';
+                  let maskedName = 'فاعل خير';
+                  if (rawName && rawName !== 'فاعل خير') {
+                    const parts = rawName.trim().split(' ');
+                    if (parts.length === 1) {
+                      maskedName = parts[0].substring(0, 3) + '...';
+                    } else {
+                      maskedName = `${parts[0]} ${parts[1].charAt(0)}.`;
+                    }
+                  }
+
+                  return (
+                    <div
+                      key={d.id}
+                      className="p-4 rounded-2xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-subtle flex items-center justify-between gap-3"
+                    >
+                      <div className="space-y-0.5">
+                        <span className="font-bold text-sm text-[#191F1C] dark:text-[#F3F5F4] block">
+                          {maskedName}
+                        </span>
+                        <div className="flex items-center gap-2 text-xs text-[#738079] dark:text-[#A7B4B0]">
+                          <span>{d.payment_method === 'vodafone_cash' ? 'فودافون كاش' : 'InstaPay'}</span>
+                          <span>•</span>
+                          <span suppressHydrationWarning>{new Date(d.created_at).toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US', { month: 'short', day: 'numeric' })}</span>
+                        </div>
+                      </div>
+
+                      <div className="text-end space-y-1">
+                        <span className="font-extrabold text-sm text-[#153C32] dark:text-[#24B58A] block">
+                          {Number(d.amount).toLocaleString('en-US')} {t('egp')}
+                        </span>
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#217A61] dark:text-[#24B58A]">
+                          <Check className="w-3 h-3" />
+                          <span>{t('verified_badge')}</span>
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
               )}
             </div>
+
           </div>
-        </div>
+        </section>
 
       </main>
 
-      {/* FOOTER SECTION */}
-      <footer className="w-full border-t border-slate-900 bg-slate-950/80 backdrop-blur-md mt-16 py-10 relative z-20">
-        <div className="max-w-7xl mx-auto px-4 md:px-8 grid grid-cols-1 md:grid-cols-12 gap-8 items-start">
-
-          {/* Logo & Brief */}
-          <div className="col-span-1 md:col-span-5 space-y-4">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center flex-shrink-0">
-                <Heart className="w-4 h-4 text-slate-950 fill-slate-950" />
-              </div>
-              <span className="text-md font-extrabold text-white">donations 9th Batch</span>
-            </div>
-            <p className="text-xs text-slate-400 leading-relaxed max-w-sm">
-              {language === 'ar'
-                ? 'نظام تبرعات آمن وتلقائي لدعم حملة الدفعة التاسعة طب كفر الشيخ لتوفير الأجهزة الطبية الحيوية لمستشفى كفر الشيخ الجامعي.'
-                : 'A secure, automated donation system supporting the 9th Batch Kafr El-Sheikh Medicine campaign to provide critical medical equipment to the University Hospital.'}
-            </p>
-            {language === 'ar' ? (
-              <div className="pt-3 border-t border-slate-900/60 mt-3 space-y-1">
-                <p className="text-xs text-emerald-405 font-bold flex items-center gap-1.5">
-                  <span>🤍</span>
-                  <span>هذا النظام صدقة جارية عن والد د. محمد أبو الخير.</span>
-                </p>
-                <p className="text-[10.5px] text-slate-500 font-normal pr-5">
-                  نسألكم الفاتحة والدعاء له بالرحمة والمغفرة.
-                </p>
-              </div>
-            ) : (
-              <div className="pt-3 border-t border-slate-900/60 mt-3 space-y-1">
-                <p className="text-xs text-emerald-450 font-bold flex items-center gap-1.5">
-                  <span>🤍</span>
-                  <span>This system is an ongoing charity (Sadqa Jariyah) for the father of Dr. Mohamed Abouelkhier.</span>
-                </p>
-                <p className="text-[10px] text-slate-500 font-normal pl-5">
-                  Please pray for his mercy and forgiveness.
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* Quick Links */}
-          <div className="col-span-1 md:col-span-3 space-y-3">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300">
-              {language === 'ar' ? 'صفحات تهمك' : 'Pages'}
-            </h4>
-            <ul className="space-y-2 text-xs">
-              <li>
-                <Link href="/about" className="text-slate-400 hover:text-emerald-400 transition-colors">
-                  {language === 'ar' ? 'عن الحملة والمنصة' : 'About Campaign & Platform'}
-                </Link>
-              </li>
-              <li>
-                <Link href="/privacy-policy" className="text-slate-400 hover:text-emerald-400 transition-colors">
-                  {language === 'ar' ? 'سياسة الخصوصية' : 'Privacy Policy'}
-                </Link>
-              </li>
-            </ul>
-          </div>
-
-          {/* Developer Contact Card */}
-          <div className="col-span-1 md:col-span-4 space-y-3">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300">
-              {language === 'ar' ? 'التواصل مع المطور' : 'Contact Developer'}
-            </h4>
-            <div className="glass-panel p-4 rounded-xl border border-slate-900 space-y-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-emerald-450 font-bold text-sm">
-                  M
+      {/* ======================================================== */}
+      {/* 8. FOOTER — RESPECTFUL, INSTITUTIONAL, MINIMAL           */}
+      {/* ======================================================== */}
+      <footer className="bg-[#153C32] dark:bg-[#080E18] text-white py-12 md:py-16 border-t border-[#0E2A22] dark:border-[#283849] transition-colors">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10">
+          
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-start">
+            
+            <div className="md:col-span-6 space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center text-[#E2F3EE] dark:text-[#24B58A]">
+                  <HeartHandshake className="w-5 h-5" />
                 </div>
-                <div>
-                  <p className="text-xs font-bold text-white">
-                    {language === 'ar' ? 'د. محمد أبو الخير' : 'Dr. Mohamed Abouelkhier'}
-                  </p>
-                  <p className="text-[10px] text-slate-500 font-medium">
-                    {language === 'ar' ? 'مطور المنصة' : 'Platform Developer'}
-                  </p>
-                </div>
+                <span className="font-bold text-lg text-white">
+                  {t('brand_title')}
+                </span>
               </div>
-              <div className="flex gap-2 pt-1">
-                <a
-                  href="https://wa.me/201015339426"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 bg-emerald-950/30 hover:bg-emerald-950/50 border border-emerald-900/35 text-[10px] font-bold text-emerald-400 rounded-lg transition-all active:scale-95"
-                >
-                  <span>WhatsApp</span>
-                </a>
-                <a
-                  href="https://t.me/M7MED1573"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 bg-sky-950/30 hover:bg-sky-950/50 border border-sky-900/35 text-[10px] font-bold text-sky-400 rounded-lg transition-all active:scale-95"
-                >
-                  <span>Telegram</span>
-                </a>
+              <p className="text-xs text-[#E2F3EE]/80 dark:text-[#A7B4B0] leading-relaxed max-w-md">
+                {t('footer_text')}
+              </p>
+              <div className="text-xs text-[#B79B68] dark:text-[#C5A876] font-semibold pt-1">
+                صدقة جارية عن روح د. حسين علي الأمير ود. ندى هاني حامد
               </div>
             </div>
+
+            <div className="md:col-span-3 space-y-2">
+              <span className="text-xs font-bold text-[#B79B68] dark:text-[#C5A876] block uppercase tracking-wider">
+                {language === 'ar' ? 'روابط هامة' : 'Quick Links'}
+              </span>
+              <ul className="text-xs space-y-2 text-[#E2F3EE]/80 dark:text-[#A7B4B0]">
+                <li><a href="#about" className="hover:text-white transition-colors">{t('nav_about')}</a></li>
+                <li><a href="#progress" className="hover:text-white transition-colors">{t('nav_progress')}</a></li>
+                <li><a href="#donate" className="hover:text-white transition-colors">{t('nav_donate')}</a></li>
+                <li><a href="#tracking" className="hover:text-white transition-colors">{t('nav_tracking')}</a></li>
+                <li><a href="#transparency" className="hover:text-white transition-colors">{t('nav_transparency')}</a></li>
+              </ul>
+            </div>
+
+            <div className="md:col-span-3 space-y-2">
+              <span className="text-xs font-bold text-[#B79B68] dark:text-[#C5A876] block uppercase tracking-wider">
+                {language === 'ar' ? 'الإدارة والخصوصية' : 'Admin & Governance'}
+              </span>
+              <ul className="text-xs space-y-2 text-[#E2F3EE]/80 dark:text-[#A7B4B0]">
+                <li><Link href="/privacy-policy" className="hover:text-white transition-colors">{t('footer_privacy')}</Link></li>
+                <li><Link href="/about" className="hover:text-white transition-colors">{t('hero_cta_about')}</Link></li>
+                <li><Link href="/admin/login" className="hover:text-white transition-colors">{t('footer_admin_link')}</Link></li>
+              </ul>
+            </div>
+
           </div>
 
-        </div>
+          <div className="pt-8 border-t border-white/10 dark:border-[#283849] flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[#E2F3EE]/60 dark:text-[#80918C]">
+            <span>{t('footer_rights')}</span>
+            <span>كلية الطب البشري — جامعة كفر الشيخ</span>
+          </div>
 
-        {/* Sub-footer Copyright */}
-        <div className="max-w-7xl mx-auto px-4 md:px-8 mt-8 pt-6 border-t border-slate-900/40 text-center">
-          <p className="text-[10px] text-slate-500 leading-normal">
-            &copy; {new Date().getFullYear()} donations 9th Batch. Built with Next.js, Tailwind CSS & Supabase.
-          </p>
         </div>
       </footer>
 
-      {/* Mobile Floating Action Button (FAB) */}
-      {isMounted && activeMobileTab === 'campaign' && (
-        <div className="lg:hidden fixed bottom-6 left-0 right-0 z-45 px-4 flex justify-center pointer-events-none animate-bounce-gentle">
-          <button
-            type="button"
-            onClick={() => {
-              setActiveMobileTab('donate');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-            className="pointer-events-auto px-8 py-3.5 rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 font-black text-sm shadow-xl shadow-emerald-500/30 active:scale-95 transition-all flex items-center gap-2 border border-emerald-300/30 glow-green"
-          >
-            <Heart className="w-4 h-4 fill-slate-950" />
-            <span>{language === 'ar' ? 'تبرع الآن للحملة' : 'Donate to Campaign'}</span>
-          </button>
-        </div>
-      )}
-
-      {/* SHARE PROGRESS MODAL */}
-      {showShareModal && shareImage && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
-          <div className="glass-panel w-full max-w-md p-6 rounded-2xl border border-slate-900 bg-slate-950 space-y-6 shadow-2xl animate-scale-up">
-            
-            {/* Modal Header */}
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-white">
-                {language === 'ar' ? 'مشاركة تقدم الحملة' : 'Share Campaign Progress'}
-              </h3>
-              <button 
-                onClick={() => setShowShareModal(false)}
-                className="text-slate-400 hover:text-white text-xs font-semibold px-2 py-1 hover:bg-slate-900 rounded-lg transition-colors"
-              >
-                {language === 'ar' ? 'إغلاق' : 'Close'}
-              </button>
-            </div>
-
-            {/* Image Preview Container */}
-            <div className="w-full bg-slate-900/40 rounded-xl overflow-hidden border border-slate-900 p-2 flex items-center justify-center relative">
-              <img 
-                src={shareImage} 
-                alt="Campaign Progress Share Card" 
-                className="w-full h-auto rounded-lg shadow-md border border-slate-950"
-              />
-            </div>
-
-            {/* Action Buttons */}
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={handleDownloadShareImage}
-                className="py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 font-black text-xs text-center shadow-md active:scale-95 transition-all hover:brightness-105"
-              >
-                {language === 'ar' ? 'تحميل الصورة' : 'Download Image'}
-              </button>
-              <button
-                onClick={handleNativeShare}
-                className="py-3.5 rounded-xl bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-350 font-bold text-xs text-center active:scale-95 transition-all"
-              >
-                {language === 'ar' ? 'نشر ومشاركة' : 'Share / Copy'}
-              </button>
-            </div>
-
-            <p className="text-[10px] text-slate-500 text-center leading-normal">
-              {language === 'ar' 
-                ? 'يمكنك تحميل بطاقة التقدم ونشرها على وسائل التواصل الاجتماعي لدعم الحملة.' 
-                : 'Download the progress card to share on social media stories.'}
-            </p>
-
-          </div>
-        </div>
-      )}
-
-      {/* DONATION RECEIPT MODAL */}
-      {showReceiptModal && selectedReceiptDonation && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
-          <div className="glass-panel w-full max-w-md p-6 rounded-2xl border border-slate-900 bg-slate-950 space-y-6 shadow-2xl animate-scale-up">
-            
-            {/* Modal Header */}
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-white">
-                {language === 'ar' ? 'فاتورة تبرع معتمدة' : 'Verified Donation Receipt'}
-              </h3>
-              <button 
-                onClick={() => {
-                  setShowReceiptModal(false);
-                  setSelectedReceiptDonation(null);
-                  setReceiptImage(null);
-                }}
-                className="text-slate-400 hover:text-white text-xs font-semibold px-2 py-1 hover:bg-slate-900 rounded-lg transition-colors"
-              >
-                {language === 'ar' ? 'إغلاق' : 'Close'}
-              </button>
-            </div>
-
-            {/* Receipt Preview */}
-            <div className="w-full bg-slate-900/40 rounded-xl overflow-hidden border border-slate-900 p-2 flex flex-col items-center justify-center min-h-[300px] relative">
-              {isGeneratingReceipt || !receiptImage ? (
-                <div className="flex flex-col items-center justify-center py-12 space-y-3">
-                  <Loader2 className="w-8 h-8 animate-spin text-emerald-400" />
-                  <p className="text-xs text-slate-400">
-                    {language === 'ar' ? 'جاري توليد الفاتورة المعتمدة...' : 'Generating certified receipt...'}
-                  </p>
-                </div>
-              ) : (
-                <img 
-                  src={receiptImage} 
-                  alt="Donation Receipt" 
-                  className="w-full h-auto rounded-lg shadow-md border border-slate-950"
-                />
-              )}
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex flex-col gap-3">
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={handleDownloadReceiptImage}
-                  disabled={isGeneratingReceipt || !receiptImage}
-                  className="py-3 px-4 rounded-xl bg-slate-900 border border-slate-800 hover:bg-slate-850 text-slate-100 font-bold text-xs text-center active:scale-95 transition-all disabled:opacity-50"
-                >
-                  {language === 'ar' ? 'تحميل كبطاقة' : 'Download Image'}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDownloadReceiptPDF}
-                  disabled={isGeneratingReceipt || !receiptImage}
-                  className="py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 font-black text-xs text-center shadow-md active:scale-95 transition-all hover:brightness-105 disabled:opacity-50"
-                >
-                  {language === 'ar' ? 'تحميل فاتورة PDF' : 'Download PDF Invoice'}
-                </button>
-              </div>
-              <button
-                type="button"
-                onClick={handleReceiptNativeShare}
-                disabled={isGeneratingReceipt || !receiptImage}
-                className="py-3 rounded-xl bg-slate-900 border border-slate-800 hover:bg-slate-850 text-slate-350 font-bold text-xs text-center active:scale-95 transition-all disabled:opacity-50"
-              >
-                {language === 'ar' ? 'مشاركة وتوثيق التبرع' : 'Share / Copy Verification'}
-              </button>
-            </div>
-
-            <p className="text-[10px] text-slate-500 text-center leading-normal">
-              {language === 'ar' 
-                ? 'تحتوي الفاتورة على رقم معاملة فريد ورمز QR مشفر للتحقق الفوري من صحة التبرع.' 
-                : 'The receipt includes a unique transaction ID and a verification QR code linked to the ledger.'}
-            </p>
-
-          </div>
-        </div>
-      )}
-
-      {/* Dedication Toast Notification (Messenger Style) */}
-      <div 
-        className={`fixed z-50 
-          top-4 left-1/2 -translate-x-1/2
-          md:top-auto md:bottom-6 md:left-6 md:translate-x-0 rtl:md:right-6 rtl:md:left-auto
-          max-w-sm w-[calc(100vw-2rem)] md:w-[360px] 
-          bg-slate-950/95 backdrop-blur-md border border-emerald-500/20 p-4 rounded-2xl 
-          shadow-[0_15px_35px_rgba(0,0,0,0.6)] flex items-start gap-3.5 transition-all duration-500 transform ${
-          showDedicationToast 
-            ? 'translate-y-0 opacity-100 scale-100' 
-            : '-translate-y-4 md:translate-y-12 opacity-0 scale-95 pointer-events-none'
-        }`}
-        dir={language === 'ar' ? 'rtl' : 'ltr'}
-      >
-        {/* Profile/Heart Icon */}
-        <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center text-lg shadow-md shadow-emerald-500/20 flex-shrink-0 animate-pulse">
-          🤍
-        </div>
-
-        {/* Text Details */}
-        <div className="flex-1 min-w-0">
-          <p className="text-xs font-extrabold text-white leading-normal">
-            {language === 'ar' 
-              ? 'هذا النظام صدقة جارية عن والد د. محمد أبو الخير.' 
-              : 'This system is a continuous charity for the father of Dr. Mohamed Abouelkhier.'}
-          </p>
-          <p className="text-[10px] text-slate-400 mt-1 leading-normal">
-            {language === 'ar' 
-              ? 'نسألكم الفاتحة والدعاء له بالرحمة والمغفرة.' 
-              : 'Please pray for his mercy and forgiveness.'}
-          </p>
-        </div>
-
-        {/* Close Button */}
-        <button
-          type="button"
-          onClick={() => setShowDedicationToast(false)}
-          className="text-slate-500 hover:text-white transition-colors p-1 -mt-1 -me-1 rounded-lg hover:bg-slate-900/60"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
     </div>
   );
 }

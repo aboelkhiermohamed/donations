@@ -1,35 +1,34 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import AdminLayout from '@/components/admin/AdminLayout';
 import { useLanguage } from '@/context/LanguageContext';
 import { supabase } from '@/lib/supabase';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useTheme } from '@/context/ThemeContext';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend, BarChart, Bar
+  PieChart, Pie, Cell
 } from 'recharts';
 import { 
   TrendingUp, 
   Coins, 
   Clock, 
-  CheckCircle, 
-  AlertTriangle,
-  ArrowRight,
-  ShieldCheck,
-  UserCheck,
-  Smartphone,
-  Activity,
-  Battery,
-  Wifi,
-  Edit3,
-  Check,
-  X
+  CheckCircle2, 
+  UserCheck, 
+  Smartphone, 
+  Battery, 
+  Wifi, 
+  Edit3, 
+  Check, 
+  X, 
+  Loader2 
 } from 'lucide-react';
 import Link from 'next/link';
 
 export default function AdminDashboardPage() {
-  const { language, t } = useLanguage();
+  const { language, dir, t } = useLanguage();
+  const { resolvedTheme } = useTheme();
   const [isMounted, setIsMounted] = useState(false);
   const queryClient = useQueryClient();
 
@@ -41,12 +40,12 @@ export default function AdminDashboardPage() {
     setIsMounted(true);
   }, []);
 
-  // Realtime subscription for instant dashboard updates
+  // Realtime subscription
   useEffect(() => {
     const channel = supabase
-      .channel('admin_dashboard_realtime')
+      .channel('admin_dashboard_realtime_redesign')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'donations' }, () => {
-        queryClient.invalidateQueries({ queryKey: ['adminDashboardStats'] });
+        queryClient.invalidateQueries({ queryKey: ['adminDashboardDonations'] });
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sms_logs' }, () => {
         queryClient.invalidateQueries({ queryKey: ['dashboardSmsLogs'] });
@@ -58,629 +57,522 @@ export default function AdminDashboardPage() {
     };
   }, [queryClient]);
 
-  // Fetch latest HTTP gateway logs (sms_logs)
-  const { data: smsLogs, isLoading: isLogsLoading } = useQuery({
-    queryKey: ['dashboardSmsLogs'],
+  // 1. Fetch Campaign Info (minimal column projection)
+  const { data: campaign } = useQuery({
+    queryKey: ['adminCampaignData'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('sms_logs')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(5);
-
-      if (error) throw error;
-      return data || [];
+      const { data } = await supabase.from('campaigns').select('id, target_amount, collected_amount').limit(1).maybeSingle();
+      return data || { target_amount: 350000, collected_amount: 0 };
     },
-    refetchInterval: 10000,
+    staleTime: 60000,
   });
 
-  // Fetch gateway status from DB settings
-  const { data: gateways, isLoading: isGatewayLoading } = useQuery({
-    queryKey: ['adminGatewayStatus'],
+  // 2. Fetch Donations for Stats & Charts
+  const { data: donations = [], isLoading: isDonationsLoading } = useQuery({
+    queryKey: ['adminDashboardDonations'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('settings')
-        .select('*')
-        .like('key', 'gateway_status_%');
-
-      if (error) throw error;
-      return (data || []).map(row => row.value) || null;
-    },
-    refetchInterval: 10000,
-  });
-
-  // Fetch gateway nicknames from DB settings
-  const { data: nicknames } = useQuery<Record<string, string>>({
-    queryKey: ['adminGatewayNicknames'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('settings')
-        .select('*')
-        .eq('key', 'gateway_nicknames')
-        .maybeSingle();
-
-      if (error) throw error;
-      if (!data) return {};
-      return (typeof data.value === 'string' ? JSON.parse(data.value) : data.value) || {};
-    },
-  });
-
-  const handleSaveNickname = async (deviceId: string) => {
-    if (isSavingNickname) return;
-    setIsSavingNickname(true);
-    try {
-      const updatedNicknames = { ...(nicknames || {}), [deviceId]: newNickname.trim() };
-      
-      const { error } = await supabase
-        .from('settings')
-        .upsert({
-          key: 'gateway_nicknames',
-          value: updatedNicknames,
-          updated_at: new Date().toISOString()
-        });
-
-      if (error) throw error;
-      
-      queryClient.invalidateQueries({ queryKey: ['adminGatewayNicknames'] });
-      setEditingDevice(null);
-    } catch (err) {
-      console.error(err);
-      alert(language === 'ar' ? 'فشل حفظ الاسم المستعار' : 'Failed to save nickname');
-    } finally {
-      setIsSavingNickname(false);
-    }
-  };
-
-  const getLogStatusBadge = (status: string) => {
-    switch (status) {
-      case 'success':
-        return (
-          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950/60 border border-emerald-900 text-emerald-400">
-            Success
-          </span>
-        );
-      case 'duplicate':
-        return (
-          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-900 border border-slate-800 text-slate-400">
-            Duplicate
-          </span>
-        );
-      case 'failed_parsing':
-        return (
-          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-950/40 border border-red-900/40 text-red-300">
-            Failed
-          </span>
-        );
-      default:
-        return (
-          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-400">
-            {status}
-          </span>
-        );
-    }
-  };
-
-  // Fetch all donations for dashboard stats
-  const { data: dashboardData, isLoading } = useQuery({
-    queryKey: ['adminDashboardStats'],
-    queryFn: async () => {
-      const { data: donations, error } = await supabase
         .from('donations')
         .select(`
           id,
           amount,
           status,
           payment_method,
-          verification_method,
-          created_at
-        `);
+          created_at,
+          transaction_ref,
+          donor:donors (
+            name,
+            phone
+          )
+        `)
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
-
-      const items = donations || [];
-
-      // Metrics
-      const totalDonations = items.length;
-      const approved = items.filter(d => d.status === 'auto_verified' || d.status === 'manual_verified');
-      const pending = items.filter(d => d.status === 'pending');
-      const rejected = items.filter(d => d.status === 'rejected');
-      
-      const autoVerified = items.filter(d => d.status === 'auto_verified');
-      const manualVerified = items.filter(d => d.status === 'manual_verified');
-
-      const totalRevenue = approved.reduce((sum, d) => sum + Number(d.amount), 0);
-      const pendingRevenue = pending.reduce((sum, d) => sum + Number(d.amount), 0);
-
-      // Calculations
-      const autoVerifiedRate = approved.length > 0 
-        ? Math.round((autoVerified.length / approved.length) * 100) 
-        : 0;
-
-      // Group by payment method
-      const vfcTotal = approved.filter(d => d.payment_method === 'vodafone_cash').reduce((sum, d) => sum + Number(d.amount), 0);
-      const instapayTotal = approved.filter(d => d.payment_method === 'instapay').reduce((sum, d) => sum + Number(d.amount), 0);
-
-      const paymentDistribution = [
-        { name: language === 'ar' ? 'فودافون كاش' : 'Vodafone Cash', value: vfcTotal },
-        { name: language === 'ar' ? 'إنستاباي' : 'InstaPay', value: instapayTotal },
-      ];
-
-      // Group by daily donation totals for past 7 days
-      const dailyMap: Record<string, number> = {};
-      const dates = Array.from({ length: 7 }, (_, i) => {
-        const d = new Date();
-        d.setDate(d.getDate() - i);
-        return d.toISOString().split('T')[0];
-      }).reverse();
-
-      dates.forEach(d => {
-        dailyMap[d] = 0;
-      });
-
-      approved.forEach(d => {
-        const dateStr = d.created_at.split('T')[0];
-        if (dateStr in dailyMap) {
-          dailyMap[dateStr] += Number(d.amount);
-        }
-      });
-
-      const dailyDonations = Object.keys(dailyMap).map(key => ({
-        date: key.substring(5), // MM-DD format
-        amount: dailyMap[key]
-      }));
-
-      // Method comparison chart
-      const verificationTypes = [
-        { name: language === 'ar' ? 'تحقق تلقائي' : 'Auto Verified', count: autoVerified.length },
-        { name: language === 'ar' ? 'تحقق يدوي' : 'Manual Verified', count: manualVerified.length },
-        { name: language === 'ar' ? 'قيد الانتظار' : 'Pending', count: pending.length },
-        { name: language === 'ar' ? 'مرفوض' : 'Rejected', count: rejected.length }
-      ];
-
-      return {
-        totalDonations,
-        approvedCount: approved.length,
-        pendingCount: pending.length,
-        rejectedCount: rejected.length,
-        autoVerifiedCount: autoVerified.length,
-        manualVerifiedCount: manualVerified.length,
-        totalRevenue,
-        pendingRevenue,
-        autoVerifiedRate,
-        paymentDistribution,
-        dailyDonations,
-        verificationTypes
-      };
+      return data || [];
     },
-    refetchInterval: 12000,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
   });
 
-  const COLORS = ['#10b981', '#06b6d4', '#e2e8f0', '#f43f5e'];
+  // 3. Fetch Gateway Status & Nicknames (relaxed polling)
+  const { data: gateways = [] } = useQuery({
+    queryKey: ['adminGatewayStatus'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('settings')
+        .select('key, value')
+        .like('key', 'gateway_status_%');
 
-  if (isLoading || !dashboardData) {
-    return (
-      <AdminLayout>
-        <div className="space-y-6">
-          <div className="h-10 w-48 bg-slate-900 rounded-lg animate-pulse" />
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="h-28 bg-slate-900 rounded-2xl animate-pulse" />
-            ))}
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="h-80 lg:col-span-2 bg-slate-900 rounded-2xl animate-pulse" />
-            <div className="h-80 bg-slate-900 rounded-2xl animate-pulse" />
-          </div>
-        </div>
-      </AdminLayout>
-    );
-  }
+      return (data || []).map(row => row.value) || [];
+    },
+    refetchInterval: 30000,
+    staleTime: 25000,
+  });
+
+  const { data: nicknames = {} } = useQuery<Record<string, string>>({
+    queryKey: ['adminGatewayNicknames'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('settings')
+        .select('*')
+        .eq('key', 'gateway_nicknames')
+        .maybeSingle();
+
+      return data?.value || {};
+    },
+  });
+
+  // Calculate Metrics
+  const metrics = useMemo(() => {
+    let verifiedSum = 0;
+    let pendingCount = 0;
+    let verifiedCount = 0;
+    let rejectedCount = 0;
+    const donorPhoneSet = new Set();
+
+    donations.forEach((d: any) => {
+      const isVerified = d.status === 'auto_verified' || d.status === 'manual_verified';
+      if (isVerified) {
+        verifiedSum += Number(d.amount || 0);
+        verifiedCount++;
+        if (d.donor?.phone) donorPhoneSet.add(d.donor.phone);
+      } else if (d.status === 'pending') {
+        pendingCount++;
+      } else if (d.status === 'rejected') {
+        rejectedCount++;
+      }
+    });
+
+    const target = Number(campaign?.target_amount) || 350000;
+    const remaining = Math.max(0, target - verifiedSum);
+    const progress = Math.min(100, Math.round((verifiedSum / target) * 100));
+
+    return {
+      target,
+      verifiedSum,
+      remaining,
+      progress,
+      verifiedCount,
+      pendingCount,
+      rejectedCount,
+      totalCount: donations.length,
+      uniqueDonorsCount: donorPhoneSet.size,
+    };
+  }, [donations, campaign]);
+
+  // Chart Data: Last 7 Days
+  const chartData = useMemo(() => {
+    const daysMap: Record<string, number> = {};
+    const now = new Date();
+
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      const key = d.toISOString().split('T')[0];
+      daysMap[key] = 0;
+    }
+
+    donations.forEach((d: any) => {
+      const isVerified = d.status === 'auto_verified' || d.status === 'manual_verified';
+      if (isVerified && d.created_at) {
+        const dayKey = d.created_at.split('T')[0];
+        if (daysMap[dayKey] !== undefined) {
+          daysMap[dayKey] += Number(d.amount || 0);
+        }
+      }
+    });
+
+    return Object.keys(daysMap).map(k => {
+      const dateObj = new Date(k);
+      const label = dateObj.toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US', { weekday: 'short', month: 'numeric', day: 'numeric' });
+      return {
+        date: label,
+        amount: daysMap[k],
+      };
+    });
+  }, [donations, language]);
+
+  // Method Distribution Data
+  const methodData = useMemo(() => {
+    let vfc = 0;
+    let ipn = 0;
+    donations.forEach((d: any) => {
+      const isVerified = d.status === 'auto_verified' || d.status === 'manual_verified';
+      if (isVerified) {
+        if (d.payment_method === 'vodafone_cash') vfc += Number(d.amount);
+        else ipn += Number(d.amount);
+      }
+    });
+    return [
+      { name: 'فودافون كاش', value: vfc, color: resolvedTheme === 'dark' ? '#24B58A' : '#153C32' },
+      { name: 'InstaPay', value: ipn, color: resolvedTheme === 'dark' ? '#C5A876' : '#B79B68' },
+    ];
+  }, [donations, resolvedTheme]);
+
+  const handleSaveNickname = async (deviceId: string) => {
+    setIsSavingNickname(true);
+    try {
+      const updated = { ...nicknames, [deviceId]: newNickname.trim() };
+      await supabase
+        .from('settings')
+        .upsert({
+          key: 'gateway_nicknames',
+          value: updated,
+          updated_at: new Date().toISOString(),
+        });
+      queryClient.invalidateQueries({ queryKey: ['adminGatewayNicknames'] });
+      setEditingDevice(null);
+    } catch (err) {
+      console.error('Save nickname failed:', err);
+    } finally {
+      setIsSavingNickname(false);
+    }
+  };
 
   return (
     <AdminLayout>
-      <div className="space-y-6">
+      <div className="space-y-8">
         
-        {/* TOP TITLE */}
-        <div className="flex items-center justify-between">
+        {/* Header Title */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-[#EAE8DE] dark:border-[#283849]">
           <div>
-            <h1 className="text-2xl font-black text-white">{t('db_overview')}</h1>
-            <p className="text-slate-400 text-xs mt-1">
-              {language === 'ar' ? 'إحصائيات فورية ومؤشرات نجاح التحقق التلقائي للحملة.' : 'Real-time stats and success rates of campaign matching engine.'}
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-[#153C32] dark:text-[#24B58A] tracking-tight">
+              {language === 'ar' ? 'لوحة المتابعة والتحكم' : 'Operations Dashboard'}
+            </h1>
+            <p className="text-xs sm:text-sm text-[#738079] dark:text-[#A7B4B0] mt-1">
+              {language === 'ar'
+                ? 'متابعة حية للمساهمات المالية، حالة بوابات الـ SMS، ومعدل إنجاز الصدقة الجارية.'
+                : 'Live tracking of contributions, Android gateway health, and campaign target.'}
             </p>
           </div>
+
+          <div className="flex items-center gap-2.5">
+            <Link
+              href="/admin/donations?status=pending"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/40 text-amber-800 dark:text-amber-300 text-xs font-bold hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors"
+            >
+              <Clock className="w-4 h-4 text-amber-600" />
+              <span>{metrics.pendingCount} {language === 'ar' ? 'معاملة معلقة' : 'Pending Requests'}</span>
+            </Link>
+          </div>
         </div>
 
-        {/* KPI CARDS GRID */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* 1. PRIMARY KPI TILES */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           
-          {/* Card: Total Collected */}
-          <div className="glass-panel p-5 rounded-2xl border border-slate-900 relative overflow-hidden flex flex-col justify-between min-h-[110px]">
-            <div className="flex justify-between items-start">
-              <span className="text-slate-400 text-xs font-semibold">{t('db_total')}</span>
-              <Coins className="w-5 h-5 text-emerald-400" />
+          <div className="p-5 rounded-2xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-subtle space-y-2">
+            <div className="flex items-center justify-between text-[#738079] dark:text-[#A7B4B0]">
+              <span className="text-xs font-bold">{t('collected')}</span>
+              <Coins className="w-4 h-4 text-[#153C32] dark:text-[#24B58A]" />
             </div>
-            <div className="mt-2">
-              <span className="text-2xl font-black text-white">
-                {dashboardData.totalRevenue.toLocaleString()}{' '}
-                <span className="text-xs font-bold text-emerald-400">{t('egp')}</span>
-              </span>
+            <div className="text-2xl sm:text-3xl font-black text-[#153C32] dark:text-[#24B58A]">
+              {metrics.verifiedSum.toLocaleString('en-US')}{' '}
+              <span className="text-xs font-bold text-[#738079] dark:text-[#A7B4B0]">{t('egp')}</span>
             </div>
-            <div className="absolute top-0 right-0 w-8 h-8 bg-emerald-500/5 rounded-full blur-md" />
+            <span className="text-[11px] font-semibold text-[#217A61] dark:text-[#24B58A] block">
+              {metrics.progress}% {language === 'ar' ? 'من الهدف' : 'of target'}
+            </span>
           </div>
 
-          {/* Card: Pending Verification */}
-          <div className="glass-panel p-5 rounded-2xl border border-slate-900 relative overflow-hidden flex flex-col justify-between min-h-[110px]">
-            <div className="flex justify-between items-start">
-              <span className="text-slate-400 text-xs font-semibold">{t('stat_pending')}</span>
-              <Clock className="w-5 h-5 text-teal-400" />
+          <div className="p-5 rounded-2xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-subtle space-y-2">
+            <div className="flex items-center justify-between text-[#738079] dark:text-[#A7B4B0]">
+              <span className="text-xs font-bold">{t('target')}</span>
+              <TrendingUp className="w-4 h-4 text-[#B79B68] dark:text-[#C5A876]" />
             </div>
-            <div className="mt-2 flex items-baseline justify-between">
-              <span className="text-2xl font-black text-white">
-                {dashboardData.pendingCount}{' '}
-                <span className="text-xs text-slate-500 font-semibold">({dashboardData.pendingRevenue.toLocaleString()} EGP)</span>
-              </span>
-              <Link href="/admin/donations" className="text-[10px] text-emerald-400 font-bold hover:underline flex items-center gap-0.5">
-                <span>{language === 'ar' ? 'مراجعة' : 'Review'}</span>
-                <ArrowRight className="w-3 h-3 rtl-flip" />
-              </Link>
+            <div className="text-2xl sm:text-3xl font-black text-[#191F1C] dark:text-[#F3F5F4]">
+              {metrics.target.toLocaleString('en-US')}{' '}
+              <span className="text-xs font-bold text-[#738079] dark:text-[#A7B4B0]">{t('egp')}</span>
             </div>
-            <div className="absolute top-0 right-0 w-8 h-8 bg-teal-500/5 rounded-full blur-md" />
+            <span className="text-[11px] text-[#738079] dark:text-[#A7B4B0] block">
+              {t('remaining')}: {metrics.remaining.toLocaleString('en-US')} {t('egp')}
+            </span>
           </div>
 
-          {/* Card: Auto Verified Rate */}
-          <div className="glass-panel p-5 rounded-2xl border border-slate-900 relative overflow-hidden flex flex-col justify-between min-h-[110px]">
-            <div className="flex justify-between items-start">
-              <span className="text-slate-400 text-xs font-semibold">{t('db_verification_rate')}</span>
-              <ShieldCheck className="w-5 h-5 text-emerald-400" />
+          <div className="p-5 rounded-2xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-subtle space-y-2">
+            <div className="flex items-center justify-between text-[#738079] dark:text-[#A7B4B0]">
+              <span className="text-xs font-bold">{t('verified_donors_count')}</span>
+              <UserCheck className="w-4 h-4 text-[#217A61] dark:text-[#24B58A]" />
             </div>
-            <div className="mt-2">
-              <span className="text-2xl font-black text-emerald-400">
-                {dashboardData.autoVerifiedRate}%
-              </span>
-              <span className="text-[10px] text-slate-500 block mt-0.5">
-                {language === 'ar' ? `تمت مطابقة ${dashboardData.autoVerifiedCount} تبرع تلقائياً` : `Matched ${dashboardData.autoVerifiedCount} requests automatically`}
-              </span>
+            <div className="text-2xl sm:text-3xl font-black text-[#153C32] dark:text-[#24B58A]">
+              {metrics.uniqueDonorsCount}
             </div>
-            <div className="absolute top-0 right-0 w-8 h-8 bg-emerald-500/5 rounded-full blur-md" />
+            <span className="text-[11px] text-[#738079] dark:text-[#A7B4B0] block">
+              {metrics.verifiedCount} {language === 'ar' ? 'عملية موثقة' : 'Verified Gifts'}
+            </span>
           </div>
 
-          {/* Card: Total Donors */}
-          <div className="glass-panel p-5 rounded-2xl border border-slate-900 relative overflow-hidden flex flex-col justify-between min-h-[110px]">
-            <div className="flex justify-between items-start">
-              <span className="text-slate-400 text-xs font-semibold">{t('stat_total_donors')}</span>
-              <UserCheck className="w-5 h-5 text-teal-400" />
+          <div className="p-5 rounded-2xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-subtle space-y-2">
+            <div className="flex items-center justify-between text-[#738079] dark:text-[#A7B4B0]">
+              <span className="text-xs font-bold">{language === 'ar' ? 'قيد المراجعة' : 'Pending Review'}</span>
+              <Clock className="w-4 h-4 text-amber-600" />
             </div>
-            <div className="mt-2">
-              <span className="text-2xl font-black text-white">
-                {dashboardData.approvedCount}
-              </span>
-              <span className="text-[10px] text-slate-500 block mt-0.5">
-                {language === 'ar' ? 'متبرعون معتمدون بنجاح' : 'Donors verified successfully'}
-              </span>
+            <div className="text-2xl sm:text-3xl font-black text-amber-700 dark:text-amber-400">
+              {metrics.pendingCount}
             </div>
-            <div className="absolute top-0 right-0 w-8 h-8 bg-teal-500/5 rounded-full blur-md" />
+            <Link
+              href="/admin/donations?status=pending"
+              className="text-[11px] font-bold text-[#153C32] dark:text-[#24B58A] hover:underline block"
+            >
+              {language === 'ar' ? 'مراجعة الآن ←' : 'Review Now →'}
+            </Link>
           </div>
 
         </div>
 
-        {/* CHARTS CONTAINER */}
-        {isMounted && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            
-            {/* Chart: Donation Growth (Daily) */}
-            <div className="lg:col-span-8 glass-panel p-5 rounded-2xl border border-slate-900 space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4 text-emerald-450" />
-                  {t('db_weekly_growth')}
+        {/* 2. CHARTS SECTION */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          
+          <div className="lg:col-span-8 p-6 rounded-3xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-subtle space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-extrabold text-base text-[#153C32] dark:text-[#F3F5F4]">
+                  {language === 'ar' ? 'مسار التبرعات خلال آخر 7 أيام' : '7-Day Contributions Trajectory'}
                 </h3>
-                <span className="text-[10px] text-slate-500 font-semibold">{language === 'ar' ? 'الـ 7 أيام الماضية' : 'Past 7 Days'}</span>
+                <span className="text-xs text-[#738079] dark:text-[#A7B4B0]">
+                  {language === 'ar' ? 'المبالغ المعتمدة بالجنيه المصري' : 'Verified amounts in EGP'}
+                </span>
               </div>
+            </div>
 
-              <div className="h-64 w-full">
+            <div className="h-64 w-full">
+              {isMounted && (
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={dashboardData.dailyDonations}>
+                  <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                     <defs>
-                      <linearGradient id="colorAmount" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                      <linearGradient id="forestArea" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={resolvedTheme === 'dark' ? '#24B58A' : '#153C32'} stopOpacity={0.3} />
+                        <stop offset="95%" stopColor={resolvedTheme === 'dark' ? '#24B58A' : '#153C32'} stopOpacity={0.0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.3} />
-                    <XAxis dataKey="date" stroke="#64748b" fontSize={10} tickLine={false} />
-                    <YAxis stroke="#64748b" fontSize={10} tickLine={false} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={resolvedTheme === 'dark' ? '#283849' : '#EAE8DE'} vertical={false} />
+                    <XAxis dataKey="date" stroke="#94A099" fontSize={11} tickLine={false} />
+                    <YAxis stroke="#94A099" fontSize={11} tickLine={false} />
                     <Tooltip 
-                      contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', borderRadius: '12px' }}
-                      labelStyle={{ color: '#fff', fontSize: '12px', fontWeight: 'bold' }}
-                      itemStyle={{ color: '#10b981', fontSize: '11px' }}
+                      contentStyle={{ 
+                        backgroundColor: resolvedTheme === 'dark' ? '#111C2D' : '#FFFFFF', 
+                        borderColor: resolvedTheme === 'dark' ? '#283849' : '#DDD9CC', 
+                        color: resolvedTheme === 'dark' ? '#F3F5F4' : '#191F1C',
+                        borderRadius: '12px', 
+                        fontSize: '12px' 
+                      }}
+                      formatter={(val: any) => [`${Number(val).toLocaleString('en-US')} ${t('egp')}`, language === 'ar' ? 'المبلغ' : 'Amount']}
                     />
-                    <Area type="monotone" dataKey="amount" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#colorAmount)" />
+                    <Area type="monotone" dataKey="amount" stroke={resolvedTheme === 'dark' ? '#24B58A' : '#153C32'} strokeWidth={2.5} fillOpacity={1} fill="url(#forestArea)" />
                   </AreaChart>
                 </ResponsiveContainer>
-              </div>
+              )}
             </div>
+          </div>
 
-            {/* Chart: Payment Method Breakdown */}
-            <div className="lg:col-span-4 glass-panel p-5 rounded-2xl border border-slate-900 space-y-4 flex flex-col justify-between">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  <Coins className="w-4 h-4 text-teal-400" />
-                  {language === 'ar' ? 'توزيع قنوات الدفع' : 'Payment Channels'}
-                </h3>
-              </div>
+          <div className="lg:col-span-4 p-6 rounded-3xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-subtle space-y-4">
+            <h3 className="font-extrabold text-base text-[#153C32] dark:text-[#F3F5F4]">
+              {language === 'ar' ? 'توزيع وسائل التحويل' : 'Payment Distribution'}
+            </h3>
 
-              <div className="h-48 w-full relative flex items-center justify-center">
+            <div className="h-44 w-full">
+              {isMounted && (
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
-                      data={dashboardData.paymentDistribution}
+                      data={methodData}
                       cx="50%"
                       cy="50%"
-                      innerRadius={50}
-                      outerRadius={70}
-                      paddingAngle={3}
+                      innerRadius={45}
+                      outerRadius={65}
+                      paddingAngle={4}
                       dataKey="value"
                     >
-                      {dashboardData.paymentDistribution.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      {methodData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
-                    <Tooltip
-                      contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', borderRadius: '12px' }}
-                      itemStyle={{ color: '#fff', fontSize: '11px' }}
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: resolvedTheme === 'dark' ? '#111C2D' : '#FFFFFF', 
+                        borderColor: resolvedTheme === 'dark' ? '#283849' : '#DDD9CC',
+                        color: resolvedTheme === 'dark' ? '#F3F5F4' : '#191F1C',
+                        borderRadius: '12px', 
+                        fontSize: '12px' 
+                      }}
+                      formatter={(val: any) => [`${Number(val).toLocaleString('en-US')} ${t('egp')}`, '']}
                     />
                   </PieChart>
                 </ResponsiveContainer>
-                
-                {/* Total overlay inside donut */}
-                <div className="absolute text-center">
-                  <span className="text-[10px] text-slate-500 uppercase tracking-widest">{t('collected')}</span>
-                  <p className="text-lg font-black text-white">{dashboardData.totalRevenue.toLocaleString()}</p>
-                </div>
-              </div>
-
-              {/* Legends details */}
-              <div className="space-y-1">
-                {dashboardData.paymentDistribution.map((entry, index) => (
-                  <div key={entry.name} className="flex justify-between items-center text-xs">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS[index] }} />
-                      <span className="text-slate-400 font-semibold">{entry.name}</span>
-                    </div>
-                    <span className="text-white font-bold">{entry.value.toLocaleString()} {t('egp')}</span>
-                  </div>
-                ))}
-              </div>
+              )}
             </div>
 
+            <div className="space-y-2 pt-2 border-t border-[#EAE8DE] dark:border-[#283849] text-xs">
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5 font-semibold text-[#191F1C] dark:text-[#F3F5F4]">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#153C32] dark:bg-[#24B58A]" />
+                  فودافون كاش
+                </span>
+                <span className="font-bold text-[#153C32] dark:text-[#24B58A]">
+                  {methodData[0].value.toLocaleString('en-US')} {t('egp')}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5 font-semibold text-[#191F1C] dark:text-[#F3F5F4]">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#B79B68] dark:bg-[#C5A876]" />
+                  إنستاباي (InstaPay)
+                </span>
+                <span className="font-bold text-[#B79B68] dark:text-[#C5A876]">
+                  {methodData[1].value.toLocaleString('en-US')} {t('egp')}
+                </span>
+              </div>
+            </div>
           </div>
-        )}
 
-        {/* BOTTOM SECTION: GATEWAY LOGS & METRICS */}
-        {isMounted && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Left: HTTP Gateway Requests (SMS Logs) */}
-            <div className="lg:col-span-7 glass-panel p-5 rounded-2xl border border-slate-900 space-y-4">
-              <div>
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <Smartphone className="w-4 h-4 text-emerald-400" />
-                    {language === 'ar' ? 'سجلات طلبات HTTP (بوابة SMS)' : 'HTTP Gateway Requests (SMS Logs)'}
-                  </h3>
-                  <Link href="/admin/sms" className="text-[10px] text-emerald-400 font-bold hover:underline flex items-center gap-0.5">
-                    <span>{language === 'ar' ? 'عرض الكل' : 'View All'}</span>
-                    <ArrowRight className="w-3 h-3 rtl-flip" />
-                  </Link>
-                </div>
-                
-                <div className="mt-4 space-y-3">
-                  {isLogsLoading ? (
-                    <div className="space-y-2 py-4">
-                      {Array.from({ length: 3 }).map((_, i) => (
-                        <div key={i} className="h-12 bg-slate-900/60 rounded-xl animate-pulse" />
-                      ))}
-                    </div>
-                  ) : !smsLogs || smsLogs.length === 0 ? (
-                    <div className="text-center py-10 text-xs text-slate-500">
-                      {language === 'ar' ? 'لا توجد سجلات حالياً' : 'No logs available'}
-                    </div>
-                  ) : (
-                    smsLogs.map((log: any) => (
-                      <div key={log.id} className="p-3 bg-slate-950/40 border border-slate-900 rounded-xl flex items-center justify-between gap-4">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-xs font-bold text-white">{log.sender}</span>
-                            {getLogStatusBadge(log.status)}
-                          </div>
-                          <p className="text-[11px] text-slate-400 truncate mt-1.5" title={log.message}>
-                            {log.message}
-                          </p>
-                          {log.error_message && (
-                            <p className="text-[10px] text-red-400 mt-1 font-mono">
-                              Error: {log.error_message}
-                            </p>
-                          )}
-                        </div>
-                        <div className="text-[10px] text-slate-500 whitespace-nowrap text-right self-start mt-1">
-                          {new Date(log.received_at || log.created_at).toLocaleTimeString(
-                            language === 'ar' ? 'ar-EG' : 'en-US',
-                            { hour: '2-digit', minute: '2-digit' }
-                          )}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
+        </div>
 
-            {/* Right: Gateway Telemetry & Verification Status Metrics */}
-            <div className="lg:col-span-5 space-y-6">
-              {/* Gateway Telemetry Card */}
-              <div className="glass-panel p-5 rounded-2xl border border-slate-900 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <Activity className="w-4 h-4 text-emerald-400 animate-pulse" />
-                    {language === 'ar' ? 'حالة بوابات الأندرويد' : 'Android Gateways Status'}
-                  </h3>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-900 border border-slate-800 text-slate-400">
-                    {gateways ? `${gateways.length} ${language === 'ar' ? 'أجهزة' : 'Devices'}` : '0'}
-                  </span>
-                </div>
-
-                {isGatewayLoading ? (
-                  <div className="space-y-3">
-                    <div className="h-16 bg-slate-900/40 rounded-xl animate-pulse" />
-                    <div className="h-16 bg-slate-900/40 rounded-xl animate-pulse" />
-                  </div>
-                ) : !gateways || gateways.length === 0 ? (
-                  <p className="text-xs text-slate-500 text-center py-6 leading-relaxed">
-                    {language === 'ar' 
-                      ? 'بوابات الرسائل (Android Gateways) لم ترسل أي نبضات قلب (Heartbeats) بعد.' 
-                      : 'No Android gateway applications have sent any heartbeat telemetry yet.'}
-                  </p>
-                ) : (
-                  <div className="space-y-3 max-h-72 overflow-y-auto custom-scrollbar pr-1">
-                    {gateways.map((device: any) => {
-                      const diff = Date.now() - new Date(device.lastHeartbeat).getTime();
-                      const isOnline = diff < 3 * 60 * 1000; // Online if last heartbeat < 3 minutes ago
-                      
-                      return (
-                        <div key={device.deviceId} className="p-3 bg-slate-950/40 border border-slate-900/60 rounded-xl space-y-3">
-                          <div className="flex items-center justify-between">
-                            {editingDevice === device.deviceId ? (
-                              <div className="flex items-center gap-1.5">
-                                <Smartphone className="w-3.5 h-3.5 text-slate-400" />
-                                <input
-                                  type="text"
-                                  value={newNickname}
-                                  onChange={(e) => setNewNickname(e.target.value)}
-                                  className="bg-slate-900 border border-slate-800 text-[11px] px-2 py-0.5 rounded text-white focus:outline-none focus:border-emerald-500 w-28 md:w-36"
-                                  placeholder={language === 'ar' ? 'الاسم المستعار' : 'Nickname'}
-                                  disabled={isSavingNickname}
-                                  autoFocus
-                                />
-                                <button
-                                  onClick={() => handleSaveNickname(device.deviceId)}
-                                  disabled={isSavingNickname}
-                                  className="text-emerald-400 hover:text-emerald-350 p-0.5 disabled:opacity-50"
-                                  title={language === 'ar' ? 'حفظ' : 'Save'}
-                                >
-                                  <Check className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  onClick={() => setEditingDevice(null)}
-                                  disabled={isSavingNickname}
-                                  className="text-slate-400 hover:text-slate-300 p-0.5"
-                                  title={language === 'ar' ? 'إلغاء' : 'Cancel'}
-                                >
-                                  <X className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            ) : (
-                              <span className="font-bold text-xs text-white flex items-center gap-1.5 group">
-                                <Smartphone className="w-3.5 h-3.5 text-slate-400" />
-                                <span className="truncate max-w-[120px] md:max-w-[160px]">
-                                  {nicknames?.[device.deviceId] 
-                                    ? nicknames[device.deviceId] 
-                                    : `${language === 'ar' ? 'جهاز' : 'Device'} (${device.deviceId.substring(0, 8)})`}
-                                </span>
-                                {nicknames?.[device.deviceId] && (
-                                  <span className="text-[10px] font-normal text-slate-500">
-                                    ({device.deviceId.substring(0, 8)})
-                                  </span>
-                                )}
-                                <button
-                                  onClick={() => {
-                                    setEditingDevice(device.deviceId);
-                                    setNewNickname(nicknames?.[device.deviceId] || '');
-                                  }}
-                                  className="text-slate-500 hover:text-white p-0.5 transition-colors duration-150"
-                                  title={language === 'ar' ? 'تعديل الاسم المستعار' : 'Edit Nickname'}
-                                >
-                                  <Edit3 className="w-3 h-3" />
-                                </button>
-                              </span>
-                            )}
-                            <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
-                              isOnline 
-                                ? 'bg-emerald-950/60 border border-emerald-900 text-emerald-400' 
-                                : 'bg-red-950/40 border border-red-900/40 text-red-300'
-                            }`}>
-                              {isOnline 
-                                ? (language === 'ar' ? '🟢 متصل' : '🟢 Active') 
-                                : (language === 'ar' ? '🔴 غير متصل' : '🔴 Offline')
-                              }
-                            </span>
-                          </div>
-
-                          <div className="grid grid-cols-3 gap-2 text-[11px]">
-                            {/* Battery */}
-                            <div className="flex items-center gap-1.5 text-slate-300">
-                              <Battery className={`w-4 h-4 ${device.battery > 20 ? 'text-emerald-400' : 'text-red-400'}`} />
-                              <span>{device.battery}%</span>
-                            </div>
-
-                            {/* Network */}
-                            <div className="flex items-center gap-1.5 text-slate-300 capitalize">
-                              <Wifi className="w-4 h-4 text-teal-400" />
-                              <span>{device.network || 'wifi'}</span>
-                            </div>
-
-                            {/* Pending SMS */}
-                            <div className="flex items-center gap-1.5 text-slate-300">
-                              <Clock className="w-4 h-4 text-amber-400" />
-                              <span className={device.pendingSms > 0 ? 'text-amber-400 font-bold' : ''}>
-                                {device.pendingSms} {language === 'ar' ? 'معلقة' : 'Pending'}
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="text-[9px] text-slate-500 flex justify-between border-t border-slate-900/60 pt-2">
-                            <span>
-                              {language === 'ar' ? 'آخر اتصال: ' : 'Last Sync: '}
-                              {new Date(device.lastHeartbeat).toLocaleTimeString(
-                                language === 'ar' ? 'ar-EG' : 'en-US',
-                                { hour: '2-digit', minute: '2-digit', second: '2-digit' }
-                              )}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Right: Verification Status Metrics */}
-              <div className="glass-panel p-5 rounded-2xl border border-slate-900 space-y-4">
-                <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  <CheckCircle className="w-4 h-4 text-teal-400" />
-                  {language === 'ar' ? 'تحليل حالات التحقق' : 'Verification Status Metrics'}
+        {/* 3. GATEWAY HEALTH & RECENT TRANSACTIONS */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          
+          <div className="lg:col-span-5 p-6 rounded-3xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-subtle space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-[#EAE8DE] dark:border-[#283849]">
+              <div className="flex items-center gap-2">
+                <Smartphone className="w-5 h-5 text-[#153C32] dark:text-[#24B58A]" />
+                <h3 className="font-extrabold text-base text-[#153C32] dark:text-[#F3F5F4]">
+                  {language === 'ar' ? 'أجهزة بوابة الـ SMS' : 'Active SMS Gateways'}
                 </h3>
-
-                <div className="h-60 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={dashboardData.verificationTypes} barSize={35}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.3} />
-                      <XAxis dataKey="name" stroke="#64748b" fontSize={9} tickLine={false} />
-                      <YAxis stroke="#64748b" fontSize={9} tickLine={false} />
-                      <Tooltip 
-                        contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', borderRadius: '12px' }}
-                        itemStyle={{ color: '#fff', fontSize: '10px' }}
-                      />
-                      <Bar dataKey="count" fill="#06b6d4" radius={[6, 6, 0, 0]}>
-                        {dashboardData.verificationTypes.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
               </div>
+              <Link href="/admin/sms" className="text-xs font-bold text-[#153C32] dark:text-[#24B58A] hover:underline">
+                {language === 'ar' ? 'إدارة ←' : 'Manage →'}
+              </Link>
+            </div>
+
+            {gateways.length === 0 ? (
+              <p className="text-xs text-[#738079] dark:text-[#A7B4B0] py-4 text-center">
+                {language === 'ar' ? 'لم يتم ربط أجهزة حتى الآن عبر تطبيق الأندرويد.' : 'No active gateway devices detected.'}
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {gateways.map((g: any, idx: number) => {
+                  const id = g.deviceId || `device_${idx}`;
+                  const customName = nicknames[id] || `هاتف البوابة ${idx + 1}`;
+                  const isOnline = g.lastHeartbeat && (Date.now() - new Date(g.lastHeartbeat).getTime()) < 1000 * 60 * 30;
+
+                  return (
+                    <div key={id} className="p-4 rounded-2xl bg-[#FAF9F5] dark:bg-[#111C2D] border border-[#EAE8DE] dark:border-[#283849] space-y-2">
+                      <div className="flex items-center justify-between">
+                        {editingDevice === id ? (
+                          <div className="flex items-center gap-1.5 flex-1 me-2">
+                            <input
+                              type="text"
+                              value={newNickname}
+                              onChange={e => setNewNickname(e.target.value)}
+                              className="py-1 px-2 text-xs rounded-lg border border-[#DDD9CC] dark:border-[#283849] bg-white dark:bg-[#172436] text-[#191F1C] dark:text-[#F3F5F4]"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleSaveNickname(id)}
+                              disabled={isSavingNickname}
+                              className="p-1 rounded bg-[#153C32] dark:bg-[#24B58A] text-white"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingDevice(null)}
+                              className="p-1 rounded bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-sm text-[#191F1C] dark:text-[#F3F5F4]">{customName}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingDevice(id);
+                                setNewNickname(customName);
+                              }}
+                              className="text-[#738079] hover:text-[#153C32] dark:hover:text-[#24B58A]"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
+
+                        <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                          isOnline 
+                            ? 'bg-green-100 dark:bg-green-950/40 text-green-800 dark:text-green-300' 
+                            : 'bg-red-100 dark:bg-red-950/40 text-red-800 dark:text-red-300'
+                        }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-green-600' : 'bg-red-600'}`} />
+                          {isOnline ? 'متصل' : 'غير متصل'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-4 text-xs text-[#738079] dark:text-[#A7B4B0]">
+                        <span className="flex items-center gap-1">
+                          <Battery className="w-3.5 h-3.5" />
+                          <span>{g.battery ?? '—'}%</span>
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Wifi className="w-3.5 h-3.5" />
+                          <span>{g.network || 'WiFi'}</span>
+                        </span>
+                        <span className="text-[11px] font-mono text-[#94A099]">
+                          ID: {id.substring(0, 8)}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="lg:col-span-7 p-6 rounded-3xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-subtle space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-[#EAE8DE] dark:border-[#283849]">
+              <h3 className="font-extrabold text-base text-[#153C32] dark:text-[#F3F5F4]">
+                {language === 'ar' ? 'آخر التبرعات المسجلة' : 'Recent Submissions'}
+              </h3>
+              <Link href="/admin/donations" className="text-xs font-bold text-[#153C32] dark:text-[#24B58A] hover:underline">
+                {language === 'ar' ? 'عرض السجل الكامل ←' : 'View All →'}
+              </Link>
+            </div>
+
+            <div className="divide-y divide-[#EAE8DE] dark:divide-[#283849]">
+              {donations.slice(0, 5).map((d: any) => (
+                <div key={d.id} className="py-3 flex items-center justify-between gap-3">
+                  <div className="space-y-0.5">
+                    <span className="font-bold text-sm text-[#191F1C] dark:text-[#F3F5F4] block">
+                      {d.donor?.name || 'فاعل خير'}
+                    </span>
+                    <span className="text-xs text-[#738079] dark:text-[#A7B4B0]">
+                      {d.donor?.phone || '—'} • {d.payment_method === 'vodafone_cash' ? 'فودافون كاش' : 'InstaPay'}
+                    </span>
+                  </div>
+
+                  <div className="text-end space-y-1">
+                    <span className="font-extrabold text-sm text-[#153C32] dark:text-[#24B58A] block">
+                      {Number(d.amount).toLocaleString('en-US')} {t('egp')}
+                    </span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full inline-block ${
+                      d.status === 'auto_verified' || d.status === 'manual_verified'
+                        ? 'bg-[#F0F9F6] dark:bg-[#24B58A]/10 text-[#217A61] dark:text-[#24B58A]'
+                        : d.status === 'pending'
+                        ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300'
+                        : 'bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300'
+                    }`}>
+                      {d.status === 'auto_verified'
+                        ? 'موثق آليًا'
+                        : d.status === 'manual_verified'
+                        ? 'معتمد يدويًا'
+                        : d.status === 'pending'
+                        ? 'قيد المراجعة'
+                        : 'مرفوض'}
+                    </span>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-        )}
+
+        </div>
 
       </div>
     </AdminLayout>

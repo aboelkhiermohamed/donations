@@ -4,22 +4,23 @@ import React, { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useLanguage } from '@/context/LanguageContext';
-import { 
-  LayoutDashboard, 
-  Coins, 
-  MessageSquare, 
-  FileSpreadsheet, 
-  LogOut, 
-  Heart, 
-  Globe, 
-  Menu, 
-  X, 
-  Bell, 
+import {
+  LayoutDashboard,
+  Coins,
+  MessageSquare,
+  FileSpreadsheet,
+  LogOut,
+  HeartHandshake,
+  Globe,
+  Menu,
+  X,
+  Bell,
   Loader2,
-  AlertTriangle,
-  Settings
+  Settings,
+  ExternalLink
 } from 'lucide-react';
 import Link from 'next/link';
+import ThemeToggle from '@/components/ThemeToggle';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { language, dir, toggleLanguage, t } = useLanguage();
@@ -32,37 +33,39 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
   const [adminName, setAdminName] = useState('');
-  const [isMaintenanceActive, setIsMaintenanceActive] = useState(false);
 
   // 1. Session verification & redirection
   useEffect(() => {
     async function verifyAdmin() {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+
+        if (!session) {
+          router.replace('/admin/login');
+          return;
+        }
+
+        const { data: admin, error } = await supabase
+          .from('admins')
+          .select('name')
+          .eq('id', session.user.id)
+          .maybeSingle();
+
+        if (error || !admin) {
+          await supabase.auth.signOut();
+          router.replace('/admin/login');
+          return;
+        }
+
+        setAdminName(admin.name || 'مسؤول الحملة');
+        setIsAdmin(true);
+        setIsLoading(false);
+      } catch (err) {
+        console.error('Admin session error:', err);
         router.replace('/admin/login');
-        return;
       }
-
-      // Check admins table
-      const { data: admin, error } = await supabase
-        .from('admins')
-        .select('name')
-        .eq('id', session.user.id)
-        .maybeSingle();
-
-      if (error || !admin) {
-        // Sign out if not admin
-        await supabase.auth.signOut();
-        router.replace('/admin/login');
-        return;
-      }
-
-      setAdminName(admin.name);
-      setIsAdmin(true);
-      setIsLoading(false);
     }
-    
+
     verifyAdmin();
   }, [router]);
 
@@ -71,22 +74,22 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     if (!isAdmin) return;
 
     const fetchNotifications = async () => {
-      const { count } = await supabase
-        .from('notifications')
-        .select('*', { count: 'exact', head: true })
-        .eq('is_read', false);
-      
-      setUnreadNotificationsCount(count || 0);
+      try {
+        const { count } = await supabase
+          .from('notifications')
+          .select('*', { count: 'exact', head: true })
+          .eq('is_read', false);
+
+        setUnreadNotificationsCount(count || 0);
+      } catch { }
     };
 
     fetchNotifications();
 
-    // Subscribe to notifications
     const channel = supabase
-      .channel('admin_notifications')
+      .channel('admin_notifications_layout')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, () => {
         setUnreadNotificationsCount(prev => prev + 1);
-        // Play notification alert chime (optional)
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'notifications' }, () => {
         fetchNotifications();
@@ -98,230 +101,252 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     };
   }, [isAdmin]);
 
-  // 2.5. Check and Subscribe to Maintenance Mode status
-  useEffect(() => {
-    if (!isAdmin) return;
-
-    const checkMaintenance = async () => {
-      const { data, error } = await supabase
-        .from('settings')
-        .select('*')
-        .eq('key', 'maintenance_mode')
-        .maybeSingle();
-
-      if (!error && data) {
-        setIsMaintenanceActive(data.value?.enabled || false);
-      }
-    };
-
-    checkMaintenance();
-
-    // Subscribe to changes in settings table
-    const channel = supabase
-      .channel('admin_settings_maintenance')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'settings' },
-        (payload) => {
-          if (payload.new && (payload.new as any).key === 'maintenance_mode') {
-            setIsMaintenanceActive((payload.new as any).value?.enabled || false);
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [isAdmin]);
-
-  // 3. Logout action
   const handleLogout = async () => {
-    setIsLoading(true);
     await supabase.auth.signOut();
     router.replace('/admin/login');
   };
 
   const navItems = [
-    { label: t('db_overview'), path: '/admin/dashboard', icon: LayoutDashboard },
-    { label: t('db_donations'), path: '/admin/donations', icon: Coins },
-    { label: t('db_sms'), path: '/admin/sms', icon: MessageSquare, badge: true },
-    { label: t('db_reports'), path: '/admin/reports', icon: FileSpreadsheet },
-    { label: language === 'ar' ? 'الإعدادات' : 'Settings', path: '/admin/settings', icon: Settings },
+    {
+      href: '/admin/dashboard',
+      label: language === 'ar' ? 'نظرة عامة' : 'Dashboard',
+      icon: LayoutDashboard,
+      active: pathname === '/admin/dashboard',
+    },
+    {
+      href: '/admin/donations',
+      label: language === 'ar' ? 'سجل التبرعات' : 'Donations',
+      icon: Coins,
+      active: pathname === '/admin/donations',
+    },
+    {
+      href: '/admin/sms',
+      label: language === 'ar' ? 'بوابة الرسائل (SMS)' : 'SMS Gateway',
+      icon: MessageSquare,
+      active: pathname === '/admin/sms',
+    },
+    {
+      href: '/admin/reports',
+      label: language === 'ar' ? 'التقارير المحاسبية' : 'Reports',
+      icon: FileSpreadsheet,
+      active: pathname === '/admin/reports',
+    },
+    {
+      href: '/admin/settings',
+      label: language === 'ar' ? 'إعدادات الحملة والدفع' : 'Payment Settings',
+      icon: Settings,
+      active: pathname === '/admin/settings',
+    },
   ];
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center gap-4 text-slate-400">
-        <Loader2 className="w-10 h-10 animate-spin text-emerald-400" />
-        <span className="text-sm font-semibold">{language === 'ar' ? 'تحميل لوحة الإدارة...' : 'Loading Admin Portal...'}</span>
+      <div className="min-h-screen bg-[#FAF9F5] dark:bg-[#0B1220] flex flex-col items-center justify-center font-arabic">
+        <Loader2 className="w-8 h-8 animate-spin text-[#153C32] dark:text-[#24B58A] mb-3" />
+        <span className="text-sm font-semibold text-[#55625B] dark:text-[#A7B4B0]">
+          جارٍ التحقق من صلاحيات الإدارة...
+        </span>
       </div>
     );
   }
 
-  if (!isAdmin) return null;
-
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-50 flex flex-col md:flex-row font-sans" dir={dir}>
-      {/* MOBILE HEADER */}
-      <header className="md:hidden w-full bg-slate-900/80 border-b border-slate-800 p-4 flex items-center justify-between sticky top-0 z-40 backdrop-blur-md print:hidden">
-        <Link href="/" className="flex items-center gap-2 hover:opacity-90 transition-opacity">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center">
-            <Heart className="w-4 h-4 text-slate-950 fill-slate-950" />
-          </div>
-          <span className="font-extrabold text-white text-md tracking-tight">YusrAdmin</span>
-        </Link>
+    <div className="min-h-screen flex bg-[#FAF9F5] dark:bg-[#0B1220] text-[#191F1C] dark:text-[#F3F5F4] font-arabic transition-colors duration-200" dir={dir}>
 
-        <div className="flex items-center gap-4">
-          <button onClick={toggleLanguage} className="p-1.5 rounded-lg bg-slate-800 text-slate-300">
-            <Globe className="w-4 h-4 text-emerald-400" />
-          </button>
-          
-          <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="p-1.5 rounded-lg bg-slate-800 text-slate-350">
-            {mobileMenuOpen ? <X className="w-5 h-5 text-white" /> : <Menu className="w-5 h-5 text-white" />}
-          </button>
-        </div>
-      </header>
+      {/* DESKTOP SIDEBAR */}
+      <aside className="hidden lg:flex w-72 flex-col bg-[#153C32] dark:bg-[#111C2D] text-white border-e border-[#0E2A22] dark:border-[#283849] fixed inset-y-0 start-0 z-30 shadow-elevated">
 
-      {/* SIDEBAR NAVIGATION (Desktop) */}
-      <aside className={`fixed inset-y-0 start-0 z-30 w-64 glass-panel border-r border-slate-800/80 p-6 flex flex-col justify-between transition-transform duration-300 md:translate-x-0 md:static print:hidden ${
-        mobileMenuOpen 
-          ? 'translate-x-0' 
-          : dir === 'rtl' 
-            ? 'translate-x-full md:translate-x-0' 
-            : '-translate-x-full md:translate-x-0'
-      }`}>
-        <div className="space-y-8">
-          {/* Logo */}
-          <Link href="/" className="flex items-center gap-3 hover:opacity-90 transition-opacity">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center shadow-lg shadow-emerald-500/20">
-              <Heart className="w-5 h-5 text-slate-950 fill-slate-950" />
+        {/* Brand Header */}
+        <div className="h-20 px-6 flex items-center justify-between border-b border-white/10 dark:border-[#283849]">
+          <Link href="/admin/dashboard" className="flex items-center gap-3 group">
+            <div className="w-10 h-10 rounded-xl bg-white/10 dark:bg-[#24B58A]/15 flex items-center justify-center text-[#E2F3EE] dark:text-[#24B58A] group-hover:bg-white/15 transition-colors">
+              <HeartHandshake className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="font-black text-white text-sm tracking-tight">Yusr Dashboard</h2>
-              <span className="text-[10px] text-slate-500 block uppercase tracking-widest">{t('admin_title')}</span>
+              <span className="font-extrabold text-base text-white tracking-tight block">
+                {language === 'ar' ? 'لوحة إدارة الصدقة' : 'Charity Admin'}
+              </span>
+              <span className="text-xs text-[#B79B68] dark:text-[#C5A876] font-medium block">
+                {t('brand_batch')}
+              </span>
             </div>
           </Link>
-
-          {/* Nav List */}
-          <nav className="space-y-1.5">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = pathname === item.path;
-              return (
-                <Link
-                  key={item.path}
-                  href={item.path}
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={`flex items-center justify-between px-4 py-3 rounded-xl text-sm font-semibold transition-all ${
-                    isActive
-                      ? 'bg-slate-900 border border-slate-800 text-emerald-400 shadow-md'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-900/30'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <Icon className={`w-4 h-4 ${isActive ? 'text-emerald-400' : 'text-slate-400'}`} />
-                    <span>{item.label}</span>
-                  </div>
-
-                  {item.badge && unreadNotificationsCount > 0 && (
-                    <span className="px-1.5 py-0.5 rounded-full bg-emerald-500 text-slate-950 font-black text-[10px] glow-green">
-                      {unreadNotificationsCount}
-                    </span>
-                  )}
-                </Link>
-              );
-            })}
-          </nav>
         </div>
 
-        {/* Sidebar Footer */}
-        <div className="space-y-4 pt-6 border-t border-slate-900">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-xs font-bold text-emerald-400">
-              {adminName ? adminName.charAt(0).toUpperCase() : 'A'}
+        {/* Navigation Items */}
+        <nav className="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto">
+          {navItems.map(item => {
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm font-bold transition-all ${
+                  item.active
+                    ? 'bg-white/15 dark:bg-[#24B58A]/20 text-white shadow-subtle'
+                    : 'text-[#E2F3EE]/75 dark:text-[#A7B4B0] hover:bg-white/10 dark:hover:bg-[#172436] hover:text-white'
+                }`}
+              >
+                <Icon className={`w-5 h-5 ${item.active ? 'text-[#B79B68] dark:text-[#24B58A]' : 'text-[#E2F3EE]/60 dark:text-[#80918C]'}`} />
+                <span>{item.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* Admin Footer Information */}
+        <div className="p-4 border-t border-white/10 dark:border-[#283849] space-y-3">
+          <div className="p-3 rounded-xl bg-white/5 dark:bg-[#172436] border border-white/10 dark:border-[#283849] flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-[#B79B68] dark:bg-[#24B58A] text-[#153C32] dark:text-[#0B1220] font-black flex items-center justify-center text-xs">
+                {adminName.charAt(0) || 'م'}
+              </div>
+              <div className="text-start">
+                <span className="text-xs font-bold text-white block leading-tight truncate max-w-[120px]">
+                  {adminName}
+                </span>
+                <span className="text-[10px] text-[#B79B68] dark:text-[#C5A876] font-semibold block">
+                  {language === 'ar' ? 'مسؤول معتمد' : 'Authorized Admin'}
+                </span>
+              </div>
             </div>
-            <div className="overflow-hidden">
-              <h4 className="text-white font-bold text-xs truncate">{adminName || 'Administrator'}</h4>
-              <span className="text-[9px] text-emerald-450 block font-semibold">{t('admin_title')}</span>
-            </div>
+
+            <button
+              onClick={handleLogout}
+              className="p-1.5 rounded-lg text-white/60 hover:text-red-300 hover:bg-red-950/30 transition-colors"
+              title="تسجيل الخروج"
+            >
+              <LogOut className="w-4 h-4 rtl-flip" />
+            </button>
           </div>
 
-          {/* Toggle Language Button (Desktop) */}
-          <button
-            onClick={toggleLanguage}
-            className="w-full hidden md:flex items-center gap-3 px-4 py-2.5 rounded-xl border border-slate-800 hover:bg-slate-900/50 text-xs font-semibold text-slate-300 transition-colors"
+          <Link
+            href="/"
+            target="_blank"
+            className="w-full inline-flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-white/5 dark:bg-[#172436] text-xs font-semibold text-[#E2F3EE]/80 dark:text-[#A7B4B0] hover:bg-white/10 dark:hover:bg-[#1f3047] hover:text-white transition-colors"
           >
-            <Globe className="w-3.5 h-3.5 text-emerald-400" />
-            <span>{language === 'ar' ? 'English Language' : 'اللغة العربية'}</span>
-          </button>
-
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl bg-red-950/20 border border-red-900/20 hover:bg-red-950/30 text-xs font-semibold text-red-300 transition-all active:scale-[0.99]"
-          >
-            <LogOut className="w-3.5 h-3.5 text-red-400" />
-            <span>{t('logout')}</span>
-          </button>
+            <ExternalLink className="w-3.5 h-3.5" />
+            <span>{language === 'ar' ? 'زيارة الموقع العام' : 'View Public Site'}</span>
+          </Link>
         </div>
+
       </aside>
 
-      {/* MAIN CONTAINER CONTENT */}
-      <div className="flex-1 min-w-0 p-6 md:p-8 overflow-y-auto space-y-6 print:p-0 print:m-0 print:overflow-visible">
-        {/* Banner Alert for Maintenance Mode */}
-        {isMaintenanceActive && (
-          <div className="w-full p-4 bg-amber-950/20 border border-amber-900/30 rounded-2xl flex items-center justify-between gap-4 animate-scale-up print:hidden">
-            <div className="flex items-center gap-3">
-              <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0" />
-              <div>
-                <h4 className="text-white font-bold text-sm">
-                  {language === 'ar' ? 'تنبيه: وضع الصيانة نشط حالياً' : 'Alert: Maintenance Mode is Active'}
-                </h4>
-                <p className="text-slate-400 text-xs mt-0.5">
-                  {language === 'ar' 
-                    ? 'الموقع حالياً معروض للمشرفين فقط ومغلق للعامة. لا تنسَ إيقافه فور الانتهاء.' 
-                    : 'The site is currently hidden from public users. Remember to disable it when done.'
-                  }
-                </p>
-              </div>
-            </div>
-            <Link 
-              href="/admin/settings"
-              className="px-4 py-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-lg text-xs font-bold text-amber-400 hover:text-amber-350 flex-shrink-0"
-            >
-              {language === 'ar' ? 'الإعدادات' : 'Settings'}
-            </Link>
-          </div>
-        )}
+      {/* MAIN CONTENT AREA */}
+      <div className="flex-1 flex flex-col lg:ps-72 min-w-0">
 
-        {/* Banner Alert for Unverified Matches */}
-        {unreadNotificationsCount > 0 && (
-          <div className="w-full p-4 bg-emerald-950/20 border border-emerald-900/30 rounded-2xl flex items-center justify-between gap-4 animate-scale-up print:hidden">
-            <div className="flex items-center gap-3">
-              <AlertTriangle className="w-5 h-5 text-emerald-400 flex-shrink-0" />
-              <div>
-                <h4 className="text-white font-bold text-sm">
-                  {language === 'ar' ? 'تنبيه: رسائل غير مطابقة' : 'Alert: Unmatched Transactions'}
-                </h4>
-                <p className="text-slate-400 text-xs mt-0.5">
-                  {language === 'ar' 
-                    ? `لديك عدد ${unreadNotificationsCount} إشعارات معلقة قيد المراجعة. يرجى التحقق من لوحة مراقب الرسائل لمطابقتها يدوياً.` 
-                    : `You have ${unreadNotificationsCount} unread system alerts. Review the SMS Monitor to perform manual verification.`
-                  }
-                </p>
-              </div>
-            </div>
-            <Link 
-              href="/admin/sms"
-              className="px-4 py-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-lg text-xs font-bold text-emerald-300 flex-shrink-0"
-            >
-              {language === 'ar' ? 'افتح المراقب' : 'Open Monitor'}
-            </Link>
-          </div>
-        )}
+        {/* Top Navbar */}
+        <header className="h-16 px-4 sm:px-8 bg-white dark:bg-[#172436] border-b border-[#EAE8DE] dark:border-[#283849] flex items-center justify-between sticky top-0 z-20 shadow-subtle transition-colors">
 
-        {children}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setMobileMenuOpen(true)}
+              className="lg:hidden p-2 rounded-lg border border-[#DDD9CC] dark:border-[#283849] bg-[#FAF9F5] dark:bg-[#111C2D] text-[#3D4742] dark:text-[#F3F5F4]"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <span className="text-xs sm:text-sm font-semibold text-[#738079] dark:text-[#A7B4B0] hidden sm:inline">
+              صدقة جارية • إهداء لروح د. حسين علي الأمير ود. ندى هاني حامد
+            </span>
+          </div>
+
+          {/* Top Right Controls */}
+          <div className="flex items-center gap-2.5">
+
+            {/* Theme Toggle */}
+            <ThemeToggle />
+
+            {/* Notifications Indicator */}
+            <div className="relative">
+              <Link
+                href="/admin/donations?status=pending"
+                className="p-2 rounded-xl border border-[#DDD9CC] dark:border-[#283849] bg-[#FAF9F5] dark:bg-[#111C2D] text-[#3D4742] dark:text-[#F3F5F4] hover:bg-[#F4F3ED] dark:hover:bg-[#172436] block relative"
+                title="التبرعات المعلقة"
+              >
+                <Bell className="w-4 h-4" />
+                {unreadNotificationsCount > 0 && (
+                  <span className="absolute -top-1 -end-1 w-5 h-5 rounded-full bg-red-600 text-white text-[10px] font-black flex items-center justify-center shadow-subtle">
+                    {unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount}
+                  </span>
+                )}
+              </Link>
+            </div>
+
+            {/* Language Switch */}
+            <button
+              onClick={toggleLanguage}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#DDD9CC] dark:border-[#283849] bg-[#FAF9F5] dark:bg-[#111C2D] text-xs font-semibold text-[#3D4742] dark:text-[#F3F5F4] hover:bg-[#F4F3ED] dark:hover:bg-[#172436]"
+            >
+              <Globe className="w-3.5 h-3.5 text-[#153C32] dark:text-[#24B58A]" />
+              <span>{language === 'ar' ? 'English' : 'العربية'}</span>
+            </button>
+
+            {/* Public Link */}
+            <Link
+              href="/"
+              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#153C32] dark:bg-[#24B58A] text-white dark:text-[#0B1220] text-xs font-bold hover:bg-[#1C4E41] dark:hover:bg-[#1fa37b]"
+            >
+              <span>{language === 'ar' ? 'الموقع العام' : 'Public Site'}</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </Link>
+
+          </div>
+        </header>
+
+        {/* Page Body */}
+        <main className="flex-1 p-4 sm:p-8">
+          {children}
+        </main>
+
       </div>
+
+      {/* MOBILE DRAWER SIDEBAR */}
+      {mobileMenuOpen && (
+        <div className="lg:hidden fixed inset-0 z-50 flex">
+          <div
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+          <div className="relative w-72 max-w-[80%] bg-[#153C32] dark:bg-[#111C2D] text-white flex flex-col p-6 z-10 space-y-6">
+            <div className="flex items-center justify-between border-b border-white/10 pb-4">
+              <span className="font-bold text-base">{language === 'ar' ? 'لوحة الإدارة' : 'Admin Portal'}</span>
+              <button onClick={() => setMobileMenuOpen(false)} className="p-1 rounded-lg text-white/70 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <nav className="flex-1 space-y-2">
+              {navItems.map(item => {
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold ${
+                      item.active ? 'bg-white/15 dark:bg-[#24B58A]/20 text-white' : 'text-[#E2F3EE]/75 dark:text-[#A7B4B0] hover:bg-white/10'
+                    }`}
+                  >
+                    <Icon className="w-5 h-5 text-[#B79B68] dark:text-[#24B58A]" />
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </nav>
+
+            <div className="pt-4 border-t border-white/10 space-y-2">
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center gap-2 px-4 py-2.5 rounded-xl bg-red-950/30 text-red-300 text-xs font-bold"
+              >
+                <LogOut className="w-4 h-4 rtl-flip" />
+                <span>{language === 'ar' ? 'تسجيل الخروج' : 'Log Out'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

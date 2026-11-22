@@ -1,30 +1,61 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import AdminLayout from '@/components/admin/AdminLayout';
 import { useLanguage } from '@/context/LanguageContext';
 import { supabase } from '@/lib/supabase';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Save, Loader2, Coins, Target, CheckCircle, Upload, Image, ShieldAlert, Wrench } from 'lucide-react';
+import { 
+  getAllPaymentMethods, 
+  savePaymentMethods, 
+  DEFAULT_PAYMENT_METHODS 
+} from '@/lib/paymentService';
+import { PaymentMethodConfig, WalletConfig } from '@/types';
+import { 
+  Save, 
+  Loader2, 
+  Target, 
+  CheckCircle2, 
+  Smartphone, 
+  CreditCard,
+  Plus, 
+  Trash2, 
+  Edit3, 
+  Copy, 
+  Check, 
+  ArrowUp, 
+  ArrowDown, 
+  Eye, 
+  Wrench, 
+  AlertCircle, 
+  X,
+  ExternalLink
+} from 'lucide-react';
 
 export default function AdminSettingsPage() {
-  const { language } = useLanguage();
+  const { language, dir, t } = useLanguage();
   const queryClient = useQueryClient();
 
-  // Form states
-  const [targetAmount, setTargetAmount] = useState('');
-  const [vodafoneCash, setVodafoneCash] = useState('');
-  const [vodafoneCash2, setVodafoneCash2] = useState('');
-  const [instapayAddress, setInstapayAddress] = useState('');
-  const [instapayPhone, setInstapayPhone] = useState('');
-  const [instapayLink, setInstapayLink] = useState('');
-  const [instapayQrUrl, setInstapayQrUrl] = useState('');
-  const [instapayQrFile, setInstapayQrFile] = useState<File | null>(null);
+  // Campaign Settings
+  const [targetAmount, setTargetAmount] = useState('350000');
+  const [campaignTitleAr, setCampaignTitleAr] = useState('');
+  const [campaignDescAr, setCampaignDescAr] = useState('');
 
-  const [vodafoneCashEnabled, setVodafoneCashEnabled] = useState(true);
-  const [vodafoneCash2Enabled, setVodafoneCash2Enabled] = useState(true);
-  const [instapayEnabled, setInstapayEnabled] = useState(true);
-  
+  // Payment Methods State
+  const [methods, setMethods] = useState<PaymentMethodConfig[]>(DEFAULT_PAYMENT_METHODS);
+
+  // Wallet Modal State
+  const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
+  const [editingWalletId, setEditingWalletId] = useState<string | null>(null);
+  const [walletLabel, setWalletLabel] = useState('');
+  const [walletPhone, setWalletPhone] = useState('');
+  const [walletEnabled, setWalletEnabled] = useState(true);
+  const [walletError, setWalletError] = useState('');
+
+  // InstaPay QR file upload
+  const [instapayQrFile, setInstapayQrFile] = useState<File | null>(null);
+  const [instapayQrPreview, setInstapayQrPreview] = useState<string | null>(null);
+
   // Maintenance Mode States
   const [maintenanceEnabled, setMaintenanceEnabled] = useState(false);
   const [maintenanceMessageAr, setMaintenanceMessageAr] = useState('');
@@ -32,29 +63,26 @@ export default function AdminSettingsPage() {
   const [isSavingMaintenance, setIsSavingMaintenance] = useState(false);
   const [maintenanceSaveSuccess, setMaintenanceSaveSuccess] = useState(false);
 
+  // Saving state
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [isClearing, setIsClearing] = useState(false);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
-  // 1. Fetch Campaign and settings data
+  // Public Preview Tab
+  const [previewMethod, setPreviewMethod] = useState<string>('vodafone_cash');
+
+  // 1. Fetch Campaign and Payment Config Data
   const { data: config, isLoading } = useQuery({
-    queryKey: ['adminConfigData'],
+    queryKey: ['adminFullSettings'],
     queryFn: async () => {
-      // Fetch active campaign
       const { data: campaign } = await supabase
         .from('campaigns')
         .select('*')
         .limit(1)
         .maybeSingle();
 
-      // Fetch payment settings
-      const { data: settings } = await supabase
-        .from('settings')
-        .select('*')
-        .eq('key', 'payment_accounts')
-        .maybeSingle();
+      const paymentMethodsList = await getAllPaymentMethods(supabase);
 
-      // Fetch maintenance settings
       const { data: maintenance } = await supabase
         .from('settings')
         .select('*')
@@ -63,155 +91,299 @@ export default function AdminSettingsPage() {
 
       return {
         campaign,
-        settings: settings?.value || { 
-          vodafone_cash: '01015339426', 
-          vodafone_cash_2: '', 
-          instapay_address: '01015339426@instapay', 
-          instapay_phone: '01015339426',
-          instapay_payment_link: '',
-          instapay_qr_url: '',
-          vodafone_cash_enabled: true,
-          vodafone_cash_2_enabled: true,
-          instapay_enabled: true
-        },
-        maintenance: maintenance?.value || {
-          enabled: false,
-          message_ar: '',
-          message_en: ''
-        }
+        paymentMethods: paymentMethodsList,
+        maintenance: maintenance?.value || { enabled: false, message_ar: '', message_en: '' },
       };
-    }
+    },
   });
 
-  // Populate form once data is loaded
+  // Populate state on load
   useEffect(() => {
     if (config) {
-      setTargetAmount(String(config.campaign?.target_amount || '500000'));
-      setVodafoneCash(config.settings.vodafone_cash || '01015339426');
-      setVodafoneCash2(config.settings.vodafone_cash_2 || '');
-      setInstapayAddress(config.settings.instapay_address || '01015339426@instapay');
-      setInstapayPhone(config.settings.instapay_phone || '01015339426');
-      setInstapayLink(config.settings.instapay_payment_link || '');
-      setInstapayQrUrl(config.settings.instapay_qr_url || '');
-      setVodafoneCashEnabled(config.settings.vodafone_cash_enabled !== false);
-      setVodafoneCash2Enabled(config.settings.vodafone_cash_2_enabled !== false);
-      setInstapayEnabled(config.settings.instapay_enabled !== false);
-      
-      setMaintenanceEnabled(config.maintenance?.enabled || false);
-      setMaintenanceMessageAr(config.maintenance?.message_ar || '');
-      setMaintenanceMessageEn(config.maintenance?.message_en || '');
+      if (config.campaign) {
+        setTargetAmount(String(config.campaign.target_amount || '350000'));
+        setCampaignTitleAr(config.campaign.name_ar || '');
+        setCampaignDescAr(config.campaign.description_ar || '');
+      }
+      if (config.paymentMethods && config.paymentMethods.length > 0) {
+        setMethods(config.paymentMethods);
+      }
+      if (config.maintenance) {
+        setMaintenanceEnabled(config.maintenance.enabled || false);
+        setMaintenanceMessageAr(config.maintenance.message_ar || '');
+        setMaintenanceMessageEn(config.maintenance.message_en || '');
+      }
     }
   }, [config]);
 
-  // Save Handler
-  const handleSave = async (e: React.FormEvent) => {
+  // VFC Wallets helper
+  const vfcMethod = useMemo(() => {
+    return methods.find(m => m.method_key === 'vodafone_cash') || methods[0];
+  }, [methods]);
+
+  const ipnMethod = useMemo(() => {
+    return methods.find(m => m.method_key === 'instapay') || methods[1];
+  }, [methods]);
+
+  // Copy handler
+  const handleCopy = (text: string, key: string) => {
+    try {
+      navigator.clipboard.writeText(text);
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey(null), 2000);
+    } catch {}
+  };
+
+  // Toggle Master Method Enabled
+  const handleToggleMethod = (methodKey: string) => {
+    setMethods(prev =>
+      prev.map(m => (m.method_key === methodKey ? { ...m, enabled: !m.enabled } : m))
+    );
+  };
+
+  // Toggle Wallet Enabled
+  const handleToggleWallet = (walletId: string) => {
+    setMethods(prev =>
+      prev.map(m => {
+        if (m.method_key === 'vodafone_cash' && m.wallets) {
+          return {
+            ...m,
+            wallets: m.wallets.map(w =>
+              w.id === walletId ? { ...w, enabled: !w.enabled } : w
+            ),
+          };
+        }
+        return m;
+      })
+    );
+  };
+
+  // Move Wallet Up / Down
+  const handleMoveWallet = (walletId: string, direction: 'up' | 'down') => {
+    setMethods(prev =>
+      prev.map(m => {
+        if (m.method_key === 'vodafone_cash' && m.wallets) {
+          const list = [...m.wallets];
+          const idx = list.findIndex(w => w.id === walletId);
+          if (idx < 0) return m;
+
+          const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+          if (targetIdx < 0 || targetIdx >= list.length) return m;
+
+          const temp = list[idx];
+          list[idx] = list[targetIdx];
+          list[targetIdx] = temp;
+
+          // Re-index display_order
+          const reordered = list.map((w, i) => ({ ...w, display_order: i + 1 }));
+          return { ...m, wallets: reordered };
+        }
+        return m;
+      })
+    );
+  };
+
+  // Delete Wallet
+  const handleDeleteWallet = (walletId: string) => {
+    if (!window.confirm(language === 'ar' ? 'هل أنت متأكد من حذف رقم هذه المحفظة؟' : 'Are you sure you want to delete this wallet?')) {
+      return;
+    }
+
+    setMethods(prev =>
+      prev.map(m => {
+        if (m.method_key === 'vodafone_cash' && m.wallets) {
+          const filtered = m.wallets.filter(w => w.id !== walletId);
+          const reordered = filtered.map((w, i) => ({ ...w, display_order: i + 1 }));
+          return { ...m, wallets: reordered };
+        }
+        return m;
+      })
+    );
+  };
+
+  // Open Wallet Modal for Add or Edit
+  const handleOpenWalletModal = (wallet?: WalletConfig) => {
+    setWalletError('');
+    if (wallet) {
+      setEditingWalletId(wallet.id);
+      setWalletLabel(wallet.label || '');
+      setWalletPhone(wallet.phone_number || '');
+      setWalletEnabled(wallet.enabled !== false);
+    } else {
+      setEditingWalletId(null);
+      const nextNum = (vfcMethod?.wallets?.length || 0) + 1;
+      setWalletLabel(`محفظة فودافون كاش (${nextNum})`);
+      setWalletPhone('');
+      setWalletEnabled(true);
+    }
+    setIsWalletModalOpen(true);
+  };
+
+  // Save Wallet in Modal
+  const handleSaveWalletModal = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanPhone = walletPhone.trim().replace(/\s+/g, '');
+    const egPhoneRegex = /^01[0125]\d{8}$/;
+
+    if (!cleanPhone) {
+      setWalletError(language === 'ar' ? 'رقم الهاتف مطلوب' : 'Phone number is required');
+      return;
+    }
+    if (!egPhoneRegex.test(cleanPhone)) {
+      setWalletError(language === 'ar' ? 'يرجى إدخال رقم محفظة فودافون كاش مصري صحيح (11 رقم يبدأ بـ 010/011/012/015)' : 'Please enter a valid 11-digit Egyptian mobile number');
+      return;
+    }
+
+    // Check duplicate phone numbers in other active wallets
+    const currentWallets = vfcMethod?.wallets || [];
+    const isDuplicate = currentWallets.some(
+      w => w.id !== editingWalletId && w.phone_number === cleanPhone
+    );
+    if (isDuplicate) {
+      setWalletError(language === 'ar' ? 'هذا الرقم مضاف بالفعل في قائمة المحافظ' : 'This wallet number already exists in the list');
+      return;
+    }
+
+    setMethods(prev =>
+      prev.map(m => {
+        if (m.method_key === 'vodafone_cash') {
+          const list = m.wallets ? [...m.wallets] : [];
+          if (editingWalletId) {
+            // Edit existing
+            const updated = list.map(w =>
+              w.id === editingWalletId
+                ? {
+                    ...w,
+                    label: walletLabel.trim() || `محفظة ${cleanPhone}`,
+                    phone_number: cleanPhone,
+                    enabled: walletEnabled,
+                  }
+                : w
+            );
+            return { ...m, wallets: updated };
+          } else {
+            // Add new
+            const newWallet: WalletConfig = {
+              id: `wallet_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+              label: walletLabel.trim() || `محفظة ${cleanPhone}`,
+              phone_number: cleanPhone,
+              enabled: walletEnabled,
+              display_order: list.length + 1,
+            };
+            return { ...m, wallets: [...list, newWallet] };
+          }
+        }
+        return m;
+      })
+    );
+
+    setIsWalletModalOpen(false);
+  };
+
+  // Update InstaPay Config field
+  const handleUpdateInstapayConfig = (field: string, value: string) => {
+    setMethods(prev =>
+      prev.map(m => {
+        if (m.method_key === 'instapay') {
+          return {
+            ...m,
+            configuration: {
+              ...m.configuration,
+              [field]: value,
+            },
+          };
+        }
+        return m;
+      })
+    );
+  };
+
+  // QR Upload Handler
+  const handleQrFileChange = (file: File | null) => {
+    setInstapayQrFile(file);
+    if (file) {
+      setInstapayQrPreview(URL.createObjectURL(file));
+    } else {
+      setInstapayQrPreview(null);
+    }
+  };
+
+  // Master Save (Campaign + Payment Methods)
+  const handleSaveAll = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
     setSaveSuccess(false);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      let finalMethods = [...methods];
 
-      // 1. Update Campaign Target Amount
-      if (config?.campaign?.id) {
-        const { error: campaignError } = await supabase
-          .from('campaigns')
-          .update({
-            target_amount: Number(targetAmount),
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', config.campaign.id);
-        
-        if (campaignError) throw campaignError;
-      }
-
-      // Upload QR Code if a new file is chosen
-      let finalQrUrl = instapayQrUrl;
+      // If user uploaded a new QR file for InstaPay
       if (instapayQrFile) {
-        const fileExt = instapayQrFile.name.split('.').pop();
-        const fileName = `settings/instapay_qr_${Date.now()}.${fileExt}`;
-        
+        const fileExt = instapayQrFile.name.split('.').pop() || 'png';
+        const fileName = `instapay_qr_${Date.now()}.${fileExt}`;
+        const filePath = `settings/${fileName}`;
+
         const { error: uploadError } = await supabase.storage
           .from('receipts')
-          .upload(fileName, instapayQrFile);
-          
-        if (uploadError) throw uploadError;
-        
-        const { data: { publicUrl } } = supabase.storage
-          .from('receipts')
-          .getPublicUrl(fileName);
-          
-        finalQrUrl = publicUrl;
-        setInstapayQrUrl(finalQrUrl);
-        setInstapayQrFile(null);
+          .upload(filePath, instapayQrFile);
+
+        if (!uploadError) {
+          const { data: urlData } = supabase.storage
+            .from('receipts')
+            .getPublicUrl(filePath);
+
+          finalMethods = finalMethods.map(m => {
+            if (m.method_key === 'instapay') {
+              return {
+                ...m,
+                configuration: {
+                  ...m.configuration,
+                  instapay_qr_url: urlData.publicUrl,
+                },
+              };
+            }
+            return m;
+          });
+        }
       }
 
-      // 2. Update Payment settings in settings table
-      const { error: settingsError } = await supabase
-        .from('settings')
-        .upsert({
-          key: 'payment_accounts',
-          value: {
-            vodafone_cash: vodafoneCash.trim(),
-            vodafone_cash_2: vodafoneCash2.trim(),
-            instapay_address: instapayAddress.trim(),
-            instapay_phone: instapayPhone.trim(),
-            instapay_payment_link: instapayLink.trim(),
-            instapay_qr_url: finalQrUrl,
-            vodafone_cash_enabled: vodafoneCashEnabled,
-            vodafone_cash_2_enabled: vodafoneCash2Enabled,
-            instapay_enabled: instapayEnabled
-          },
-          updated_at: new Date().toISOString()
-        });
+      // 1. Update Campaign Details
+      if (config?.campaign?.id) {
+        await supabase
+          .from('campaigns')
+          .update({
+            target_amount: parseFloat(targetAmount) || 350000,
+            name_ar: campaignTitleAr || undefined,
+            description_ar: campaignDescAr || undefined,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', config.campaign.id);
+      }
 
-      if (settingsError) throw settingsError;
+      // 2. Save Payment Methods via Centralized Service
+      await savePaymentMethods(supabase, finalMethods);
 
-      // 3. Log Audit Log
-      await supabase.from('audit_logs').insert({
-        admin_id: session?.user?.id || null,
-        action: 'UPDATE_SYSTEM_SETTINGS',
-        details: { 
-          targetAmount, 
-          vodafoneCash, 
-          vodafoneCash2, 
-          instapayAddress, 
-          instapayPhone, 
-          instapayLink, 
-          instapayQrUrl: finalQrUrl,
-          vodafoneCashEnabled,
-          vodafoneCash2Enabled,
-          instapayEnabled
-        }
-      });
+      queryClient.invalidateQueries({ queryKey: ['adminFullSettings'] });
+      queryClient.invalidateQueries({ queryKey: ['paymentSettingsPublic'] });
+      queryClient.invalidateQueries({ queryKey: ['campaignPublic'] });
 
-      // Refetch
-      queryClient.invalidateQueries({ queryKey: ['adminConfigData'] });
-      queryClient.invalidateQueries({ queryKey: ['campaign'] });
-      queryClient.invalidateQueries({ queryKey: ['adminDashboardStats'] });
-      queryClient.invalidateQueries({ queryKey: ['publicSettings'] });
-      
       setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 4000);
+      setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err: any) {
-      console.error(err);
-      alert(`Save failed: ${err.message}`);
+      alert(`Error saving: ${err.message}`);
     } finally {
       setIsSaving(false);
     }
   };
 
-  // Save Maintenance Settings Handler
+  // Save Maintenance Mode
   const handleSaveMaintenance = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSavingMaintenance(true);
     setMaintenanceSaveSuccess(false);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-
-      // Update Maintenance settings in settings table
-      const { error: settingsError } = await supabase
+      await supabase
         .from('settings')
         .upsert({
           key: 'maintenance_mode',
@@ -220,497 +392,602 @@ export default function AdminSettingsPage() {
             message_ar: maintenanceMessageAr.trim(),
             message_en: maintenanceMessageEn.trim(),
           },
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
         });
 
-      if (settingsError) throw settingsError;
-
-      // Log Audit Log
-      await supabase.from('audit_logs').insert({
-        admin_id: session?.user?.id || null,
-        action: 'UPDATE_MAINTENANCE_MODE',
-        details: { 
-          enabled: maintenanceEnabled,
-          message_ar: maintenanceMessageAr,
-          message_en: maintenanceMessageEn
-        }
-      });
-
-      // Refetch queries
-      queryClient.invalidateQueries({ queryKey: ['adminConfigData'] });
       queryClient.invalidateQueries({ queryKey: ['maintenanceMode'] });
-      
       setMaintenanceSaveSuccess(true);
-      setTimeout(() => setMaintenanceSaveSuccess(false), 4000);
+      setTimeout(() => setMaintenanceSaveSuccess(false), 3000);
     } catch (err: any) {
-      console.error(err);
-      alert(`Save failed: ${err.message}`);
+      alert(`Error saving maintenance: ${err.message}`);
     } finally {
       setIsSavingMaintenance(false);
     }
   };
 
-  const handleClearDatabase = async () => {
-    const promptMessage = language === 'ar' 
-      ? "تنبيه هام جداً!\nهذا الإجراء سيقوم بحذف كافة التبرعات، المتبرعين، السجلات، والرسائل الواردة نهائياً ولا يمكن التراجع عنه.\n\nلتأكيد المسح، يرجى كتابة كلمة (مسح) في المربع أدناه:"
-      : "CRITICAL WARNING!\nThis will permanently delete all donations, donors, transaction logs, and SMS messages. This action CANNOT be undone.\n\nTo confirm, type (DELETE) below:";
-    
-    const confirmationWord = language === 'ar' ? 'مسح' : 'DELETE';
-    const userInput = prompt(promptMessage);
-    
-    if (userInput !== confirmationWord) {
-      alert(language === 'ar' ? "تم إلغاء العملية. لم يتم إدخال كلمة التأكيد بشكل صحيح." : "Action cancelled. Confirmation word did not match.");
-      return;
-    }
-
-    setIsClearing(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-
-      // Delete data from tables
-      const { error: donationsErr } = await supabase
-        .from('donations')
-        .delete()
-        .neq('id', '00000000-0000-0000-0000-000000000000');
-      if (donationsErr) throw donationsErr;
-
-      const { error: donorsErr } = await supabase
-        .from('donors')
-        .delete()
-        .neq('id', '00000000-0000-0000-0000-000000000000');
-      if (donorsErr) throw donorsErr;
-
-      const { error: txErr } = await supabase
-        .from('incoming_transactions')
-        .delete()
-        .neq('id', '00000000-0000-0000-0000-000000000000');
-      if (txErr) throw txErr;
-
-      const { error: smsErr } = await supabase
-        .from('sms_logs')
-        .delete()
-        .neq('id', '00000000-0000-0000-0000-000000000000');
-      if (smsErr) throw smsErr;
-
-      const { error: notifErr } = await supabase
-        .from('notifications')
-        .delete()
-        .neq('id', '00000000-0000-0000-0000-000000000000');
-      if (notifErr) throw notifErr;
-
-      const { error: reportsErr } = await supabase
-        .from('report_exports')
-        .delete()
-        .neq('id', '00000000-0000-0000-0000-000000000000');
-      if (reportsErr) throw reportsErr;
-
-      const { error: campaignErr } = await supabase
-        .from('campaigns')
-        .update({ collected_amount: 0 })
-        .neq('id', '00000000-0000-0000-0000-000000000000');
-      if (campaignErr) throw campaignErr;
-
-      const { error: auditErr } = await supabase
-        .from('audit_logs')
-        .delete()
-        .neq('id', '00000000-0000-0000-0000-000000000000');
-      if (auditErr) throw auditErr;
-
-      await supabase.from('audit_logs').insert({
-        admin_id: session?.user?.id || null,
-        action: 'CLEAR_DATABASE',
-        details: { timestamp: new Date().toISOString() }
-      });
-
-      alert(language === 'ar' ? "تم مسح قاعدة البيانات وتهيئة النظام بنجاح!" : "Database cleared and platform reset successfully!");
-      
-      queryClient.invalidateQueries({ queryKey: ['adminConfigData'] });
-      queryClient.invalidateQueries({ queryKey: ['campaign'] });
-      queryClient.invalidateQueries({ queryKey: ['adminDashboardStats'] });
-    } catch (err: any) {
-      console.error("Error clearing database:", err);
-      alert(`Clear failed: ${err.message}`);
-    } finally {
-      setIsClearing(false);
-    }
-  };
-
-  if (isLoading) {
-    return (
-      <AdminLayout>
-        <div className="space-y-6">
-          <div className="h-10 w-48 bg-slate-900 rounded-lg animate-pulse" />
-          <div className="h-80 bg-slate-900 rounded-2xl animate-pulse" />
-        </div>
-      </AdminLayout>
-    );
-  }
+  // Preview data computed
+  const activeWalletsPreview = useMemo(() => {
+    return (vfcMethod?.wallets || []).filter(w => w.enabled);
+  }, [vfcMethod]);
 
   return (
     <AdminLayout>
-      <div className="space-y-6 max-w-2xl">
+      <div className="space-y-10 max-w-5xl">
         
-        {/* Title */}
-        <div>
-          <h1 className="text-2xl font-black text-white">
-            {language === 'ar' ? 'إعدادات المنصة والحسابات' : 'System & Accounts Settings'}
-          </h1>
-          <p className="text-slate-400 text-xs mt-1">
-            {language === 'ar' ? 'تعديل المبلغ المستهدف للحملة وأرقام حسابات الدفع التلقائي.' : 'Edit campaign target thresholds and update transaction payment account credentials.'}
-          </p>
-        </div>
-
-        {/* Success Alert */}
-        {saveSuccess && (
-          <div className="p-4 bg-emerald-950/20 border border-emerald-900/30 text-emerald-350 text-xs rounded-xl flex items-center gap-2 animate-scale-up">
-            <CheckCircle className="w-5 h-5 text-emerald-450" />
-            <span>{language === 'ar' ? 'تم حفظ التغييرات بنجاح وتحديث كافة الأنظمة!' : 'Settings updated and synced successfully!'}</span>
-          </div>
-        )}
-
-        {/* Form Card */}
-        <form onSubmit={handleSave} className="glass-panel p-6 rounded-2xl border border-slate-900 space-y-6">
-          
-          {/* Target Amount */}
-          <div className="space-y-2">
-            <label className="text-slate-300 text-xs font-semibold flex items-center gap-1.5">
-              <Target className="w-4 h-4 text-emerald-400" />
-              <span>{language === 'ar' ? 'المبلغ المستهدف للحملة (EGP)' : 'Campaign Target Amount (EGP)'}</span>
-            </label>
-            <input 
-              type="number"
-              value={targetAmount}
-              onChange={(e) => setTargetAmount(e.target.value)}
-              required
-              min="1"
-              className="w-full glass-input px-4 py-3 rounded-xl text-sm"
-              placeholder="e.g. 500000"
-            />
-          </div>
-
-          {/* Vodafone Cash */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-slate-300 text-xs font-semibold flex items-center gap-1.5">
-                <Coins className="w-4 h-4 text-emerald-450" />
-                <span>{language === 'ar' ? 'رقم محفظة فودافون كاش الأول' : 'Vodafone Cash Number 1'}</span>
-              </label>
-              <label className="relative inline-flex items-center gap-2 cursor-pointer select-none">
-                <input 
-                  type="checkbox" 
-                  checked={vodafoneCashEnabled}
-                  onChange={(e) => setVodafoneCashEnabled(e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="relative w-9 h-5 bg-slate-850 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-400 after:border-slate-400 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500 peer-checked:after:bg-slate-950 peer-checked:after:border-transparent"></div>
-                <span className="text-[10px] font-bold text-slate-400 peer-checked:text-emerald-400">
-                  {vodafoneCashEnabled ? (language === 'ar' ? 'نشط' : 'Active') : (language === 'ar' ? 'معطل' : 'Disabled')}
-                </span>
-              </label>
-            </div>
-            <input 
-              type="text"
-              value={vodafoneCash}
-              onChange={(e) => setVodafoneCash(e.target.value)}
-              required={vodafoneCashEnabled}
-              disabled={!vodafoneCashEnabled}
-              className={`w-full glass-input px-4 py-3 rounded-xl text-sm font-mono transition-all ${!vodafoneCashEnabled ? 'opacity-45 pointer-events-none border-slate-950/20' : ''}`}
-              placeholder="e.g. 01015339426"
-            />
-          </div>
-
-          {/* Vodafone Cash 2 */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-slate-300 text-xs font-semibold flex items-center gap-1.5">
-                <Coins className="w-4 h-4 text-emerald-450" />
-                <span>{language === 'ar' ? 'رقم محفظة فودافون كاش الثاني (اختياري)' : 'Vodafone Cash Number 2 (Optional)'}</span>
-              </label>
-              <label className="relative inline-flex items-center gap-2 cursor-pointer select-none">
-                <input 
-                  type="checkbox" 
-                  checked={vodafoneCash2Enabled}
-                  onChange={(e) => setVodafoneCash2Enabled(e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="relative w-9 h-5 bg-slate-850 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-400 after:border-slate-400 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500 peer-checked:after:bg-slate-950 peer-checked:after:border-transparent"></div>
-                <span className="text-[10px] font-bold text-slate-400 peer-checked:text-emerald-400">
-                  {vodafoneCash2Enabled ? (language === 'ar' ? 'نشط' : 'Active') : (language === 'ar' ? 'معطل' : 'Disabled')}
-                </span>
-              </label>
-            </div>
-            <input 
-              type="text"
-              value={vodafoneCash2}
-              onChange={(e) => setVodafoneCash2(e.target.value)}
-              disabled={!vodafoneCash2Enabled}
-              className={`w-full glass-input px-4 py-3 rounded-xl text-sm font-mono transition-all ${!vodafoneCash2Enabled ? 'opacity-45 pointer-events-none border-slate-950/20' : ''}`}
-              placeholder="e.g. 010XXXXXXXX"
-            />
-          </div>
-
-          {/* InstaPay Header & Toggles */}
-          <div className="pt-4 border-t border-slate-900 flex items-center justify-between">
-            <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <Coins className="w-4 h-4 text-teal-400" />
-              <span>{language === 'ar' ? 'طريقة الدفع إنستاباي (InstaPay)' : 'InstaPay Payment Method'}</span>
-            </h3>
-            <label className="relative inline-flex items-center gap-2 cursor-pointer select-none">
-              <input 
-                type="checkbox" 
-                checked={instapayEnabled}
-                onChange={(e) => setInstapayEnabled(e.target.checked)}
-                className="sr-only peer"
-              />
-              <div className="relative w-9 h-5 bg-slate-850 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-400 after:border-slate-400 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-teal-500 peer-checked:after:bg-slate-950 peer-checked:after:border-transparent"></div>
-              <span className="text-[10px] font-bold text-slate-400 peer-checked:text-teal-400">
-                {instapayEnabled ? (language === 'ar' ? 'نشط' : 'Active') : (language === 'ar' ? 'معطل' : 'Disabled')}
-              </span>
-            </label>
-          </div>
-
-          <div className={`space-y-6 transition-all ${!instapayEnabled ? 'opacity-45 pointer-events-none' : ''}`}>
-            {/* InstaPay Address */}
-            <div className="space-y-2">
-              <label className="text-slate-300 text-xs font-semibold flex items-center gap-1.5">
-                <Coins className="w-4 h-4 text-teal-400" />
-                <span>{language === 'ar' ? 'عنوان حساب إنستاباي (InstaPay Address)' : 'InstaPay Address'}</span>
-              </label>
-              <input 
-                type="text"
-                value={instapayAddress}
-                onChange={(e) => setInstapayAddress(e.target.value)}
-                required={instapayEnabled}
-                disabled={!instapayEnabled}
-                className="w-full glass-input px-4 py-3 rounded-xl text-sm font-mono"
-                placeholder="e.g. 01015339426@instapay"
-              />
-            </div>
-
-            {/* InstaPay Phone */}
-            <div className="space-y-2">
-              <label className="text-slate-300 text-xs font-semibold flex items-center gap-1.5">
-                <Coins className="w-4 h-4 text-teal-400" />
-                <span>{language === 'ar' ? 'رقم هاتف حساب إنستاباي (InstaPay Phone Number)' : 'InstaPay Phone Number'}</span>
-              </label>
-              <input 
-                type="text"
-                value={instapayPhone}
-                onChange={(e) => setInstapayPhone(e.target.value)}
-                required={instapayEnabled}
-                disabled={!instapayEnabled}
-                className="w-full glass-input px-4 py-3 rounded-xl text-sm font-mono"
-                placeholder="e.g. 01015339426"
-              />
-            </div>
-
-            {/* InstaPay Payment Link */}
-            <div className="space-y-2">
-              <label className="text-slate-300 text-xs font-semibold flex items-center gap-1.5">
-                <Coins className="w-4 h-4 text-teal-400" />
-                <span>{language === 'ar' ? 'رابط الدفع المباشر إنستاباي (InstaPay Payment Link)' : 'Direct InstaPay Payment Link'}</span>
-              </label>
-              <input 
-                type="text"
-                value={instapayLink}
-                onChange={(e) => setInstapayLink(e.target.value)}
-                disabled={!instapayEnabled}
-                className="w-full glass-input px-4 py-3 rounded-xl text-sm font-mono"
-                placeholder="e.g. https://ipn.eg/S/..."
-                dir="ltr"
-              />
-            </div>
-
-            {/* InstaPay QR Code Upload */}
-            <div className="space-y-2">
-              <label className="text-slate-300 text-xs font-semibold flex items-center gap-1.5">
-                <Upload className="w-4 h-4 text-teal-400" />
-                <span>{language === 'ar' ? 'تحميل صورة رمز الاستجابة السريعة (InstaPay QR Code Image)' : 'Upload InstaPay QR Code Image'}</span>
-              </label>
-              <div className="flex flex-col sm:flex-row gap-4 items-center">
-                <div className="flex-1 w-full font-sans">
-                  <input 
-                    type="file"
-                    accept="image/*"
-                    disabled={!instapayEnabled}
-                    onChange={(e) => {
-                      if (e.target.files && e.target.files[0]) {
-                        setInstapayQrFile(e.target.files[0]);
-                      }
-                    }}
-                    className="w-full text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-slate-900 file:text-slate-300 hover:file:bg-slate-800 disabled:opacity-50"
-                  />
-                  <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">
-                    {language === 'ar' ? 'الصيغ المدعومة: PNG, JPG. سيتم استخدام هذه الصورة كـ رمز QR ثابت للمتبرعين.' : 'Supported formats: PNG, JPG. Used as a static QR code.'}
-                  </p>
-                </div>
-                
-                {/* Preview */}
-                {(instapayQrFile || instapayQrUrl) && (
-                  <div className="w-20 h-20 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex items-center justify-center p-1.5 flex-shrink-0">
-                    <img 
-                      src={instapayQrFile ? URL.createObjectURL(instapayQrFile) : instapayQrUrl} 
-                      alt="QR Preview" 
-                      className="w-full h-full object-contain"
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Save Button */}
-          <button
-            type="submit"
-            disabled={isSaving}
-            className="w-full bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 font-extrabold text-sm py-4 rounded-xl shadow-lg shadow-emerald-500/20 hover:brightness-105 active:scale-[0.99] transition-all flex items-center justify-center gap-2"
-          >
-            {isSaving ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>{language === 'ar' ? 'جاري الحفظ...' : 'Saving Changes...'}</span>
-              </>
-            ) : (
-              <>
-                <Save className="w-4 h-4" />
-                <span>{language === 'ar' ? 'حفظ التعديلات' : 'Save Settings'}</span>
-              </>
-            )}
-          </button>
-
-        </form>
-
-        {/* Maintenance Mode Card */}
-        <form onSubmit={handleSaveMaintenance} className="glass-panel p-6 rounded-2xl border border-slate-900 space-y-6">
-          <div className="flex items-center justify-between border-b border-slate-800/60 pb-4">
-            <div className="space-y-0.5">
-              <h3 className="text-md font-bold text-white flex items-center gap-2">
-                <Wrench className="w-5 h-5 text-amber-500" />
-                <span>{language === 'ar' ? 'وضع صيانة الموقع' : 'Website Maintenance Mode'}</span>
-              </h3>
-              <p className="text-slate-400 text-xs">
-                {language === 'ar' 
-                  ? 'تفعيل هذا الوضع سيمنع الزوار العاديين من تصفح الموقع وعرض شاشة صيانة بدلاً منه.' 
-                  : 'Enabling this mode redirects public users to a premium maintenance landing page.'}
-              </p>
-            </div>
-            <label className="relative inline-flex items-center gap-2 cursor-pointer select-none">
-              <input 
-                type="checkbox" 
-                checked={maintenanceEnabled}
-                onChange={(e) => setMaintenanceEnabled(e.target.checked)}
-                className="sr-only peer"
-              />
-              <div className="relative w-9 h-5 bg-slate-850 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-400 after:border-slate-400 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-550 peer-checked:after:bg-slate-950 peer-checked:after:border-transparent"></div>
-              <span className="text-[10px] font-bold text-slate-400 peer-checked:text-amber-500">
-                {maintenanceEnabled ? (language === 'ar' ? 'مفعّل' : 'Enabled') : (language === 'ar' ? 'معطّل' : 'Disabled')}
-              </span>
-            </label>
-          </div>
-
-          {/* Success Notification for Maintenance */}
-          {maintenanceSaveSuccess && (
-            <div className="p-4 bg-emerald-950/20 border border-emerald-900/30 text-emerald-350 text-xs rounded-xl flex items-center gap-2 animate-scale-up">
-              <CheckCircle className="w-5 h-5 text-emerald-450" />
-              <span>{language === 'ar' ? 'تم تحديث وضع الصيانة بنجاح!' : 'Maintenance settings updated successfully!'}</span>
-            </div>
-          )}
-
-          {maintenanceEnabled && (
-            <div className="space-y-4">
-              {/* Message AR */}
-              <div className="space-y-2">
-                <label className="text-slate-350 text-xs font-semibold">
-                  {language === 'ar' ? 'رسالة الصيانة (باللغة العربية)' : 'Maintenance Message (Arabic)'}
-                </label>
-                <textarea
-                  value={maintenanceMessageAr}
-                  onChange={(e) => setMaintenanceMessageAr(e.target.value)}
-                  rows={3}
-                  className="w-full glass-input px-4 py-3 rounded-xl text-sm leading-relaxed"
-                  placeholder={language === 'ar' ? 'مثال: نقوم ببعض التحديثات المجدولة وسنعود قريباً...' : 'Arabic message to display...'}
-                />
-              </div>
-
-              {/* Message EN */}
-              <div className="space-y-2">
-                <label className="text-slate-350 text-xs font-semibold">
-                  {language === 'ar' ? 'رسالة الصيانة (باللغة الإنجليزية)' : 'Maintenance Message (English)'}
-                </label>
-                <textarea
-                  value={maintenanceMessageEn}
-                  onChange={(e) => setMaintenanceMessageEn(e.target.value)}
-                  rows={3}
-                  className="w-full glass-input px-4 py-3 rounded-xl text-sm leading-relaxed"
-                  placeholder={language === 'ar' ? 'Example: We are performing scheduled updates and will be back online soon...' : 'English message to display...'}
-                  dir="ltr"
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Save Maintenance Button */}
-          <button
-            type="submit"
-            disabled={isSavingMaintenance}
-            className="w-full bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-extrabold text-sm py-4 rounded-xl shadow-lg shadow-amber-500/10 hover:brightness-105 active:scale-[0.99] transition-all flex items-center justify-center gap-2"
-          >
-            {isSavingMaintenance ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>{language === 'ar' ? 'جاري الحفظ...' : 'Saving...'}</span>
-              </>
-            ) : (
-              <>
-                <Save className="w-4 h-4" />
-                <span>{language === 'ar' ? 'حفظ إعدادات الصيانة' : 'Save Maintenance Settings'}</span>
-              </>
-            )}
-          </button>
-        </form>
-
-        {/* Danger Zone */}
-        <div className="glass-panel p-6 rounded-2xl border border-red-900/30 bg-red-950/5 space-y-4">
+        {/* Header */}
+        <div className="pb-3 border-b border-[#EAE8DE] dark:border-[#283849] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h3 className="text-lg font-bold text-red-400">
-              {language === 'ar' ? 'إجراءات خطيرة (Danger Zone)' : 'Danger Zone'}
-            </h3>
-            <p className="text-slate-400 text-xs mt-1">
-              {language === 'ar' 
-                ? 'إجراءات مدمرة لقاعدة البيانات لقفل الحسابات الحالية والبدء من جديد. يرجى الحذر قبل الاستخدام.' 
-                : 'Destructive database operations. Please proceed with caution.'}
+            <h1 className="text-2xl sm:text-3xl font-black text-[#153C32] dark:text-[#24B58A] tracking-tight">
+              {language === 'ar' ? 'إدارة وسائل الدفع والمحافظ' : 'Dynamic Payment Management'}
+            </h1>
+            <p className="text-xs sm:text-sm text-[#738079] dark:text-[#A7B4B0] mt-1">
+              {language === 'ar'
+                ? 'إضافة عدد لا محدود من محافظ فودافون كاش، التحكم في تفعيل القنوات، وتحديث حسابات التحويل فوريًا.'
+                : 'Manage unlimited Vodafone Cash wallets, toggle payment channels, and configure instant transfer endpoints.'}
             </p>
           </div>
 
-          <div className="border-t border-red-950/20 pt-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="space-y-1 text-center sm:text-start">
-              <p className="text-sm font-semibold text-white">
-                {language === 'ar' ? 'تهيئة قاعدة البيانات (مسح كامل البيانات)' : 'Reset Database (Clear All Data)'}
-              </p>
-              <p className="text-slate-400 text-xs">
-                {language === 'ar' 
-                  ? 'حذف كافة التبرعات، المتبرعين، السجلات، والرسائل وبدء حملة جديدة من الصفر.' 
-                  : 'Permanently deletes all donations, donors, messages, and logs.'}
-              </p>
+          <button
+            type="button"
+            onClick={handleSaveAll}
+            disabled={isSaving}
+            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#153C32] dark:bg-[#24B58A] text-white dark:text-[#0B1220] text-xs font-bold hover:bg-[#1C4E41] dark:hover:bg-[#1fa37b] shadow-subtle disabled:opacity-50 transition-all"
+          >
+            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            <span>{language === 'ar' ? 'حفظ كافة التغييرات' : 'Save All Changes'}</span>
+          </button>
+        </div>
+
+        {/* 1. PAYMENT METHODS MASTER SWITCHES */}
+        <section className="p-6 sm:p-8 rounded-3xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-subtle space-y-6">
+          <div className="flex items-center justify-between pb-3 border-b border-[#EAE8DE] dark:border-[#283849]">
+            <div className="flex items-center gap-2">
+              <CreditCard className="w-5 h-5 text-[#153C32] dark:text-[#24B58A]" />
+              <h3 className="font-extrabold text-base text-[#153C32] dark:text-[#F3F5F4]">
+                {language === 'ar' ? '1. القنوات والوسائل المتاحة (Payment Channels)' : '1. Payment Channels'}
+              </h3>
             </div>
+            <span className="text-xs text-[#738079] dark:text-[#A7B4B0]">
+              {language === 'ar' ? 'التحكم في ظهور الوسيلة على الموقع العام' : 'Public Channel Visibility'}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             
+            {/* Vodafone Cash Channel Toggle */}
+            <div className={`p-4 rounded-2xl border transition-all ${
+              vfcMethod?.enabled
+                ? 'bg-[#FAF9F5] dark:bg-[#111C2D] border-[#153C32]/30 dark:border-[#24B58A]/30'
+                : 'bg-gray-50 dark:bg-[#0B1220] border-gray-200 dark:border-[#283849] opacity-75'
+            }`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-red-600 text-white flex items-center justify-center font-bold text-xs">
+                    VFC
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-sm text-[#191F1C] dark:text-[#F3F5F4]">فودافون كاش</h4>
+                    <span className="text-xs text-[#738079] dark:text-[#A7B4B0]">
+                      {activeWalletsPreview.length} {language === 'ar' ? 'محافظ نشطة' : 'Active Wallets'}
+                    </span>
+                  </div>
+                </div>
+
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={vfcMethod?.enabled}
+                    onChange={() => handleToggleMethod('vodafone_cash')}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#153C32] dark:peer-checked:bg-[#24B58A]"></div>
+                </label>
+              </div>
+            </div>
+
+            {/* InstaPay Channel Toggle */}
+            <div className={`p-4 rounded-2xl border transition-all ${
+              ipnMethod?.enabled
+                ? 'bg-[#FAF9F5] dark:bg-[#111C2D] border-[#B79B68]/30 dark:border-[#C5A876]/30'
+                : 'bg-gray-50 dark:bg-[#0B1220] border-gray-200 dark:border-[#283849] opacity-75'
+            }`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-[#B79B68] text-white flex items-center justify-center font-bold text-xs">
+                    IPN
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-sm text-[#191F1C] dark:text-[#F3F5F4]">إنستاباي (InstaPay)</h4>
+                    <span className="text-xs text-[#738079] dark:text-[#A7B4B0]">
+                      {ipnMethod?.configuration?.instapay_address || '—'}
+                    </span>
+                  </div>
+                </div>
+
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={ipnMethod?.enabled}
+                    onChange={() => handleToggleMethod('instapay')}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#B79B68] dark:peer-checked:bg-[#C5A876]"></div>
+                </label>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+        {/* 2. DYNAMIC VODAFONE CASH WALLETS MANAGEMENT */}
+        <section className="p-6 sm:p-8 rounded-3xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-subtle space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#EAE8DE] dark:border-[#283849]">
+            <div className="flex items-center gap-2">
+              <Smartphone className="w-5 h-5 text-[#153C32] dark:text-[#24B58A]" />
+              <div>
+                <h3 className="font-extrabold text-base text-[#153C32] dark:text-[#F3F5F4]">
+                  {language === 'ar' ? '2. إدارة محافظ فودافون كاش الديناميكية' : '2. Dynamic Vodafone Cash Wallets'}
+                </h3>
+                <span className="text-xs text-[#738079] dark:text-[#A7B4B0]">
+                  {language === 'ar' ? 'يمكنك إضافة عدد غير محدود من المحافظ، تفعيلها، وإعادة ترتيب أولويتها.' : 'Add unlimited wallets, toggle them, or reorder priority.'}
+                </span>
+              </div>
+            </div>
+
             <button
               type="button"
-              onClick={handleClearDatabase}
-              disabled={isClearing}
-              className="w-full sm:w-auto px-6 py-3 bg-red-950/40 hover:bg-red-900/40 border border-red-900 text-red-300 hover:text-white font-extrabold text-sm rounded-xl transition-all active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2"
+              onClick={() => handleOpenWalletModal()}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#153C32] dark:bg-[#24B58A] text-white dark:text-[#0B1220] text-xs font-bold hover:bg-[#1C4E41] shadow-subtle transition-all self-start sm:self-auto"
             >
-              {isClearing ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin text-red-400" />
-                  <span>{language === 'ar' ? 'جاري المسح...' : 'Clearing...'}</span>
-                </>
-              ) : (
-                <span>{language === 'ar' ? 'مسح قاعدة البيانات' : 'Clear Database'}</span>
-              )}
+              <Plus className="w-4 h-4" />
+              <span>{language === 'ar' ? '+ إضافة رقم محفظة جديد' : '+ Add New Wallet'}</span>
             </button>
           </div>
+
+          {/* Wallets List */}
+          {(vfcMethod?.wallets || []).length === 0 ? (
+            <div className="p-8 text-center rounded-2xl bg-[#FAF9F5] dark:bg-[#111C2D] border border-dashed border-[#DDD9CC] dark:border-[#283849]">
+              <AlertCircle className="w-8 h-8 text-[#B79B68] mx-auto mb-2" />
+              <p className="text-xs font-bold text-[#191F1C] dark:text-[#F3F5F4]">
+                {language === 'ar' ? 'لا توجد أي محافظ مضافة حاليًا.' : 'No wallets configured.'}
+              </p>
+              <p className="text-xs text-[#738079] dark:text-[#A7B4B0] mt-1">
+                {language === 'ar' ? 'انقر على زر "إضافة رقم محفظة جديد" للبدء في استقبال التحويلات.' : 'Click "Add New Wallet" to start receiving transfers.'}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {(vfcMethod?.wallets || []).map((wallet, idx) => (
+                <div
+                  key={wallet.id}
+                  className={`p-4 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+                    wallet.enabled
+                      ? 'bg-[#FAF9F5] dark:bg-[#111C2D] border-[#DDD9CC] dark:border-[#283849]'
+                      : 'bg-gray-50 dark:bg-[#0B1220] border-gray-200 dark:border-[#283849] opacity-60'
+                  }`}
+                >
+                  {/* Left: Info */}
+                  <div className="flex items-center gap-3">
+                    <span className="w-6 h-6 rounded-full bg-[#153C32]/10 dark:bg-[#24B58A]/10 text-[#153C32] dark:text-[#24B58A] font-bold text-xs flex items-center justify-center">
+                      {idx + 1}
+                    </span>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-sm text-[#191F1C] dark:text-[#F3F5F4]">
+                          {wallet.label}
+                        </span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          wallet.enabled
+                            ? 'bg-green-100 dark:bg-green-950/40 text-green-800 dark:text-green-300'
+                            : 'bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-400'
+                        }`}>
+                          {wallet.enabled ? 'نشط ويظهر للمتبرعين' : 'معطل مؤقتًا'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="font-mono text-base font-bold text-[#153C32] dark:text-[#24B58A]" dir="ltr">
+                          {wallet.phone_number}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(wallet.phone_number, wallet.id)}
+                          className="text-[#738079] hover:text-[#153C32] dark:hover:text-[#24B58A]"
+                          title="نسخ الرقم"
+                        >
+                          {copiedKey === wallet.id ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right: Actions */}
+                  <div className="flex items-center gap-1.5 self-end sm:self-auto">
+                    {/* Reorder Buttons */}
+                    <div className="flex items-center border border-[#DDD9CC] dark:border-[#283849] rounded-lg overflow-hidden bg-white dark:bg-[#172436] me-2">
+                      <button
+                        type="button"
+                        onClick={() => handleMoveWallet(wallet.id, 'up')}
+                        disabled={idx === 0}
+                        className="p-1.5 hover:bg-[#FAF9F5] dark:hover:bg-[#111C2D] disabled:opacity-30 text-[#738079]"
+                        title="تحريك لأعلى"
+                      >
+                        <ArrowUp className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleMoveWallet(wallet.id, 'down')}
+                        disabled={idx === (vfcMethod?.wallets?.length || 0) - 1}
+                        className="p-1.5 hover:bg-[#FAF9F5] dark:hover:bg-[#111C2D] disabled:opacity-30 text-[#738079] border-s border-[#DDD9CC] dark:border-[#283849]"
+                        title="تحريك لأسفل"
+                      >
+                        <ArrowDown className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {/* Active toggle */}
+                    <button
+                      type="button"
+                      onClick={() => handleToggleWallet(wallet.id)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                        wallet.enabled
+                          ? 'bg-amber-100 text-amber-800 hover:bg-amber-200 dark:bg-amber-950/40 dark:text-amber-300'
+                          : 'bg-green-100 text-green-800 hover:bg-green-200 dark:bg-green-950/40 dark:text-green-300'
+                      }`}
+                    >
+                      {wallet.enabled ? 'تعطيل' : 'تفعيل'}
+                    </button>
+
+                    {/* Edit button */}
+                    <button
+                      type="button"
+                      onClick={() => handleOpenWalletModal(wallet)}
+                      className="p-2 rounded-lg border border-[#DDD9CC] dark:border-[#283849] bg-white dark:bg-[#172436] text-[#738079] hover:text-[#153C32] dark:hover:text-[#24B58A]"
+                      title="تعديل المحفظة"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
+
+                    {/* Delete button */}
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteWallet(wallet.id)}
+                      className="p-2 rounded-lg border border-red-200 dark:border-red-900/40 bg-white dark:bg-[#172436] text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+                      title="حذف المحفظة"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* 3. INSTAPAY CONFIGURATION */}
+        <section className="p-6 sm:p-8 rounded-3xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-subtle space-y-6">
+          <div className="flex items-center gap-2 pb-3 border-b border-[#EAE8DE] dark:border-[#283849]">
+            <CreditCard className="w-5 h-5 text-[#B79B68]" />
+            <h3 className="font-extrabold text-base text-[#153C32] dark:text-[#F3F5F4]">
+              {language === 'ar' ? '3. بيانات حساب إنستاباي (InstaPay Configuration)' : '3. InstaPay Configuration'}
+            </h3>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-[#191F1C] dark:text-[#F3F5F4]">{t('instapay_acc')}</label>
+              <input
+                type="text"
+                value={ipnMethod?.configuration?.instapay_address || ''}
+                onChange={e => handleUpdateInstapayConfig('instapay_address', e.target.value)}
+                placeholder="name@instapay"
+                dir="ltr"
+                className="w-full py-2.5 px-3.5 rounded-xl bg-[#FAF9F5] dark:bg-[#111C2D] border border-[#DDD9CC] dark:border-[#283849] font-mono text-sm font-bold text-[#153C32] dark:text-[#24B58A] focus:outline-none"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-[#191F1C] dark:text-[#F3F5F4]">{t('instapay_phone')}</label>
+              <input
+                type="text"
+                value={ipnMethod?.configuration?.instapay_phone || ''}
+                onChange={e => handleUpdateInstapayConfig('instapay_phone', e.target.value)}
+                placeholder="01012345678"
+                dir="ltr"
+                className="w-full py-2.5 px-3.5 rounded-xl bg-[#FAF9F5] dark:bg-[#111C2D] border border-[#DDD9CC] dark:border-[#283849] font-mono text-sm font-bold text-[#153C32] dark:text-[#24B58A] focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-[#191F1C] dark:text-[#F3F5F4]">
+              {language === 'ar' ? 'رابط الدفع المباشر لتطبيق إنستاباي (اختياري)' : 'Direct Payment Link (Optional)'}
+            </label>
+            <input
+              type="url"
+              value={ipnMethod?.configuration?.instapay_payment_link || ''}
+              onChange={e => handleUpdateInstapayConfig('instapay_payment_link', e.target.value)}
+              placeholder="https://..."
+              dir="ltr"
+              className="w-full py-2.5 px-3.5 rounded-xl bg-[#FAF9F5] dark:bg-[#111C2D] border border-[#DDD9CC] dark:border-[#283849] text-xs font-mono text-[#191F1C] dark:text-[#F3F5F4] focus:outline-none"
+            />
+          </div>
+
+          {/* QR Code Upload / Preview */}
+          <div className="space-y-2 pt-2">
+            <label className="text-xs font-bold text-[#191F1C] dark:text-[#F3F5F4]">
+              {language === 'ar' ? 'رمز الاستجابة السريعة (QR Code):' : 'InstaPay QR Code:'}
+            </label>
+            <div className="flex items-center gap-4">
+              {(instapayQrPreview || ipnMethod?.configuration?.instapay_qr_url) && (
+                <img
+                  src={instapayQrPreview || ipnMethod?.configuration?.instapay_qr_url}
+                  alt="InstaPay QR"
+                  className="w-20 h-20 rounded-xl object-contain border border-[#DDD9CC] dark:border-[#283849] p-1 bg-white"
+                />
+              )}
+              <input
+                type="file"
+                accept="image/*"
+                onChange={e => {
+                  if (e.target.files && e.target.files[0]) {
+                    handleQrFileChange(e.target.files[0]);
+                  }
+                }}
+                className="text-xs text-[#738079] dark:text-[#A7B4B0]"
+              />
+            </div>
+          </div>
+        </section>
+
+        {/* 4. LIVE PUBLIC PREVIEW */}
+        <section className="p-6 sm:p-8 rounded-3xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-subtle space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-[#EAE8DE] dark:border-[#283849]">
+            <div className="flex items-center gap-2">
+              <Eye className="w-5 h-5 text-[#217A61] dark:text-[#24B58A]" />
+              <h3 className="font-extrabold text-base text-[#153C32] dark:text-[#F3F5F4]">
+                {language === 'ar' ? '4. معاينة حية لما سيظهر للمتبرعين على الموقع' : '4. Public Donor View Preview'}
+              </h3>
+            </div>
+            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#FAF8F2] dark:bg-[#111C2D] text-[#B79B68] dark:text-[#C5A876] border border-[#B79B68]/30">
+              معاينة فورية
+            </span>
+          </div>
+
+          <div className="max-w-md mx-auto p-5 rounded-2xl bg-[#FAF9F5] dark:bg-[#111C2D] border border-[#DDD9CC] dark:border-[#283849] space-y-4">
+            
+            {/* If both disabled */}
+            {!vfcMethod?.enabled && !ipnMethod?.enabled ? (
+              <div className="p-6 text-center text-xs text-amber-700 dark:text-amber-400 font-bold space-y-1">
+                <AlertCircle className="w-6 h-6 mx-auto mb-1 text-amber-600" />
+                <span>وسائل التبرع معطلة مؤقتًا من قِبل إدارة الحملة.</span>
+              </div>
+            ) : (
+              <>
+                {/* Method selector tabs in preview */}
+                <div className="grid grid-cols-2 gap-2 p-1 bg-[#EAE8DE] dark:bg-[#172436] rounded-xl text-xs font-bold">
+                  {vfcMethod?.enabled && activeWalletsPreview.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setPreviewMethod('vodafone_cash')}
+                      className={`py-2 px-3 rounded-lg ${
+                        previewMethod === 'vodafone_cash'
+                          ? 'bg-white dark:bg-[#111C2D] text-[#153C32] dark:text-[#24B58A] shadow-subtle'
+                          : 'text-[#738079] dark:text-[#A7B4B0]'
+                      }`}
+                    >
+                      فودافون كاش
+                    </button>
+                  )}
+                  {ipnMethod?.enabled && (
+                    <button
+                      type="button"
+                      onClick={() => setPreviewMethod('instapay')}
+                      className={`py-2 px-3 rounded-lg ${
+                        previewMethod === 'instapay'
+                          ? 'bg-white dark:bg-[#111C2D] text-[#153C32] dark:text-[#24B58A] shadow-subtle'
+                          : 'text-[#738079] dark:text-[#A7B4B0]'
+                      }`}
+                    >
+                      InstaPay
+                    </button>
+                  )}
+                </div>
+
+                {/* Preview Content */}
+                {previewMethod === 'vodafone_cash' && vfcMethod?.enabled ? (
+                  activeWalletsPreview.length === 0 ? (
+                    <div className="p-4 text-center text-xs text-amber-600 font-semibold">
+                      تنبيه: محفظة فودافون كاش مفعلة ولكن لا توجد أرقام محافظ نشطة حاليًا!
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {activeWalletsPreview.map(w => (
+                        <div key={w.id} className="p-3 rounded-xl bg-white dark:bg-[#172436] border border-[#DDD9CC] dark:border-[#283849] flex items-center justify-between">
+                          <div>
+                            <span className="text-xs text-[#738079] dark:text-[#A7B4B0] block">{w.label}</span>
+                            <span className="font-mono font-bold text-sm text-[#153C32] dark:text-[#24B58A]">{w.phone_number}</span>
+                          </div>
+                          <span className="text-[10px] font-bold px-2 py-1 rounded bg-[#FAF9F5] dark:bg-[#111C2D] border border-[#DDD9CC] dark:border-[#283849]">
+                            نسخ
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                ) : ipnMethod?.enabled ? (
+                  <div className="p-3 rounded-xl bg-white dark:bg-[#172436] border border-[#DDD9CC] dark:border-[#283849] space-y-1">
+                    <span className="text-xs text-[#738079] dark:text-[#A7B4B0] block">عنوان إنستاباي</span>
+                    <span className="font-mono font-bold text-sm text-[#153C32] dark:text-[#24B58A] block break-all">
+                      {ipnMethod?.configuration?.instapay_address || '—'}
+                    </span>
+                  </div>
+                ) : null}
+              </>
+            )}
+
+          </div>
+        </section>
+
+        {/* 5. CAMPAIGN TARGET & MAINTENANCE */}
+        <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          
+          {/* Target Amount Box */}
+          <div className="p-6 rounded-3xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-subtle space-y-4">
+            <div className="flex items-center gap-2 pb-2 border-b border-[#EAE8DE] dark:border-[#283849]">
+              <Target className="w-5 h-5 text-[#153C32] dark:text-[#24B58A]" />
+              <h3 className="font-bold text-sm text-[#153C32] dark:text-[#F3F5F4]">
+                المبلغ المستهدف للحملة
+              </h3>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-[#191F1C] dark:text-[#F3F5F4]">المبلغ بالجنيه المصري:</label>
+              <input
+                type="number"
+                value={targetAmount}
+                onChange={e => setTargetAmount(e.target.value)}
+                className="w-full py-2.5 px-3.5 rounded-xl bg-[#FAF9F5] dark:bg-[#111C2D] border border-[#DDD9CC] dark:border-[#283849] font-bold text-[#153C32] dark:text-[#24B58A] focus:outline-none"
+              />
+            </div>
+          </div>
+
+          {/* Maintenance Mode Box */}
+          <div className="p-6 rounded-3xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-subtle space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-[#EAE8DE] dark:border-[#283849]">
+              <div className="flex items-center gap-2">
+                <Wrench className="w-5 h-5 text-amber-600" />
+                <h3 className="font-bold text-sm text-[#153C32] dark:text-[#F3F5F4]">وضع الصيانة</h3>
+              </div>
+              <input
+                type="checkbox"
+                checked={maintenanceEnabled}
+                onChange={e => setMaintenanceEnabled(e.target.checked)}
+                className="rounded text-amber-600"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={handleSaveMaintenance}
+              disabled={isSavingMaintenance}
+              className="w-full py-2 rounded-xl bg-amber-700 text-white text-xs font-bold hover:bg-amber-800 disabled:opacity-50"
+            >
+              {isSavingMaintenance ? 'جارٍ التحديث...' : 'تطبيق وضع الصيانة'}
+            </button>
+          </div>
+
+        </section>
+
+        {/* Master Save Bar */}
+        <div className="p-4 rounded-2xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-subtle flex items-center justify-between">
+          <div>
+            {saveSuccess && (
+              <span className="text-xs font-bold text-[#217A61] dark:text-[#24B58A] flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>تم حفظ إعدادات المحافظ ووسائل الدفع بنجاح!</span>
+              </span>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={handleSaveAll}
+            disabled={isSaving}
+            className="px-8 py-3 rounded-xl bg-[#153C32] dark:bg-[#24B58A] text-white dark:text-[#0B1220] text-sm font-bold hover:bg-[#1C4E41] dark:hover:bg-[#1fa37b] shadow-subtle disabled:opacity-50 flex items-center gap-2 transition-all"
+          >
+            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            <span>{language === 'ar' ? 'حفظ كافة الإعدادات' : 'Save Settings'}</span>
+          </button>
         </div>
+
+        {/* MODAL: ADD / EDIT WALLET */}
+        {isWalletModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn">
+            <div className="w-full max-w-md bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] rounded-3xl p-6 sm:p-8 shadow-editorial space-y-6">
+              
+              <div className="flex items-center justify-between pb-3 border-b border-[#EAE8DE] dark:border-[#283849]">
+                <h3 className="font-extrabold text-base text-[#153C32] dark:text-[#F3F5F4]">
+                  {editingWalletId ? (language === 'ar' ? 'تعديل بيانات المحفظة' : 'Edit Wallet') : (language === 'ar' ? 'إضافة رقم محفظة فودافون كاش' : 'Add Vodafone Cash Wallet')}
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setIsWalletModalOpen(false)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {walletError && (
+                <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/40 text-red-700 dark:text-red-300 text-xs">
+                  {walletError}
+                </div>
+              )}
+
+              <form onSubmit={handleSaveWalletModal} className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-[#191F1C] dark:text-[#F3F5F4]">
+                    {language === 'ar' ? 'اسم أو تسمية المحفظة (اختياري)' : 'Wallet Label'}
+                  </label>
+                  <input
+                    type="text"
+                    value={walletLabel}
+                    onChange={e => setWalletLabel(e.target.value)}
+                    placeholder="مثال: محفظة الدفعة الأساسية"
+                    className="w-full py-2.5 px-3.5 rounded-xl bg-[#FAF9F5] dark:bg-[#111C2D] border border-[#DDD9CC] dark:border-[#283849] text-xs sm:text-sm text-[#191F1C] dark:text-[#F3F5F4] focus:outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-[#191F1C] dark:text-[#F3F5F4]">
+                    {language === 'ar' ? 'رقم هاتف المحفظة (11 رقم)' : 'Wallet Phone Number'}
+                  </label>
+                  <input
+                    type="tel"
+                    inputMode="tel"
+                    required
+                    value={walletPhone}
+                    onChange={e => setWalletPhone(e.target.value)}
+                    placeholder="01012345678"
+                    dir="ltr"
+                    className="w-full py-2.5 px-3.5 rounded-xl bg-[#FAF9F5] dark:bg-[#111C2D] border border-[#DDD9CC] dark:border-[#283849] font-mono text-sm font-bold text-[#153C32] dark:text-[#24B58A] focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    type="checkbox"
+                    id="walletEnabledCheckbox"
+                    checked={walletEnabled}
+                    onChange={e => setWalletEnabled(e.target.checked)}
+                    className="rounded text-[#153C32]"
+                  />
+                  <label htmlFor="walletEnabledCheckbox" className="text-xs font-semibold text-[#191F1C] dark:text-[#F3F5F4] cursor-pointer">
+                    {language === 'ar' ? 'تفعيل المحفظة وعرضها للمتبرعين فورًا' : 'Active and visible to donors'}
+                  </label>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-4 border-t border-[#EAE8DE] dark:border-[#283849]">
+                  <button
+                    type="button"
+                    onClick={() => setIsWalletModalOpen(false)}
+                    className="px-4 py-2 rounded-xl border border-[#DDD9CC] dark:border-[#283849] text-xs font-semibold text-[#738079]"
+                  >
+                    إلغاء
+                  </button>
+
+                  <button
+                    type="submit"
+                    className="px-5 py-2 rounded-xl bg-[#153C32] dark:bg-[#24B58A] text-white dark:text-[#0B1220] text-xs font-bold hover:bg-[#1C4E41]"
+                  >
+                    {editingWalletId ? 'تحديث المحفظة' : 'إضافة المحفظة'}
+                  </button>
+                </div>
+              </form>
+
+            </div>
+          </div>
+        )}
 
       </div>
     </AdminLayout>

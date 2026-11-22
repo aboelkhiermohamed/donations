@@ -3,10 +3,11 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useLanguage } from '@/context/LanguageContext';
-import { Heart, Globe, ArrowLeft, ArrowRight, ShieldCheck, Cpu, Award } from 'lucide-react';
+import { HeartHandshake, Globe, ArrowLeft, ArrowRight, ShieldCheck, Heart, Layers, Building2, UserCheck } from 'lucide-react';
+import ThemeToggle from '@/components/ThemeToggle';
 
 export default function AboutPage() {
-  const { language, dir, toggleLanguage } = useLanguage();
+  const { language, dir, toggleLanguage, t } = useLanguage();
   const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
@@ -15,134 +16,151 @@ export default function AboutPage() {
 
   if (!isMounted) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-50 flex items-center justify-center font-sans">
-        <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen bg-[#FAF9F5] dark:bg-[#0B1220] text-[#191F1C] dark:text-[#F3F5F4] flex items-center justify-center font-arabic">
+        <div className="w-8 h-8 border-3 border-[#153C32] dark:border-[#24B58A] border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen pb-16 flex flex-col font-sans overflow-x-hidden bg-slate-950 text-slate-50 relative" dir={dir}>
-      {/* Background Orbs */}
-      <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-emerald-500/5 rounded-full blur-[120px] pointer-events-none -z-10" />
-      <div className="absolute bottom-0 right-1/4 w-[400px] h-[400px] bg-teal-500/5 rounded-full blur-[100px] pointer-events-none -z-10" />
+    <div className="min-h-screen flex flex-col font-arabic bg-[#FAF9F5] dark:bg-[#0B1220] text-[#191F1C] dark:text-[#F3F5F4] relative transition-colors duration-200" dir={dir}>
+      
+      {/* Top Bar */}
+      <header className="sticky top-0 z-40 bg-[#FAF9F5]/90 dark:bg-[#0B1220]/90 backdrop-blur-md border-b border-[#EAE8DE] dark:border-[#283849]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between gap-4">
+          <Link href="/" className="flex items-center gap-3.5 group">
+            <div className="w-11 h-11 rounded-xl bg-[#153C32] dark:bg-[#172436] border border-[#153C32] dark:border-[#283849] text-white flex items-center justify-center shadow-subtle flex-shrink-0">
+              <HeartHandshake className="w-6 h-6 text-[#E2F3EE] dark:text-[#24B58A]" />
+            </div>
+            <div className="flex flex-col">
+              <span className="font-extrabold text-lg text-[#153C32] dark:text-[#F3F5F4] tracking-tight leading-tight">
+                {t('brand_title')}
+              </span>
+              <span className="text-xs text-[#738079] dark:text-[#A7B4B0] font-medium">
+                {t('brand_batch')}
+              </span>
+            </div>
+          </Link>
 
-      {/* NAVBAR */}
-      <header className="w-full max-w-7xl mx-auto px-4 md:px-8 py-4 md:py-6 flex flex-row items-center justify-between z-10 gap-2">
-        <Link href="/" className="flex items-center gap-1.5 md:gap-3 group">
-          <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg md:rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center shadow-lg shadow-emerald-500/20 flex-shrink-0">
-            <Heart className="w-4 h-4 md:w-5 md:h-5 text-slate-950 fill-slate-950" />
+          <div className="flex items-center gap-3">
+            <ThemeToggle />
+            <button
+              onClick={toggleLanguage}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[#DDD9CC] dark:border-[#283849] bg-white dark:bg-[#172436] text-xs font-semibold text-[#3D4742] dark:text-[#F3F5F4] hover:bg-[#F4F3ED] dark:hover:bg-[#1f3047] transition-colors"
+            >
+              <Globe className="w-3.5 h-3.5 text-[#153C32] dark:text-[#24B58A]" />
+              <span>{language === 'ar' ? 'English' : 'العربية'}</span>
+            </button>
+            <Link
+              href="/"
+              className="inline-flex items-center gap-1 px-4 py-2 rounded-lg bg-[#153C32] dark:bg-[#217A61] text-white text-xs font-bold hover:bg-[#1C4E41] dark:hover:bg-[#24B58A] transition-colors"
+            >
+              <span>{language === 'ar' ? 'الرئيسية' : 'Home'}</span>
+              <ArrowLeft className="w-3.5 h-3.5 rtl-flip" />
+            </Link>
           </div>
-          <span className="text-base md:text-xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400 whitespace-nowrap">
-            donations 9th Batch
-          </span>
-        </Link>
-
-        <div className="flex items-center gap-1.5 md:gap-3 flex-shrink-0">
-          <button 
-            onClick={toggleLanguage}
-            className="flex items-center gap-1.5 px-2 md:px-4 py-1.5 md:py-2 rounded-lg bg-slate-900/60 border border-slate-800 text-xs md:text-sm font-semibold hover:bg-slate-800 transition-colors"
-          >
-            <Globe className="w-3.5 h-3.5 text-emerald-450" />
-            <span>{language === 'ar' ? 'English' : 'العربية'}</span>
-          </button>
         </div>
       </header>
 
-      {/* MAIN CONTENT */}
-      <main className="flex-1 w-full max-w-4xl mx-auto px-4 md:px-8 mt-8 space-y-10 z-10">
-        
-        {/* Back Link */}
-        <div>
-          <Link 
-            href="/" 
-            className="inline-flex items-center gap-2 text-xs font-bold text-emerald-400 hover:text-emerald-350 transition-colors bg-slate-900/40 border border-slate-900 py-2 px-4 rounded-xl hover:bg-slate-900/70"
-          >
-            {dir === 'rtl' ? <ArrowRight className="w-4 h-4" /> : <ArrowLeft className="w-4 h-4" />}
-            <span>{language === 'ar' ? 'العودة للرئيسية' : 'Back to Home'}</span>
-          </Link>
-        </div>
-
-        {/* Title */}
-        <div className="space-y-4">
-          <h1 className="text-3xl md:text-5xl font-black text-white leading-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-350">
-            {language === 'ar' ? 'عن الحملة والمنصة' : 'About the Campaign & Platform'}
-          </h1>
-          <p className="text-slate-400 text-sm md:text-base leading-relaxed">
-            {language === 'ar'
-              ? 'مبادرة إنسانية رقمية تقودها الدفعة التاسعة من كلية الطب بجامعة كفر الشيخ لدعم الرعاية المركزة بأحدث الأجهزة الطبية.'
-              : 'A digital humanitarian initiative led by the 9th Batch of Kafr El-Sheikh University Faculty of Medicine to equip the Intensive Care Unit with vital medical machinery.'}
-          </p>
-        </div>
-
-        {/* Content Section: Campaign Goal */}
-        <div className="glass-panel p-6 md:p-8 rounded-2xl border border-slate-900 space-y-6">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-400">
-              <Award className="w-5 h-5" />
-            </div>
-            <h2 className="text-xl font-bold text-white">
-              {language === 'ar' ? 'هدف الحملة وغايتها الأساسية' : 'The Campaign Goal'}
-            </h2>
-          </div>
+      {/* Main Content */}
+      <main className="flex-1 py-12 md:py-20">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
           
-          <div className="space-y-4 text-xs md:text-sm text-slate-300 leading-relaxed">
-            <p>
-              {language === 'ar'
-                ? 'تهدف هذه الحملة بشكل أساسي لتأمين وتوريد جهاز تنفس صناعي حديث (Medical Ventilator) فائق الكفاءة لوحدة العناية المركزة بمستشفيات جامعة كفر الشيخ لدعم رئتي المرضى غير القادرين على التنفس بمفردهم نتيجة الفشل التنفسي أو الصدمات الحادة، وخدمتهم مجاناً وبأعلى جودة طبية.'
-                : 'The primary objective of this campaign is to secure and deliver a state-of-the-art medical ventilator for the Intensive Care Unit (ICU) at Kafr El-Sheikh University Hospital, designed to support respiratory failure cases and assist ICU patients in critical conditions.'}
-            </p>
-          </div>
-        </div>
-
-        {/* Content Section: Platform Technology */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="glass-panel p-6 rounded-2xl border border-slate-900 space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-teal-500/10 flex items-center justify-center text-teal-400">
-                <Cpu className="w-5 h-5" />
-              </div>
-              <h3 className="text-base font-bold text-white">
-                {language === 'ar' ? 'نظام التحقق التلقائي المبتكر' : 'Automated Verification'}
-              </h3>
+          {/* Header Card */}
+          <div className="text-center space-y-4">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white dark:bg-[#172436] border border-[#DDD9CC] dark:border-[#283849] text-xs font-bold text-[#153C32] dark:text-[#24B58A] shadow-subtle">
+              <span className="w-2 h-2 rounded-full bg-[#B79B68]" />
+              <span>{language === 'ar' ? 'عن الحملة والغاية' : 'About the Campaign'}</span>
             </div>
-            <p className="text-xs text-slate-405 leading-relaxed">
+
+            <h1 className="text-3xl sm:text-5xl font-black text-[#153C32] dark:text-[#F3F5F4] tracking-tight">
+              {language === 'ar' ? 'صدقة جارية بأثرٍ يمتد' : 'Sadaqah Jariyah — An Enduring Impact'}
+            </h1>
+
+            <p className="text-sm sm:text-base text-[#55625B] dark:text-[#A7B4B0] max-w-2xl mx-auto leading-relaxed">
               {language === 'ar'
-                ? 'تتميز المنصة بنظام مطابقة تلقائي يربط تبرعك المسجل على الموقع بإشعارات الرسائل النصية القصيرة (SMS) المستلمة من فودافون كاش أو إنستاباي عبر هاتف بوابة مخصص، ليتم اعتماد تبرعك تلقائياً ونشره في لوحة الشفافية خلال ثوانٍ.'
-                : 'The platform integrates an automated matching engine that verifies donation requests against real-time SMS alerts received from Vodafone Cash or InstaPay on our gateway device, validating contributions automatically within seconds.'}
+                ? 'مبادرة طبية إنسانية نظمتها الدفعة التاسعة بكلية الطب البشري جامعة كفر الشيخ، تخليدًا لذكرى زميلينا الراحلين الدكتور حسين علي الأمير والدكتورة ندى هاني حامد.'
+                : 'A humanitarian medical initiative organized by the 9th Batch of Kafr El-Sheikh Medicine, commemorating our beloved late colleagues Dr. Hussein Ali El-Amir & Dr. Nada Hani Hamed.'}
             </p>
           </div>
 
-          <div className="glass-panel p-6 rounded-2xl border border-slate-900 space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-450">
+          {/* Memorial Dedication Box */}
+          <div className="p-8 rounded-3xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-subtle space-y-4 border-r-4 border-r-[#B79B68]">
+            <span className="text-xs font-bold uppercase tracking-wider text-[#9E8047] dark:text-[#C5A876]">
+              {language === 'ar' ? 'إهداء المبادرة' : 'Dedication'}
+            </span>
+            <div className="text-2xl font-extrabold text-[#153C32] dark:text-[#F3F5F4]">
+              د. حسين علي الأمير   •   د. ندى هاني حامد
+            </div>
+            <p className="text-sm text-[#55625B] dark:text-[#CBD5E1] leading-relaxed">
+              {language === 'ar'
+                ? 'رحم الله فقيدينا وأسكنهما فسيح جناته. كانا مثالاً للإخلاص ودماثة الخلق وحب الخير. ونسأل المولى عز وجل أن يجعل هذا العمل صدقة جارية ونورًا يرافقهما في ميزان حسناتهما إلى يوم القيامة.'
+                : 'May Allah have mercy on our beloved colleagues and grant them eternal peace. They were shining examples of sincerity and virtue.'}
+            </p>
+          </div>
+
+          {/* Pillars & Details */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            <div className="p-6 rounded-2xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-subtle space-y-3">
+              <div className="w-10 h-10 rounded-xl bg-[#F0F9F6] dark:bg-[#217A61]/20 border border-[#153C32]/10 dark:border-[#217A61]/30 flex items-center justify-center text-[#153C32] dark:text-[#24B58A]">
+                <Layers className="w-5 h-5" />
+              </div>
+              <h3 className="font-bold text-lg text-[#153C32] dark:text-[#F3F5F4]">
+                {language === 'ar' ? 'الهدف الطبي للمشروع' : 'Medical Purpose'}
+              </h3>
+              <p className="text-sm text-[#55625B] dark:text-[#A7B4B0] leading-relaxed">
+                {language === 'ar'
+                  ? 'توفير جهاز تنفس صناعي متطور (ICU Ventilator) لتجهيز وحدة العناية المركزة بمستشفيات جامعة كفر الشيخ، لخدمة المرضى ذوي الحالات الحرجة ومصابي الطوارئ مجانًا.'
+                  : 'Equipping the ICU at Kafr El-Sheikh University Hospitals with a state-of-the-art ventilator to serve critical care patients free of charge.'}
+              </p>
+            </div>
+
+            <div className="p-6 rounded-2xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-subtle space-y-3">
+              <div className="w-10 h-10 rounded-xl bg-[#F0F9F6] dark:bg-[#217A61]/20 border border-[#217A61]/20 dark:border-[#217A61]/30 flex items-center justify-center text-[#217A61] dark:text-[#24B58A]">
                 <ShieldCheck className="w-5 h-5" />
               </div>
-              <h3 className="text-base font-bold text-white">
-                {language === 'ar' ? 'الشفافية الكاملة وحماية الهوية' : '100% Transparency & Privacy'}
+              <h3 className="font-bold text-lg text-[#153C32] dark:text-[#F3F5F4]">
+                {language === 'ar' ? 'الشفافية والمصداقية' : 'Transparency & Accountability'}
               </h3>
+              <p className="text-sm text-[#55625B] dark:text-[#A7B4B0] leading-relaxed">
+                {language === 'ar'
+                  ? 'إدارة الحملة تخضع لمتابعة وإشراف مباشر من أطباء الدفعة التاسعة مع تسجيل آلي فوري لكافة التبرعات عبر لوحة الشفافية المعلنة للجميع.'
+                  : 'The campaign is supervised by the 9th Batch physicians with real-time audit logs and complete donor transparency.'}
+              </p>
             </div>
-            <p className="text-xs text-slate-405 leading-relaxed">
+
+          </div>
+
+          {/* Call to action */}
+          <div className="p-8 rounded-3xl bg-[#153C32] dark:bg-[#111C2D] border border-[#153C32] dark:border-[#283849] text-white text-center space-y-4 shadow-elevated">
+            <h3 className="text-xl sm:text-2xl font-bold">
+              {language === 'ar' ? 'ساهم معنا في إكمال هذا الأثر' : 'Contribute to this Lasting Impact'}
+            </h3>
+            <p className="text-xs sm:text-sm text-[#E2F3EE]/80 dark:text-[#A7B4B0] max-w-lg mx-auto">
               {language === 'ar'
-                ? 'لضمان الثقة الكاملة، يتم عرض كافة التبرعات المعتمدة مباشرةً في لوحة الشفافية العامة. وبنفس الوقت، نقوم بحماية خصوصيتك عبر تشفير كامل لأرقام الهواتف وإخفاء أجزاء من أسماء المتبرعين لتجنب أي إساءة لاستخدام البيانات.'
-                : 'To establish complete public trust, all approved donations are streamed in real time to the public ledger. Simultaneously, donor privacy is safeguarded by hashing phone numbers and partially masking names to prevent data misuse.'}
+                ? 'كل مساهمة، مهما كانت بسيطة، تقربنا من شراء الجهاز وإنقاذ الأرواح في العناية المركزة.'
+                : 'Every contribution brings us closer to securing the ventilator and saving lives.'}
             </p>
+            <div className="pt-2">
+              <Link
+                href="/#donate"
+                className="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl bg-white dark:bg-[#24B58A] text-[#153C32] dark:text-[#0B1220] text-sm font-bold shadow-subtle hover:bg-[#F4F3ED] dark:hover:bg-[#209f79] transition-colors"
+              >
+                <Heart className="w-4 h-4 fill-current" />
+                <span>{language === 'ar' ? 'ساهم الآن في الصدقة' : 'Contribute Now'}</span>
+              </Link>
+            </div>
           </div>
-        </div>
 
-        {/* Footer/Sign-off Card */}
-        <div className="bg-gradient-to-br from-slate-900 to-slate-950 p-6 md:p-8 rounded-2xl border border-slate-900 text-center space-y-4">
-          <p className="text-xs text-slate-400">
-            {language === 'ar'
-              ? 'كل تبرع، مهما كانت قيمته، يقربنا خطوة إضافية نحو تأمين هذا العتاد الطبي وإنقاذ الأرواح.'
-              : 'Every contribution, big or small, brings us closer to securing these vital medical devices and saving lives.'}
-          </p>
-          <div className="font-extrabold text-sm text-emerald-400">
-            {language === 'ar' ? 'كلية الطب بجامعة كفر الشيخ - الدفعة التاسعة' : 'Kafr El-Sheikh University Faculty of Medicine - 9th Batch'}
-          </div>
         </div>
-
       </main>
+
+      {/* Footer */}
+      <footer className="border-t border-[#EAE8DE] dark:border-[#283849] bg-white dark:bg-[#111C2D] py-8 text-center text-xs text-[#738079] dark:text-[#A7B4B0]">
+        <span>جميع الحقوق محفوظة © الدفعة التاسعة طب كفر الشيخ</span>
+      </footer>
+
     </div>
   );
 }

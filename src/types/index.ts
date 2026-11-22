@@ -23,7 +23,34 @@ export interface Donor {
 }
 
 export type DonationStatus = 'pending' | 'auto_verified' | 'manual_verified' | 'rejected' | 'refunded';
-export type PaymentMethod = 'vodafone_cash' | 'instapay';
+export type PaymentMethod = 'vodafone_cash' | 'instapay' | string;
+
+export interface WalletConfig {
+  id: string;
+  label: string;
+  phone_number: string;
+  enabled: boolean;
+  display_order: number;
+}
+
+export interface PaymentMethodConfig {
+  id: string;
+  method_key: 'vodafone_cash' | 'instapay' | string;
+  display_name: string;
+  display_name_ar: string;
+  description_ar?: string;
+  description_en?: string;
+  enabled: boolean;
+  display_order: number;
+  wallets?: WalletConfig[];
+  configuration?: {
+    instapay_address?: string;
+    instapay_phone?: string;
+    instapay_payment_link?: string;
+    instapay_qr_url?: string;
+    [key: string]: any;
+  };
+}
 
 export interface Donation {
   id: string;

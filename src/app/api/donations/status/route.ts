@@ -3,8 +3,48 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// Sliding-window rate limiter: max 30 status checks per IP per minute
+const statusRateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
+const MAX_REQUESTS_PER_WINDOW = 30;
+
+function isStatusRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const entry = statusRateLimitMap.get(ip);
+
+  if (!entry || now > entry.resetAt) {
+    statusRateLimitMap.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return false;
+  }
+
+  if (entry.count >= MAX_REQUESTS_PER_WINDOW) {
+    return true;
+  }
+
+  entry.count += 1;
+  return false;
+}
+
+// Periodic cleanup of rate limiter entries
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of statusRateLimitMap.entries()) {
+    if (now > entry.resetAt) {
+      statusRateLimitMap.delete(ip);
+    }
+  }
+}, 5 * 60 * 1000).unref?.();
+
 export async function GET(req: NextRequest) {
   try {
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    if (isStatusRateLimited(ip)) {
+      return NextResponse.json(
+        { error: 'Too many status check requests. Please wait a moment.' },
+        { status: 429 }
+      );
+    }
+
     const { searchParams } = new URL(req.url);
     const idsParam = searchParams.get('ids');
     const phoneParam = searchParams.get('phone');
@@ -33,31 +73,37 @@ export async function GET(req: NextRequest) {
           phone
         )
       `)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(20);
 
     if (idsParam) {
-      const ids = idsParam.split(',').filter(id => uuidRegex.test(id));
+      const ids = idsParam
+        .split(',')
+        .filter(id => uuidRegex.test(id))
+        .slice(0, 20);
+
       if (ids.length === 0) {
         return NextResponse.json([]);
       }
       query = query.in('id', ids);
     } else if (refParam) {
-      const ref = refParam.trim();
+      const ref = refParam.trim().slice(0, 50);
       if (!ref) {
         return NextResponse.json([]);
       }
       query = query.ilike('transaction_ref', `%${ref}%`);
     } else if (phoneParam) {
-      const phone = phoneParam.trim();
+      const phone = phoneParam.trim().slice(0, 20);
       if (!phone) {
         return NextResponse.json([]);
       }
       
-      // Step 1: Find donor ids by phone
+      // Step 1: Find donor ids by phone (max 10 donors)
       const { data: donors, error: donorError } = await supabaseAdmin
         .from('donors')
         .select('id')
-        .eq('phone', phone);
+        .eq('phone', phone)
+        .limit(10);
 
       if (donorError) {
         throw donorError;

@@ -2,6 +2,39 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { findMatchForDonation } from '@/lib/matchingEngine';
+import { getActivePaymentMethods } from '@/lib/paymentService';
+
+// Anti-Spam Sliding-window rate limiter: max 15 donation attempts per IP per 10 minutes
+const donationRateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const DONATION_RATE_LIMIT_MS = 10 * 60 * 1000;
+const MAX_DONATIONS_PER_WINDOW = 15;
+
+function isDonationRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const entry = donationRateLimitMap.get(ip);
+
+  if (!entry || now > entry.resetAt) {
+    donationRateLimitMap.set(ip, { count: 1, resetAt: now + DONATION_RATE_LIMIT_MS });
+    return false;
+  }
+
+  if (entry.count >= MAX_DONATIONS_PER_WINDOW) {
+    return true;
+  }
+
+  entry.count += 1;
+  return false;
+}
+
+// Clean up stale IP limits
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of donationRateLimitMap.entries()) {
+    if (now > entry.resetAt) {
+      donationRateLimitMap.delete(ip);
+    }
+  }
+}, 15 * 60 * 1000).unref?.();
 
 const donationRequestSchema = z.object({
   name: z.string().min(1),
@@ -37,6 +70,43 @@ export async function POST(req: NextRequest) {
       notes,
       screenshotUrl,
     } = validation.data;
+
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    if (isDonationRateLimited(ip)) {
+      return NextResponse.json(
+        { error: 'تم تجاوز الحد المسموح لتسجيل التبرعات مؤقتاً. يرجى الانتظار قليلاً.' },
+        { status: 429 }
+      );
+    }
+
+    // Anti-Fraud: Prevent reuse of an already-verified transaction reference
+    if (transactionRef && transactionRef.trim()) {
+      const cleanRef = transactionRef.trim();
+      const { data: existingVerifiedTx } = await supabaseAdmin
+        .from('donations')
+        .select('id')
+        .eq('transaction_ref', cleanRef)
+        .in('status', ['auto_verified', 'manual_verified'])
+        .limit(1)
+        .maybeSingle();
+
+      if (existingVerifiedTx) {
+        return NextResponse.json(
+          { error: 'رقم العملية المرجعي هذا تم تأكيده وتوثيقه مسبقاً في عملية تبرع سابقة.' },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Validate that the requested payment method is currently active
+    const activeMethods = await getActivePaymentMethods(supabaseAdmin);
+    const isMethodAllowed = activeMethods.some(m => m.method_key === paymentMethod && m.enabled);
+    if (!isMethodAllowed) {
+      return NextResponse.json(
+        { error: 'Payment method is currently disabled or unavailable for donations.' },
+        { status: 400 }
+      );
+    }
 
     // 1. Insert or reuse Donor (Check if donor with same phone and name already exists)
     let donorId: string;

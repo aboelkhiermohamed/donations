@@ -14,12 +14,12 @@ import {
   Download, 
   Printer, 
   Loader2,
-  CheckCircle,
+  CheckCircle2, 
   AlertTriangle
 } from 'lucide-react';
 
 export default function AdminReportsPage() {
-  const { language, t } = useLanguage();
+  const { language, dir, t } = useLanguage();
 
   // Filters
   const [reportRange, setReportRange] = useState<'daily' | 'weekly' | 'monthly' | 'custom'>('weekly');
@@ -33,10 +33,9 @@ export default function AdminReportsPage() {
   });
 
   const [isExporting, setIsExporting] = useState(false);
-  const [exportMessage, setExportMessage] = useState('');
 
   // Fetch donations matching selected date range
-  const { data: donations, isLoading } = useQuery<Donation[]>({
+  const { data: donations = [], isLoading } = useQuery<Donation[]>({
     queryKey: ['reportDonations', reportRange, startDate, endDate],
     queryFn: async () => {
       const now = new Date();
@@ -46,7 +45,6 @@ export default function AdminReportsPage() {
       let startStr = startDate;
       let endStr = endOfToday.toISOString();
 
-      // Handle preset ranges
       if (reportRange === 'daily') {
         const start = new Date(now);
         start.setHours(0, 0, 0, 0);
@@ -62,7 +60,6 @@ export default function AdminReportsPage() {
         start.setHours(0, 0, 0, 0);
         startStr = start.toISOString();
       } else {
-        // Custom dates
         const start = new Date(startDate);
         start.setHours(0, 0, 0, 0);
         startStr = start.toISOString();
@@ -90,432 +87,266 @@ export default function AdminReportsPage() {
     },
   });
 
-  // Calculate stats for current filter
-  const items = donations || [];
-  const approvedItems = items.filter(d => d.status === 'auto_verified' || d.status === 'manual_verified');
+  const approvedItems = donations.filter(d => d.status === 'auto_verified' || d.status === 'manual_verified');
   const totalApprovedSum = approvedItems.reduce((sum, d) => sum + Number(d.amount), 0);
+  const avgDonation = approvedItems.length > 0 ? Math.round(totalApprovedSum / approvedItems.length) : 0;
 
-  // 1. Export as CSV
-  const handleExportCSV = async () => {
-    if (items.length === 0) return;
+  // Export to Excel
+  const handleExportExcel = () => {
+    if (donations.length === 0) return;
     setIsExporting(true);
-    setExportMessage(language === 'ar' ? 'جاري تصدير ملف CSV...' : 'Exporting CSV file...');
 
     try {
-      const headers = ['Donation ID', 'Donor Name', 'Donor Phone', 'Amount (EGP)', 'Payment Method', 'Ref Number', 'Status', 'Date', 'Verification'];
-      const rows = items.map(d => [
+      const exportRows = donations.map((d: any, idx) => ({
+        '#': idx + 1,
+        'اسم المتبرع': d.donor?.name || 'فاعل خير',
+        'رقم الهاتف': d.donor?.phone || '—',
+        'المبلغ (ج.م)': Number(d.amount),
+        'وسيلة التحويل': d.payment_method === 'vodafone_cash' ? 'فودافون كاش' : 'InstaPay',
+        'الرقم المرجعي': d.transaction_ref || '—',
+        'حالة التوثيق': d.status === 'auto_verified' ? 'موثق آليًا' :
+                        d.status === 'manual_verified' ? 'معتمد يدويًا' :
+                        d.status === 'pending' ? 'قيد المراجعة' : 'مرفوض',
+        'تاريخ التسجيل': new Date(d.created_at).toLocaleString('ar-EG'),
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(exportRows);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'تقرير التبرعات');
+      XLSX.writeFile(workbook, `Sadaqah_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+    } catch (err: any) {
+      alert(`Export error: ${err.message}`);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  // Export to CSV
+  const handleExportCSV = () => {
+    if (donations.length === 0) return;
+    try {
+      const headers = ['ID', 'Donor Name', 'Phone', 'Amount', 'Method', 'Ref', 'Status', 'Date'];
+      const rows = donations.map((d: any) => [
         d.id,
-        d.donor?.name || '',
-        d.donor?.phone || '',
+        `"${d.donor?.name || 'Anonymous'}"`,
+        `"${d.donor?.phone || ''}"`,
         d.amount,
-        d.payment_method.toUpperCase(),
-        d.transaction_ref || '',
+        d.payment_method,
+        `"${d.transaction_ref || ''}"`,
         d.status,
-        new Date(d.created_at).toLocaleDateString(),
-        d.verification_method || 'none'
+        `"${d.created_at}"`,
       ]);
 
-      const csvContent = [headers.join(','), ...rows.map(e => e.map(val => `"${String(val).replace(/"/g, '""')}"`).join(','))].join('\n');
-      
-      const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
+      const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+      const encodedUri = encodeURI(csvContent);
       const link = document.createElement('a');
-      link.setAttribute('href', url);
-      link.setAttribute('download', `Donation_Report_${reportRange}_${Date.now()}.csv`);
+      link.setAttribute('href', encodedUri);
+      link.setAttribute('download', `donations_export_${new Date().toISOString().split('T')[0]}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-
-      await logExportAction('csv');
-      setExportMessage(language === 'ar' ? 'تم تصدير ملف CSV بنجاح!' : 'CSV exported successfully!');
     } catch (err: any) {
-      console.error(err);
       alert(`CSV export failed: ${err.message}`);
-    } finally {
-      setIsExporting(false);
-      setTimeout(() => setExportMessage(''), 3000);
     }
-  };
-
-  // 2. Export as Excel (XLSX)
-  const handleExportXLSX = async () => {
-    if (items.length === 0) return;
-    setIsExporting(true);
-    setExportMessage(language === 'ar' ? 'جاري تصدير ملف Excel...' : 'Exporting Excel file...');
-
-    try {
-      const formattedData = items.map(d => ({
-        'Donation ID': d.id,
-        'Donor Name': d.donor?.name || '',
-        'Donor Phone': d.donor?.phone || '',
-        'Amount (EGP)': Number(d.amount),
-        'Payment Method': d.payment_method === 'vodafone_cash' ? 'Vodafone Cash' : 'InstaPay',
-        'Transaction Ref': d.transaction_ref || '',
-        'Status': d.status,
-        'Date': new Date(d.created_at).toLocaleDateString(),
-        'Verification Method': d.verification_method || 'none'
-      }));
-
-      const worksheet = XLSX.utils.json_to_sheet(formattedData);
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Donations');
-      
-      // Generate buffer
-      XLSX.writeFile(workbook, `Donation_Report_${reportRange}_${Date.now()}.xlsx`);
-
-      await logExportAction('xlsx');
-      setExportMessage(language === 'ar' ? 'تم تصدير ملف Excel بنجاح!' : 'Excel exported successfully!');
-    } catch (err: any) {
-      console.error(err);
-      alert(`Excel export failed: ${err.message}`);
-    } finally {
-      setIsExporting(false);
-      setTimeout(() => setExportMessage(''), 3000);
-    }
-  };
-
-  // 3. Native Print layout as PDF
-  const handlePrintReport = async () => {
-    window.print();
-    await logExportAction('pdf');
-  };
-
-  // Helper: Log export in database
-  const logExportAction = async (format: string) => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      // Insert in report_exports
-      const { data: reportRecord } = await supabase.from('report_exports').insert({
-        admin_id: session?.user?.id || null,
-        report_type: `${reportRange.toUpperCase()}_${format.toUpperCase()}`,
-        status: 'completed',
-        criteria: { startDate, endDate, format }
-      }).select().single();
-
-      // Log in audit_logs
-      await supabase.from('audit_logs').insert({
-        admin_id: session?.user?.id || null,
-        action: `EXPORT_REPORT_${format.toUpperCase()}`,
-        target_table: 'report_exports',
-        target_id: reportRecord?.id || null,
-        details: { range: reportRange, format, count: items.length }
-      });
-    } catch (e) {
-      console.error('Audit logging failed:', e);
-    }
-  };
-
-  // Helper Formatters for Localized PDF/Print Tables
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case 'auto_verified':
-        return language === 'ar' ? 'موثق تلقائياً' : 'Auto Verified';
-      case 'manual_verified':
-        return language === 'ar' ? 'موثق يدوياً' : 'Manual Verified';
-      case 'pending':
-        return language === 'ar' ? 'قيد التحقق' : 'Pending';
-      case 'rejected':
-        return language === 'ar' ? 'مرفوض' : 'Rejected';
-      case 'refunded':
-        return language === 'ar' ? 'مسترجع' : 'Refunded';
-      default:
-        return status;
-    }
-  };
-
-  const getMethodLabel = (method: string) => {
-    if (method === 'vodafone_cash') {
-      return language === 'ar' ? 'فودافون كاش' : 'Vodafone Cash';
-    } else if (method === 'instapay') {
-      return language === 'ar' ? 'إنستاباي' : 'InstaPay';
-    }
-    return method.replace('_', ' ');
-  };
-
-  const getVerificationLabel = (method?: string) => {
-    if (method === 'auto') {
-      return language === 'ar' ? 'تلقائي' : 'Auto';
-    } else if (method === 'manual') {
-      return language === 'ar' ? 'يدوي' : 'Manual';
-    }
-    return language === 'ar' ? 'بدون' : 'None';
   };
 
   return (
     <AdminLayout>
-      {/* Premium Print Media Stylesheet injection */}
-      <style dangerouslySetInnerHTML={{ __html: `
-        @media print {
-          /* Reset color theme to print-friendly light layout */
-          html, body, main, div, table, tr, td, th, tbody, thead, span, h2, h3, h4, p {
-            background: white !important;
-            background-color: white !important;
-            color: #0f172a !important;
-            border-color: #cbd5e1 !important;
-          }
-          
-          /* Force page margins */
-          @page {
-            margin: 20mm 15mm 20mm 15mm !important;
-            size: A4 portrait !important;
-          }
-
-          /* Clean, elegant table rendering with clear gridlines */
-          table {
-            border: 1px solid #cbd5e1 !important;
-            font-size: 8.5pt !important;
-            width: 100% !important;
-            margin-top: 10px !important;
-          }
-          th, td {
-            border: 1px solid #cbd5e1 !important;
-            padding: 8px 10px !important;
-            text-align: ${language === 'ar' ? 'right' : 'left'} !important;
-          }
-          th {
-            background-color: #f8fafc !important;
-            font-weight: 800 !important;
-            color: #0f172a !important;
-          }
-          
-          /* Prevent row splitting across pages */
-          tr {
-            page-break-inside: avoid !important;
-            page-break-after: auto !important;
-          }
-          
-          /* Repeat header on every print page */
-          thead {
-            display: table-header-group !important;
-          }
-          
-          /* Hide sidebar, native controls, and settings cards */
-          aside, header, nav, .print\\:hidden {
-            display: none !important;
-          }
-
-          /* Force correct layout container margins */
-          .print\\:m-0 {
-            margin: 0 !important;
-            padding: 0 !important;
-          }
-          
-          /* Style printed aggregates boxes nicely */
-          .print-agg-card {
-            border: 1px solid #cbd5e1 !important;
-            border-radius: 8px !important;
-            padding: 12px !important;
-            background-color: #f8fafc !important;
-            flex: 1 !important;
-            text-align: center !important;
-          }
-        }
-      `}} />
-
-      <div className="space-y-6 print:p-0 print:space-y-6" dir={language === 'ar' ? 'rtl' : 'ltr'}>
+      <div className="space-y-8">
         
-        {/* Title Block */}
-        <div className="print:hidden">
-          <h1 className="text-2xl font-black text-white">{t('db_reports')}</h1>
-          <p className="text-slate-400 text-xs mt-1">
-            {language === 'ar' ? 'توليد وتصدير التقارير المالية للحملة بصيغ متعددة مع تحديد نطاقات زمنية مرنة.' : 'Generate and export financial campaign reports in PDF, CSV, or Excel formats.'}
-          </p>
-        </div>
-
-        {/* PRINT ONLY REPORT HEADER */}
-        <div className="hidden print:flex flex-col gap-5 border-b-2 border-slate-900 pb-5" dir={language === 'ar' ? 'rtl' : 'ltr'}>
-          <div className="flex justify-between items-center">
-            <div>
-              <h2 className="text-2xl font-black text-slate-950 tracking-tight">{language === 'ar' ? 'تقرير التبرعات والمدفوعات الرسمي' : 'Official Campaign Financial Report'}</h2>
-              <p className="text-xs text-slate-500 mt-1 font-semibold">
-                {language === 'ar' ? 'حملة اليسر لمساعدة المحتاجين - لوحة التحكم الإدارية' : 'Yusr Charity Campaign - Administrative Control Portal'}
-              </p>
-            </div>
-            <div className="text-end">
-              <span className="text-[10px] text-slate-500 font-mono block">Exported: {new Date().toLocaleString()}</span>
-              <span className="text-[10px] text-slate-400 font-mono block">Status: Verified Approved Records</span>
-            </div>
-          </div>
-          <div className="grid grid-cols-3 gap-6 bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs">
-            <div>
-              <span className="text-slate-500 font-bold block mb-0.5">{language === 'ar' ? 'الفترة المشمولة:' : 'Coverage Range:'}</span>
-              <span className="text-slate-900 font-extrabold">{reportRange.toUpperCase()} ({startDate} to {endDate})</span>
-            </div>
-            <div>
-              <span className="text-slate-500 font-bold block mb-0.5">{language === 'ar' ? 'إجمالي التبرعات:' : 'Total Record Count:'}</span>
-              <span className="text-slate-900 font-extrabold">{items.length} ({approvedItems.length} Approved)</span>
-            </div>
-            <div>
-              <span className="text-slate-500 font-bold block mb-0.5">{language === 'ar' ? 'إجمالي الأموال المحصلة:' : 'Total Funds Collected:'}</span>
-              <span className="text-slate-950 font-black text-sm text-emerald-700">{totalApprovedSum.toLocaleString()} EGP</span>
-            </div>
-          </div>
-        </div>
-
-        {/* SETTINGS CARD */}
-        <div className="glass-panel p-5 rounded-2xl border border-slate-900 grid grid-cols-1 md:grid-cols-4 gap-4 items-end print:hidden">
-          {/* Preset Range */}
-          <div className="space-y-1.5">
-            <label className="text-slate-350 text-xs font-semibold flex items-center gap-1.5">
-              <Calendar className="w-3.5 h-3.5 text-emerald-400" />
-              <span>{language === 'ar' ? 'نطاق التقرير' : 'Report Interval'}</span>
-            </label>
-            <select
-              value={reportRange}
-              onChange={(e) => setReportRange(e.target.value as any)}
-              className="w-full glass-input px-3 py-2.5 rounded-xl text-xs cursor-pointer"
-            >
-              <option value="daily">{language === 'ar' ? 'تقرير اليوم' : 'Daily'}</option>
-              <option value="weekly">{language === 'ar' ? 'تقرير الأسبوع (7 أيام)' : 'Weekly'}</option>
-              <option value="monthly">{language === 'ar' ? 'تقرير الشهر (30 يوم)' : 'Monthly'}</option>
-              <option value="custom">{language === 'ar' ? 'تاريخ مخصص' : 'Custom Dates'}</option>
-            </select>
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-[#EAE8DE] dark:border-[#283849]">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-[#153C32] dark:text-[#F3F5F4] tracking-tight">
+              {language === 'ar' ? 'التقارير المحاسبية والتصدير' : 'Financial Reports & Exports'}
+            </h1>
+            <p className="text-xs sm:text-sm text-[#738079] dark:text-[#A7B4B0] mt-1">
+              {language === 'ar'
+                ? 'استخراج كشوف الحسابات المالية، تصدير ملفات Excel و CSV، وطباعة السجلات.'
+                : 'Generate financial audit statements, export Excel & CSV spreadsheets, and print ledgers.'}
+            </p>
           </div>
 
-          {/* Start Date */}
-          <div className="space-y-1.5">
-            <label className="text-slate-350 text-xs font-semibold">{language === 'ar' ? 'تاريخ البدء' : 'Start Date'}</label>
-            <input 
-              type="date"
-              value={startDate}
-              disabled={reportRange !== 'custom'}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="w-full glass-input px-3 py-2.5 rounded-xl text-xs disabled:opacity-50"
-            />
-          </div>
-
-          {/* End Date */}
-          <div className="space-y-1.5">
-            <label className="text-slate-350 text-xs font-semibold">{language === 'ar' ? 'تاريخ الانتهاء' : 'End Date'}</label>
-            <input 
-              type="date"
-              value={endDate}
-              disabled={reportRange !== 'custom'}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="w-full glass-input px-3 py-2.5 rounded-xl text-xs disabled:opacity-50"
-            />
-          </div>
-
-          {/* Export Actions buttons */}
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
             <button
-              onClick={handleExportXLSX}
-              disabled={isLoading || items.length === 0 || isExporting}
-              className="flex-1 py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-slate-950 font-extrabold rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 shadow-md"
+              onClick={handleExportExcel}
+              disabled={isExporting || donations.length === 0}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#153C32] dark:bg-[#217A61] text-white text-xs font-bold hover:bg-[#1C4E41] dark:hover:bg-[#24B58A] disabled:opacity-50 transition-colors"
             >
-              <FileSpreadsheet className="w-4 h-4" />
-              <span>Excel</span>
+              <FileSpreadsheet className="w-4 h-4 text-[#B79B68] dark:text-[#F3F5F4]" />
+              <span>{language === 'ar' ? 'تصدير Excel (XLSX)' : 'Export Excel'}</span>
             </button>
 
+            <button
+              onClick={() => window.print()}
+              className="inline-flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white dark:bg-[#172436] border border-[#DDD9CC] dark:border-[#283849] text-[#3D4742] dark:text-[#F3F5F4] text-xs font-semibold hover:bg-[#F4F3ED] dark:hover:bg-[#1f3047] transition-colors"
+            >
+              <Printer className="w-4 h-4" />
+              <span>{language === 'ar' ? 'طباعة' : 'Print'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Date Filter Bar */}
+        <div className="p-5 rounded-2xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-subtle space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setReportRange('daily')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                reportRange === 'daily'
+                  ? 'bg-[#153C32] dark:bg-[#217A61] text-white shadow-subtle'
+                  : 'bg-[#FAF9F5] dark:bg-[#111C2D] text-[#3D4742] dark:text-[#A7B4B0] hover:bg-[#F4F3ED] dark:hover:bg-[#1a293f]'
+              }`}
+            >
+              {language === 'ar' ? 'اليوم' : 'Today'}
+            </button>
+
+            <button
+              onClick={() => setReportRange('weekly')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                reportRange === 'weekly'
+                  ? 'bg-[#153C32] dark:bg-[#217A61] text-white shadow-subtle'
+                  : 'bg-[#FAF9F5] dark:bg-[#111C2D] text-[#3D4742] dark:text-[#A7B4B0] hover:bg-[#F4F3ED] dark:hover:bg-[#1a293f]'
+              }`}
+            >
+              {language === 'ar' ? 'آخر 7 أيام' : 'Last 7 Days'}
+            </button>
+
+            <button
+              onClick={() => setReportRange('monthly')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                reportRange === 'monthly'
+                  ? 'bg-[#153C32] dark:bg-[#217A61] text-white shadow-subtle'
+                  : 'bg-[#FAF9F5] dark:bg-[#111C2D] text-[#3D4742] dark:text-[#A7B4B0] hover:bg-[#F4F3ED] dark:hover:bg-[#1a293f]'
+              }`}
+            >
+              {language === 'ar' ? 'آخر 30 يومًا' : 'Last 30 Days'}
+            </button>
+
+            <button
+              onClick={() => setReportRange('custom')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                reportRange === 'custom'
+                  ? 'bg-[#153C32] dark:bg-[#217A61] text-white shadow-subtle'
+                  : 'bg-[#FAF9F5] dark:bg-[#111C2D] text-[#3D4742] dark:text-[#A7B4B0] hover:bg-[#F4F3ED] dark:hover:bg-[#1a293f]'
+              }`}
+            >
+              {language === 'ar' ? 'فترة مخصصة' : 'Custom Period'}
+            </button>
+          </div>
+
+          {reportRange === 'custom' && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-[#EAE8DE] dark:border-[#283849]">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-[#738079] dark:text-[#A7B4B0]">من تاريخ:</label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={e => setStartDate(e.target.value)}
+                  className="w-full py-2 px-3 text-xs rounded-xl bg-[#FAF9F5] dark:bg-[#111C2D] border border-[#DDD9CC] dark:border-[#283849] text-[#191F1C] dark:text-[#F3F5F4]"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-[#738079] dark:text-[#A7B4B0]">إلى تاريخ:</label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={e => setEndDate(e.target.value)}
+                  className="w-full py-2 px-3 text-xs rounded-xl bg-[#FAF9F5] dark:bg-[#111C2D] border border-[#DDD9CC] dark:border-[#283849] text-[#191F1C] dark:text-[#F3F5F4]"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Range Summary KPIs */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="p-5 rounded-2xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-subtle space-y-1">
+            <span className="text-xs text-[#738079] dark:text-[#A7B4B0] font-medium block">
+              {language === 'ar' ? 'إجمالي المحصل المعتمد في الفترة' : 'Total Verified in Period'}
+            </span>
+            <div className="text-2xl font-black text-[#153C32] dark:text-[#24B58A]">
+              {totalApprovedSum.toLocaleString('en-US')} <span className="text-xs text-[#738079] dark:text-[#A7B4B0] font-bold">{t('egp')}</span>
+            </div>
+          </div>
+
+          <div className="p-5 rounded-2xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-subtle space-y-1">
+            <span className="text-xs text-[#738079] dark:text-[#A7B4B0] font-medium block">
+              {language === 'ar' ? 'عدد التبرعات المعتمدة' : 'Verified Donations Count'}
+            </span>
+            <div className="text-2xl font-black text-[#191F1C] dark:text-[#F3F5F4]">
+              {approvedItems.length}
+            </div>
+          </div>
+
+          <div className="p-5 rounded-2xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-subtle space-y-1">
+            <span className="text-xs text-[#738079] dark:text-[#A7B4B0] font-medium block">
+              {language === 'ar' ? 'متوسط قيمة التبرع' : 'Average Gift Value'}
+            </span>
+            <div className="text-2xl font-black text-[#217A61] dark:text-[#24B58A]">
+              {avgDonation.toLocaleString('en-US')} <span className="text-xs text-[#738079] dark:text-[#A7B4B0] font-bold">{t('egp')}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Report Preview Table */}
+        <div className="bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] rounded-3xl overflow-hidden shadow-subtle">
+          <div className="p-4 bg-[#FAF9F5] dark:bg-[#111C2D] border-b border-[#EAE8DE] dark:border-[#283849] flex items-center justify-between">
+            <span className="text-xs font-bold text-[#153C32] dark:text-[#F3F5F4]">
+              {language === 'ar' ? 'معاينة كشف الحساب' : 'Report Statement Preview'} ({donations.length} {language === 'ar' ? 'سجل' : 'records'})
+            </span>
             <button
               onClick={handleExportCSV}
-              disabled={isLoading || items.length === 0 || isExporting}
-              className="flex-1 py-2.5 bg-slate-900 border border-slate-800 hover:bg-slate-800 disabled:opacity-50 text-slate-100 font-bold rounded-xl text-xs transition-all flex items-center justify-center gap-1.5"
+              className="text-xs font-bold text-[#153C32] dark:text-[#24B58A] hover:underline"
             >
-              <Download className="w-4 h-4 text-emerald-450" />
-              <span>CSV</span>
-            </button>
-
-            <button
-              onClick={handlePrintReport}
-              disabled={isLoading || items.length === 0}
-              className="py-2.5 px-3 bg-slate-900 border border-slate-800 hover:bg-slate-850 rounded-xl text-slate-100 transition-colors flex items-center justify-center"
-            >
-              <Printer className="w-4 h-4 text-teal-400" />
+              تصدير CSV
             </button>
           </div>
-        </div>
 
-        {/* FEEDBACK STATUS INDICATOR */}
-        {exportMessage && (
-          <div className="p-3 bg-emerald-950/20 border border-emerald-900/30 text-emerald-350 text-xs rounded-xl flex items-center gap-2 animate-scale-up print:hidden">
-            <CheckCircle className="w-4 h-4" />
-            <span>{exportMessage}</span>
-          </div>
-        )}
-
-        {/* REPORT AGGREGATES CARDS */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 print:grid print:grid-cols-3 print:gap-4 print:my-4">
-          <div className="glass-panel p-4 rounded-xl border border-slate-900 print-agg-card">
-            <span className="text-slate-500 text-[10px] uppercase font-bold block">{language === 'ar' ? 'إجمالي طلبات الفترة' : 'Period Total Submissions'}</span>
-            <p className="text-xl font-bold text-white mt-1 print:text-slate-950">{items.length}</p>
-          </div>
-          <div className="glass-panel p-4 rounded-xl border border-slate-900 print-agg-card">
-            <span className="text-slate-500 text-[10px] uppercase font-bold block">{language === 'ar' ? 'الطلبات المعتمدة' : 'Verified & Approved'}</span>
-            <p className="text-xl font-bold text-white mt-1 print:text-slate-950">{approvedItems.length}</p>
-          </div>
-          <div className="glass-panel p-4 rounded-xl border border-slate-900 print-agg-card">
-            <span className="text-slate-500 text-[10px] uppercase font-bold block">{language === 'ar' ? 'الأموال الموثقة للفترة' : 'Verified Period Total'}</span>
-            <p className="text-xl font-bold text-emerald-450 mt-1 print:text-emerald-700">{totalApprovedSum.toLocaleString()} EGP</p>
-          </div>
-        </div>
-
-        {/* PREVIEW RECORDS DATA TABLE */}
-        <div className="glass-panel rounded-2xl border border-slate-900 overflow-hidden print:border-none print:shadow-none print:bg-white print:text-black">
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse">
+            <table className="w-full text-start text-xs sm:text-sm">
               <thead>
-                <tr className="border-b border-slate-900 print:border-slate-300 bg-slate-900/20 print:bg-slate-100 text-slate-400 print:text-slate-800 text-xs font-bold">
-                  <th className="px-5 py-3 text-start">{language === 'ar' ? 'المتبرع' : 'Donor'}</th>
-                  <th className="px-5 py-3 text-start">{language === 'ar' ? 'الهاتف' : 'Phone'}</th>
-                  <th className="px-5 py-3 text-start">{language === 'ar' ? 'القيمة' : 'Amount'}</th>
-                  <th className="px-5 py-3 text-start">{language === 'ar' ? 'طريقة التحويل' : 'Method'}</th>
-                  <th className="px-5 py-3 text-start">{language === 'ar' ? 'مرجع التحويل' : 'Ref Number'}</th>
-                  <th className="px-5 py-3 text-start">{language === 'ar' ? 'التحقق' : 'Verification'}</th>
-                  <th className="px-5 py-3 text-start">{language === 'ar' ? 'الحالة' : 'Status'}</th>
-                  <th className="px-5 py-3 text-start">{language === 'ar' ? 'التاريخ' : 'Date'}</th>
+                <tr className="border-b border-[#EAE8DE] dark:border-[#283849] bg-[#FAF9F5] dark:bg-[#111C2D] text-[#738079] dark:text-[#A7B4B0] font-bold">
+                  <th className="py-3 px-4 text-start">المتبرع</th>
+                  <th className="py-3 px-4 text-start">المبلغ</th>
+                  <th className="py-3 px-4 text-start">وسيلة الدفع</th>
+                  <th className="py-3 px-4 text-start">المرجع</th>
+                  <th className="py-3 px-4 text-start">الحالة</th>
+                  <th className="py-3 px-4 text-start">التاريخ</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-900 print:divide-slate-200 text-xs print:text-slate-900">
-                {isLoading ? (
-                  <tr className="print:hidden">
-                    <td colSpan={8} className="text-center py-6 text-slate-500">
-                      <Loader2 className="w-6 h-6 animate-spin mx-auto text-emerald-400" />
-                    </td>
-                  </tr>
-                ) : items.length === 0 ? (
+              <tbody className="divide-y divide-[#EAE8DE] dark:divide-[#283849]">
+                {donations.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="text-center py-6 text-slate-500 print:text-slate-600">
-                      {language === 'ar' ? 'لا توجد سجلات تبرعات في هذا النطاق الزمني.' : 'No donation records in this timeframe.'}
+                    <td colSpan={6} className="py-8 text-center text-[#738079] dark:text-[#A7B4B0]">
+                      لا توجد تبرعات مسجلة في هذا النطاق الزمني
                     </td>
                   </tr>
                 ) : (
-                  items.map((d) => (
-                    <tr key={d.id} className="print:bg-white">
-                      <td className="px-5 py-3 text-white print:text-slate-950 font-bold"><bdi>{d.donor?.name}</bdi></td>
-                      <td className="px-5 py-3 font-mono text-slate-400 print:text-slate-600"><span dir="ltr">{d.donor?.phone}</span></td>
-                      <td className="px-5 py-3 font-bold text-white print:text-slate-900">{d.amount} EGP</td>
-                      <td className="px-5 py-3 text-slate-400 print:text-slate-600 font-semibold">{getMethodLabel(d.payment_method)}</td>
-                      <td className="px-5 py-3 font-mono text-slate-400 print:text-slate-600">{d.transaction_ref || '—'}</td>
-                      <td className="px-5 py-3 text-slate-400 print:text-slate-600">{getVerificationLabel(d.verification_method)}</td>
-                      <td className="px-5 py-3 font-bold">
-                        <span className={`capitalize ${
-                          d.status.includes('verified') ? 'text-emerald-550 print:text-emerald-700' : 'text-slate-400 print:text-slate-600'
+                  donations.map(d => (
+                    <tr key={d.id} className="hover:bg-[#FAF9F5] dark:hover:bg-[#111C2D]/50 transition-colors">
+                      <td className="py-3 px-4 font-bold text-[#191F1C] dark:text-[#F3F5F4]">{d.donor?.name || 'فاعل خير'}</td>
+                      <td className="py-3 px-4 font-black text-[#153C32] dark:text-[#24B58A]">{Number(d.amount).toLocaleString('en-US')} {t('egp')}</td>
+                      <td className="py-3 px-4 text-[#55625B] dark:text-[#CBD5E1]">{d.payment_method === 'vodafone_cash' ? 'فودافون كاش' : 'InstaPay'}</td>
+                      <td className="py-3 px-4 font-mono text-xs text-[#738079] dark:text-[#A7B4B0]">{d.transaction_ref || '—'}</td>
+                      <td className="py-3 px-4">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          d.status === 'auto_verified' || d.status === 'manual_verified' ? 'bg-[#F0F9F6] text-[#217A61] dark:bg-[#217A61]/20 dark:text-[#24B58A]' :
+                          d.status === 'pending' ? 'bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300' : 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300'
                         }`}>
-                          {getStatusLabel(d.status)}
+                          {d.status === 'auto_verified' ? 'موثق آليًا' :
+                           d.status === 'manual_verified' ? 'معتمد يدويًا' :
+                           d.status === 'pending' ? 'قيد المراجعة' : 'مرفوض'}
                         </span>
                       </td>
-                      <td className="px-5 py-3 text-slate-450 print:text-slate-500 font-mono">
-                        {new Date(d.created_at).toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US')}
+                      <td className="py-3 px-4 text-xs text-[#738079] dark:text-[#A7B4B0]">
+                        {new Date(d.created_at).toLocaleDateString('ar-EG', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </td>
                     </tr>
                   ))
                 )}
               </tbody>
             </table>
-          </div>
-        </div>
-
-        {/* PRINT ONLY FOOTER */}
-        <div className="hidden print:flex justify-between items-center w-full mt-10 border-t border-slate-300 pt-5 text-[10px] text-slate-500" dir={language === 'ar' ? 'rtl' : 'ltr'}>
-          <div>
-            <p className="font-bold">{language === 'ar' ? 'توقيع المسؤول المالي:' : 'Treasurer Signature:'}</p>
-            <p className="mt-8 border-b border-slate-400 w-40"></p>
-          </div>
-          <div className="text-end">
-            <p className="font-bold">{language === 'ar' ? 'نهاية التقرير المالي المعتمد' : 'End of Certified Financial Report'}</p>
-            <p className="text-[9px] mt-1 text-slate-400">{language === 'ar' ? 'شكرًا لدعمكم المستمر للحملة الخيرية.' : 'Thank you for your continuous support of the charity campaign.'}</p>
           </div>
         </div>
 
