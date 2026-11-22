@@ -1244,13 +1244,13 @@ export default function PublicDonationPage() {
                         {submittedDonation.status === 'auto_verified' ? (
                           <LottieAnimation 
                             animationPath="/animations/payment-success.json" 
-                            className="w-56 h-36 sm:w-64 sm:h-40 mx-auto" 
+                            className="w-36 h-36 sm:w-44 sm:h-44 mx-auto" 
                             loop={false}
                           />
                         ) : (
                           <LottieAnimation 
                             animationPath="/animations/payment-waiting.json" 
-                            className="w-40 h-40 sm:w-48 sm:h-48 mx-auto" 
+                            className="w-36 h-36 sm:w-44 sm:h-44 mx-auto" 
                             loop={true}
                           />
                         )}
