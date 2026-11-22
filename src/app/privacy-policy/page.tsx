@@ -27,33 +27,34 @@ export default function PrivacyPolicyPage() {
       
       {/* Top Bar */}
       <header className="sticky top-0 z-40 bg-[#FAF9F5]/90 dark:bg-[#0B1220]/90 backdrop-blur-md border-b border-[#EAE8DE] dark:border-[#283849]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between gap-4">
-          <Link href="/" className="flex items-center gap-3.5 group">
-            <div className="w-11 h-11 rounded-xl bg-[#153C32] dark:bg-[#172436] border border-[#153C32] dark:border-[#283849] text-white flex items-center justify-center shadow-subtle flex-shrink-0">
-              <HeartHandshake className="w-6 h-6 text-[#E2F3EE] dark:text-[#24B58A]" />
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between gap-2 sm:gap-4">
+          <Link href="/" className="flex items-center gap-2 sm:gap-3.5 group min-w-0 flex-shrink">
+            <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-[#153C32] dark:bg-[#172436] border border-[#153C32] dark:border-[#283849] text-white flex items-center justify-center shadow-subtle flex-shrink-0">
+              <HeartHandshake className="w-5 h-5 sm:w-6 sm:h-6 text-[#E2F3EE] dark:text-[#24B58A]" />
             </div>
-            <div className="flex flex-col">
-              <span className="font-extrabold text-lg text-[#153C32] dark:text-[#F3F5F4] tracking-tight leading-tight">
+            <div className="flex flex-col min-w-0">
+              <span className="font-extrabold text-sm sm:text-lg text-[#153C32] dark:text-[#F3F5F4] tracking-tight leading-tight whitespace-nowrap">
                 {t('brand_title')}
               </span>
-              <span className="text-xs text-[#738079] dark:text-[#A7B4B0] font-medium">
+              <span className="text-[10px] sm:text-xs text-[#738079] dark:text-[#A7B4B0] font-medium truncate max-w-[125px] xs:max-w-[170px] sm:max-w-none">
                 {t('brand_batch')}
               </span>
             </div>
           </Link>
 
-          <div className="flex items-center gap-3">
-            <ThemeToggle />
+          <div className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
+            <ThemeToggle compact />
             <button
               onClick={toggleLanguage}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[#DDD9CC] dark:border-[#283849] bg-white dark:bg-[#172436] text-xs font-semibold text-[#3D4742] dark:text-[#F3F5F4] hover:bg-[#F4F3ED] dark:hover:bg-[#1f3047] transition-colors"
+              className="inline-flex items-center gap-1 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-[#DDD9CC] dark:border-[#283849] bg-white dark:bg-[#172436] text-xs font-semibold text-[#3D4742] dark:text-[#F3F5F4] hover:bg-[#F4F3ED] dark:hover:bg-[#1f3047] transition-colors"
             >
               <Globe className="w-3.5 h-3.5 text-[#153C32] dark:text-[#24B58A]" />
-              <span>{language === 'ar' ? 'English' : 'العربية'}</span>
+              <span className="hidden sm:inline">{language === 'ar' ? 'English' : 'العربية'}</span>
+              <span className="inline sm:hidden font-mono">{language === 'ar' ? 'EN' : 'ع'}</span>
             </button>
             <Link
               href="/"
-              className="inline-flex items-center gap-1 px-4 py-2 rounded-lg bg-[#153C32] dark:bg-[#217A61] text-white text-xs font-bold hover:bg-[#1C4E41] dark:hover:bg-[#24B58A] transition-colors"
+              className="inline-flex items-center gap-1 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg bg-[#153C32] dark:bg-[#217A61] text-white text-xs font-bold hover:bg-[#1C4E41] dark:hover:bg-[#24B58A] transition-colors"
             >
               <span>{language === 'ar' ? 'الرئيسية' : 'Home'}</span>
               <ArrowLeft className="w-3.5 h-3.5 rtl-flip" />

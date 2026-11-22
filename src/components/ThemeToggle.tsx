@@ -60,7 +60,7 @@ export default function ThemeToggle({ showLabel = false, compact = false }: { sh
         type="button"
         suppressHydrationWarning
         onClick={() => setIsOpen(!isOpen)}
-        className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border transition-all ${
+        className={`inline-flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl border transition-all ${
           isDark
             ? 'bg-[#172436] border-[#283849] text-[#F3F5F4] hover:bg-[#1f3047]'
             : 'bg-white border-[#DDD9CC] text-[#3D4742] hover:bg-[#F4F3ED]'

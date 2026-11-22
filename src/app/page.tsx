@@ -711,18 +711,18 @@ export default function PublicDonationPage() {
       {/* 1. TOP EDITORIAL NAVIGATION                              */}
       {/* ======================================================== */}
       <header className="sticky top-0 z-40 bg-[#FAF9F5]/90 dark:bg-[#0B1220]/90 backdrop-blur-md border-b border-[#EAE8DE] dark:border-[#283849] transition-colors">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between gap-4">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between gap-2 sm:gap-4">
           
           {/* Brand Mark */}
-          <Link href="/" className="flex items-center gap-3.5 group">
-            <div className="w-11 h-11 rounded-xl bg-[#153C32] dark:bg-[#24B58A] text-white dark:text-[#0B1220] flex items-center justify-center shadow-subtle group-hover:bg-[#1C4E41] dark:group-hover:bg-[#1fa37b] transition-colors flex-shrink-0">
-              <HeartHandshake className="w-6 h-6 text-[#E2F3EE] dark:text-[#0B1220]" />
+          <Link href="/" className="flex items-center gap-2 sm:gap-3.5 group min-w-0 flex-shrink">
+            <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-[#153C32] dark:bg-[#24B58A] text-white dark:text-[#0B1220] flex items-center justify-center shadow-subtle group-hover:bg-[#1C4E41] dark:group-hover:bg-[#1fa37b] transition-colors flex-shrink-0">
+              <HeartHandshake className="w-5 h-5 sm:w-6 sm:h-6 text-[#E2F3EE] dark:text-[#0B1220]" />
             </div>
-            <div className="flex flex-col">
-              <span className="font-extrabold text-lg text-[#153C32] dark:text-[#24B58A] tracking-tight leading-tight">
+            <div className="flex flex-col min-w-0">
+              <span className="font-extrabold text-sm sm:text-lg text-[#153C32] dark:text-[#24B58A] tracking-tight leading-tight whitespace-nowrap">
                 {t('brand_title')}
               </span>
-              <span className="text-xs text-[#738079] dark:text-[#A7B4B0] font-medium">
+              <span className="text-[10px] sm:text-xs text-[#738079] dark:text-[#A7B4B0] font-medium truncate max-w-[125px] xs:max-w-[170px] sm:max-w-none">
                 {t('brand_batch')}
               </span>
             </div>
@@ -748,35 +748,36 @@ export default function PublicDonationPage() {
           </nav>
 
           {/* Action CTAs */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
             
             {/* Dark / Light Theme Toggle */}
-            <ThemeToggle />
+            <ThemeToggle compact />
 
             {/* Language Switcher */}
             <button
               onClick={toggleLanguage}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-[#DDD9CC] dark:border-[#283849] bg-white dark:bg-[#172436] text-xs font-semibold text-[#3D4742] dark:text-[#F3F5F4] hover:bg-[#F4F3ED] dark:hover:bg-[#1f3047] shadow-subtle transition-colors"
+              className="inline-flex items-center gap-1 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl border border-[#DDD9CC] dark:border-[#283849] bg-white dark:bg-[#172436] text-xs font-semibold text-[#3D4742] dark:text-[#F3F5F4] hover:bg-[#F4F3ED] dark:hover:bg-[#1f3047] shadow-subtle transition-colors flex-shrink-0"
               title="تغيير اللغة / Switch Language"
             >
               <Globe className="w-3.5 h-3.5 text-[#153C32] dark:text-[#24B58A]" />
-              <span>{language === 'ar' ? 'English' : 'العربية'}</span>
+              <span className="hidden sm:inline">{language === 'ar' ? 'English' : 'العربية'}</span>
+              <span className="inline sm:hidden font-mono">{language === 'ar' ? 'EN' : 'ع'}</span>
             </button>
 
             {/* Admin Login Button */}
             <Link
               href="/admin/login"
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-[#DDD9CC] dark:border-[#283849] bg-white dark:bg-[#172436] text-xs font-semibold text-[#3D4742] dark:text-[#F3F5F4] hover:bg-[#F4F3ED] dark:hover:bg-[#1f3047] shadow-subtle transition-colors"
+              className="inline-flex items-center justify-center p-2 sm:px-3 sm:py-2 rounded-xl border border-[#DDD9CC] dark:border-[#283849] bg-white dark:bg-[#172436] text-xs font-semibold text-[#3D4742] dark:text-[#F3F5F4] hover:bg-[#F4F3ED] dark:hover:bg-[#1f3047] shadow-subtle transition-colors flex-shrink-0"
               title={language === 'ar' ? 'بوابة دخول الإدارة' : 'Admin Portal'}
             >
-              <ShieldCheck className="w-3.5 h-3.5 text-[#153C32] dark:text-[#24B58A]" />
-              <span className="hidden sm:inline">{language === 'ar' ? 'دخول الإدارة' : 'Admin'}</span>
+              <ShieldCheck className="w-4 h-4 text-[#153C32] dark:text-[#24B58A]" />
+              <span className="hidden sm:inline sm:ms-1.5">{language === 'ar' ? 'دخول الإدارة' : 'Admin'}</span>
             </Link>
 
             {/* Quick Donation Link */}
             <a
               href="#donate"
-              className="hidden sm:inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#153C32] dark:bg-[#24B58A] text-white dark:text-[#0B1220] text-xs md:text-sm font-bold shadow-subtle hover:bg-[#1C4E41] dark:hover:bg-[#1fa37b] transition-all transform active:scale-[0.98]"
+              className="hidden lg:inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#153C32] dark:bg-[#24B58A] text-white dark:text-[#0B1220] text-xs md:text-sm font-bold shadow-subtle hover:bg-[#1C4E41] dark:hover:bg-[#1fa37b] transition-all transform active:scale-[0.98]"
             >
               <Heart className="w-4 h-4 fill-white/20 text-white dark:text-[#0B1220] dark:fill-[#0B1220]/20" />
               <span>{t('hero_cta_donate')}</span>
@@ -785,10 +786,10 @@ export default function PublicDonationPage() {
             {/* Mobile Menu Trigger */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-2 rounded-xl border border-[#DDD9CC] dark:border-[#283849] bg-white dark:bg-[#172436] text-[#3D4742] dark:text-[#F3F5F4]"
+              className="md:hidden p-2 rounded-xl border border-[#DDD9CC] dark:border-[#283849] bg-white dark:bg-[#172436] text-[#3D4742] dark:text-[#F3F5F4] hover:bg-[#F4F3ED] dark:hover:bg-[#1f3047] transition-colors flex-shrink-0"
               aria-label="القائمة"
             >
-              <Menu className="w-5 h-5" />
+              <Menu className="w-4.5 h-4.5" />
             </button>
           </div>
         </div>
@@ -862,16 +863,16 @@ export default function PublicDonationPage() {
             </div>
 
             {/* Primary Headline */}
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-[#153C32] dark:text-[#F3F5F4] tracking-tight leading-[1.15]">
+            <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black text-[#153C32] dark:text-[#F3F5F4] tracking-tight leading-[1.2] sm:leading-[1.15]">
               {t('hero_title')}
             </h1>
 
             {/* Memorial Tribute Container */}
-            <div className="p-6 md:p-8 rounded-3xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-editorial space-y-2 border-r-4 rtl:border-r-4 rtl:border-l-0 ltr:border-l-4 ltr:border-r-0 border-[#B79B68] dark:border-[#C5A876] max-w-2xl mx-auto">
+            <div className="p-4 sm:p-6 md:p-8 rounded-2xl sm:rounded-3xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-editorial space-y-2 border-r-4 rtl:border-r-4 rtl:border-l-0 ltr:border-l-4 ltr:border-r-0 border-[#B79B68] dark:border-[#C5A876] max-w-2xl mx-auto">
               <p className="text-xs font-bold uppercase tracking-wider text-[#9E8047] dark:text-[#C5A876]">
                 {t('hero_dedication_to')}
               </p>
-              <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-2xl sm:text-3xl font-extrabold text-[#191F1C] dark:text-[#F3F5F4]">
+              <div className="flex flex-wrap items-center justify-center gap-x-3 sm:gap-x-4 gap-y-1.5 text-xl sm:text-2xl md:text-3xl font-extrabold text-[#191F1C] dark:text-[#F3F5F4]">
                 <span className="text-[#153C32] dark:text-[#24B58A]">{t('hero_doctor_1')}</span>
                 <span className="text-[#B79B68] font-light hidden sm:inline">•</span>
                 <span className="text-[#153C32] dark:text-[#24B58A]">{t('hero_doctor_2')}</span>
@@ -882,7 +883,7 @@ export default function PublicDonationPage() {
             </div>
 
             {/* Mission Subtitle */}
-            <p className="text-base sm:text-lg text-[#3D4742] dark:text-[#A7B4B0] leading-relaxed font-normal max-w-3xl mx-auto">
+            <p className="text-sm sm:text-lg text-[#3D4742] dark:text-[#A7B4B0] leading-relaxed font-normal max-w-3xl mx-auto px-1 sm:px-0">
               {t('hero_subtitle')}
             </p>
 
@@ -1236,7 +1237,7 @@ export default function PublicDonationPage() {
                 <div className="lg:col-span-7">
                   
                   {submittedDonation ? (
-                    <div className="p-8 sm:p-10 rounded-3xl bg-white dark:bg-[#172436] border border-[#217A61]/30 dark:border-[#24B58A]/30 shadow-editorial text-center space-y-6 animate-fadeIn">
+                    <div className="p-5 sm:p-8 md:p-10 rounded-2xl sm:rounded-3xl bg-white dark:bg-[#172436] border border-[#217A61]/30 dark:border-[#24B58A]/30 shadow-editorial text-center space-y-6 animate-fadeIn">
                       
                       {/* Lottie Animation depending on real verification status */}
                       <div className="flex justify-center -my-3">
@@ -1302,9 +1303,13 @@ export default function PublicDonationPage() {
                           <span className="font-bold text-[#153C32] dark:text-[#24B58A]">{submittedDonation.amount.toLocaleString('en-US')} {t('egp')}</span>
                         </div>
                         {submittedDonation.ref && (
-                          <div className="flex justify-between">
-                            <span className="text-[#738079] dark:text-[#A7B4B0]">{t('field_ref')}:</span>
-                            <span className="font-mono text-xs font-bold text-[#191F1C] dark:text-[#F3F5F4]">{submittedDonation.ref}</span>
+                          <div className="flex justify-between items-center gap-2">
+                            <span className="text-[#738079] dark:text-[#A7B4B0] text-xs sm:text-sm">
+                              {language === 'ar' ? 'الرقم المرجعي للتحويل:' : 'Reference / Tx ID:'}
+                            </span>
+                            <span className="font-mono text-xs font-bold text-[#191F1C] dark:text-[#F3F5F4] tracking-wider" dir="ltr">
+                              {submittedDonation.ref}
+                            </span>
                           </div>
                         )}
                         <div className="flex justify-between pt-1.5 border-t border-[#EAE8DE] dark:border-[#283849]">
