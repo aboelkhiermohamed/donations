@@ -15,6 +15,7 @@ import {
   Save, 
   Loader2, 
   Target, 
+  Infinity,
   CheckCircle2, 
   Smartphone, 
   CreditCard,
@@ -45,7 +46,10 @@ export default function AdminSettingsPage() {
   const queryClient = useQueryClient();
 
   // Campaign Settings
-  const [targetAmount, setTargetAmount] = useState('350000');
+  const [targetAmount, setTargetAmount] = useState('100000');
+  const [isUnlimitedTarget, setIsUnlimitedTarget] = useState(false);
+  const [isSavingTarget, setIsSavingTarget] = useState(false);
+  const [targetSaveSuccess, setTargetSaveSuccess] = useState(false);
   const [campaignTitleAr, setCampaignTitleAr] = useState('');
   const [campaignDescAr, setCampaignDescAr] = useState('');
 
@@ -135,10 +139,17 @@ export default function AdminSettingsPage() {
         .eq('key', 'maintenance_mode')
         .maybeSingle();
 
+      const { data: targetSetting } = await supabase
+        .from('settings')
+        .select('*')
+        .eq('key', 'campaign_target')
+        .maybeSingle();
+
       return {
         campaign,
         paymentMethods: paymentMethodsList,
         maintenance: maintenance?.value || { enabled: false, message_ar: '', message_en: '' },
+        targetSetting: targetSetting?.value || null,
       };
     },
   });
@@ -146,8 +157,15 @@ export default function AdminSettingsPage() {
   // Populate state on load
   useEffect(() => {
     if (config) {
+      if (config.targetSetting) {
+        setIsUnlimitedTarget(config.targetSetting.is_unlimited ?? false);
+        if (config.targetSetting.target_amount) {
+          setTargetAmount(String(config.targetSetting.target_amount));
+        }
+      } else if (config.campaign) {
+        setTargetAmount(String(config.campaign.target_amount || '100000'));
+      }
       if (config.campaign) {
-        setTargetAmount(String(config.campaign.target_amount || '350000'));
         setCampaignTitleAr(config.campaign.name_ar || '');
         setCampaignDescAr(config.campaign.description_ar || '');
       }
@@ -393,12 +411,24 @@ export default function AdminSettingsPage() {
         }
       }
 
-      // 1. Update Campaign Details
+      const parsedAmount = parseFloat(targetAmount.replace(/\D/g, '')) || 100000;
+
+      // 1. Save Target Setting to settings table
+      await supabase.from('settings').upsert({
+        key: 'campaign_target',
+        value: {
+          is_unlimited: isUnlimitedTarget,
+          target_amount: parsedAmount,
+        },
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'key' });
+
+      // 2. Update Campaign Details
       if (config?.campaign?.id) {
         await supabase
           .from('campaigns')
           .update({
-            target_amount: parseFloat(targetAmount) || 350000,
+            target_amount: parsedAmount,
             name_ar: campaignTitleAr || undefined,
             description_ar: campaignDescAr || undefined,
             updated_at: new Date().toISOString(),
@@ -406,10 +436,12 @@ export default function AdminSettingsPage() {
           .eq('id', config.campaign.id);
       }
 
-      // 2. Save Payment Methods via Centralized Service
+      // 3. Save Payment Methods via Centralized Service
       await savePaymentMethods(supabase, finalMethods);
 
       queryClient.invalidateQueries({ queryKey: ['adminFullSettings'] });
+      queryClient.invalidateQueries({ queryKey: ['adminCampaignData'] });
+      queryClient.invalidateQueries({ queryKey: ['campaignSummaryPublic'] });
       queryClient.invalidateQueries({ queryKey: ['paymentSettingsPublic'] });
       queryClient.invalidateQueries({ queryKey: ['campaignPublic'] });
 
@@ -419,6 +451,45 @@ export default function AdminSettingsPage() {
       alert(`Error saving: ${err.message}`);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // Save Campaign Target Directly
+  const handleSaveTarget = async () => {
+    setIsSavingTarget(true);
+    setTargetSaveSuccess(false);
+    try {
+      const parsedAmount = parseFloat(targetAmount.replace(/\D/g, '')) || 100000;
+      
+      // 1. Save to settings table
+      await supabase.from('settings').upsert({
+        key: 'campaign_target',
+        value: {
+          is_unlimited: isUnlimitedTarget,
+          target_amount: parsedAmount,
+        },
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'key' });
+
+      // 2. Update campaigns table
+      if (config?.campaign?.id) {
+        await supabase.from('campaigns').update({
+          target_amount: parsedAmount,
+          updated_at: new Date().toISOString(),
+        }).eq('id', config.campaign.id);
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['adminFullSettings'] });
+      queryClient.invalidateQueries({ queryKey: ['adminCampaignData'] });
+      queryClient.invalidateQueries({ queryKey: ['campaignSummaryPublic'] });
+      queryClient.invalidateQueries({ queryKey: ['campaignPublic'] });
+
+      setTargetSaveSuccess(true);
+      setTimeout(() => setTargetSaveSuccess(false), 3000);
+    } catch (err: any) {
+      alert(`خطأ أثناء الحفظ: ${err.message}`);
+    } finally {
+      setIsSavingTarget(false);
     }
   };
 
@@ -982,22 +1053,153 @@ export default function AdminSettingsPage() {
         <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
           
           {/* Target Amount Box */}
-          <div className="p-6 rounded-3xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-subtle space-y-4">
-            <div className="flex items-center gap-2 pb-2 border-b border-[#EAE8DE] dark:border-[#283849]">
-              <Target className="w-5 h-5 text-[#153C32] dark:text-[#24B58A]" />
-              <h3 className="font-bold text-sm text-[#153C32] dark:text-[#F3F5F4]">
-                المبلغ المستهدف للحملة
-              </h3>
+          <div className="p-6 rounded-3xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-subtle space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-[#EAE8DE] dark:border-[#283849]">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-[#153C32] dark:text-[#24B58A] flex items-center justify-center">
+                  <Target className="w-4 h-4 text-[#153C32] dark:text-[#24B58A]" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-[#153C32] dark:text-[#F3F5F4]">
+                    {language === 'ar' ? 'المبلغ المستهدف للحملة' : 'Campaign Target Goal'}
+                  </h3>
+                  <span className="text-[11px] text-[#738079] dark:text-[#A7B4B0]">
+                    {language === 'ar' ? 'حدد سقفاً مالياً أو اجعل الحملة مستمرة ومفتوحة' : 'Set a financial goal or keep the campaign ongoing'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Status Pill */}
+              <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full border ${
+                isUnlimitedTarget 
+                  ? 'bg-purple-50 dark:bg-purple-950/40 border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300'
+                  : 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
+              }`}>
+                {isUnlimitedTarget ? '♾️ هدف مفتوح' : '🎯 هدف محدد'}
+              </span>
             </div>
 
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-[#191F1C] dark:text-[#F3F5F4]">المبلغ بالجنيه المصري:</label>
-              <input
-                type="number"
-                value={targetAmount}
-                onChange={e => setTargetAmount(e.target.value)}
-                className="w-full py-2.5 px-3.5 rounded-xl bg-[#FAF9F5] dark:bg-[#111C2D] border border-[#DDD9CC] dark:border-[#283849] font-bold text-[#153C32] dark:text-[#24B58A] focus:outline-none"
-              />
+            {/* Mode Selector Tabs (Fixed Target vs Unlimited Target) */}
+            <div className="grid grid-cols-2 gap-2 p-1 bg-[#FAF9F5] dark:bg-[#111C2D] border border-[#EAE8DE] dark:border-[#283849] rounded-2xl">
+              <button
+                type="button"
+                onClick={() => setIsUnlimitedTarget(false)}
+                className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                  !isUnlimitedTarget
+                    ? 'bg-white dark:bg-[#172436] text-[#153C32] dark:text-[#24B58A] shadow-subtle border border-[#DDD9CC] dark:border-[#283849]'
+                    : 'text-[#738079] dark:text-[#A7B4B0] hover:text-[#191F1C]'
+                }`}
+              >
+                <Target className="w-3.5 h-3.5" />
+                <span>{language === 'ar' ? 'مبلغ محدد' : 'Fixed Target'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsUnlimitedTarget(true)}
+                className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                  isUnlimitedTarget
+                    ? 'bg-white dark:bg-[#172436] text-[#153C32] dark:text-[#24B58A] shadow-subtle border border-[#DDD9CC] dark:border-[#283849]'
+                    : 'text-[#738079] dark:text-[#A7B4B0] hover:text-[#191F1C]'
+                }`}
+              >
+                <Infinity className="w-3.5 h-3.5" />
+                <span>{language === 'ar' ? 'غير محدود (مفتوح)' : 'Unlimited (Open)'}</span>
+              </button>
+            </div>
+
+            {/* Conditional Display */}
+            {isUnlimitedTarget ? (
+              <div className="p-4 rounded-2xl bg-purple-50/70 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800/40 text-xs space-y-1.5 animate-fadeIn">
+                <div className="flex items-center gap-2 font-bold text-purple-900 dark:text-purple-200">
+                  <Infinity className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                  <span>{language === 'ar' ? 'حملة مستمرة بدون سقف مالي' : 'Continuous Open Campaign'}</span>
+                </div>
+                <p className="text-[11px] text-purple-800/80 dark:text-purple-300/80 leading-relaxed">
+                  {language === 'ar'
+                    ? 'سيظهر للزوار في لوحة المتابعة أن الحملة مستمرة والباب مفتوح دائمًا للمساهمة بدون سقف محدد أو نسبة مئوية مغلقة.'
+                    : 'Visitors will see that the campaign is ongoing with no maximum cap or locked percentage.'}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3 animate-fadeIn">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-[#191F1C] dark:text-[#F3F5F4] flex items-center justify-between">
+                    <span>{language === 'ar' ? 'المبلغ بالجنيه المصري:' : 'Target Amount (EGP):'}</span>
+                    {Number(targetAmount.replace(/\D/g, '')) > 0 && (
+                      <span className="text-[11px] font-mono text-[#738079] dark:text-[#A7B4B0]">
+                        {Number(targetAmount.replace(/\D/g, '')).toLocaleString('en-US')} ج.م
+                      </span>
+                    )}
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={targetAmount}
+                      onChange={e => {
+                        const raw = e.target.value.replace(/\D/g, '');
+                        setTargetAmount(raw);
+                      }}
+                      placeholder="100000"
+                      className="w-full py-2.5 px-3.5 pe-14 rounded-xl bg-[#FAF9F5] dark:bg-[#111C2D] border border-[#DDD9CC] dark:border-[#283849] font-bold text-[#153C32] dark:text-[#24B58A] focus:outline-none focus:ring-2 focus:ring-[#153C32]/20 dark:focus:ring-[#24B58A]/20 transition-all font-mono text-base"
+                    />
+                    <span className="absolute inset-y-0 end-3.5 flex items-center text-xs font-bold text-[#738079] dark:text-[#A7B4B0] pointer-events-none">
+                      ج.م
+                    </span>
+                  </div>
+                </div>
+
+                {/* Quick Presets */}
+                <div className="space-y-1">
+                  <span className="text-[10px] text-[#738079] dark:text-[#A7B4B0] font-medium block">
+                    {language === 'ar' ? 'مبالغ سريعة شائعة:' : 'Quick Presets:'}
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {['50000', '100000', '250000', '350000', '500000', '1000000'].map(val => (
+                      <button
+                        key={val}
+                        type="button"
+                        onClick={() => setTargetAmount(val)}
+                        className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition-all ${
+                          targetAmount === val
+                            ? 'bg-[#153C32] dark:bg-[#24B58A] text-white dark:text-[#0B1220] border-transparent shadow-subtle'
+                            : 'bg-[#FAF9F5] dark:bg-[#111C2D] border-[#DDD9CC] dark:border-[#283849] text-[#55625B] dark:text-[#A7B4B0] hover:bg-[#F4F3ED]'
+                        }`}
+                      >
+                        {Number(val).toLocaleString('en-US')}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Direct Save Button */}
+            <div className="pt-2 border-t border-[#EAE8DE] dark:border-[#283849]">
+              <button
+                type="button"
+                onClick={handleSaveTarget}
+                disabled={isSavingTarget}
+                className="w-full py-2.5 rounded-xl bg-[#153C32] dark:bg-[#24B58A] text-white dark:text-[#0B1220] text-xs font-bold hover:bg-[#1C4E41] dark:hover:bg-[#1fa37b] transition-all flex items-center justify-center gap-2 disabled:opacity-50 shadow-subtle active:scale-[0.99]"
+              >
+                {isSavingTarget ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>{language === 'ar' ? 'جارٍ حفظ الهدف...' : 'Saving...'}</span>
+                  </>
+                ) : targetSaveSuccess ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-white dark:text-[#0B1220]" />
+                    <span>{language === 'ar' ? 'تم حفظ الهدف بنجاح!' : 'Saved Successfully!'}</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-3.5 h-3.5" />
+                    <span>{language === 'ar' ? 'حفظ إعدادات الهدف' : 'Save Target Settings'}</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
 

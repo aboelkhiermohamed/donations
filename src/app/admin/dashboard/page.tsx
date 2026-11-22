@@ -22,7 +22,8 @@ import {
   Edit3, 
   Check, 
   X, 
-  Loader2 
+  Loader2,
+  Infinity 
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -61,8 +62,17 @@ export default function AdminDashboardPage() {
   const { data: campaign } = useQuery({
     queryKey: ['adminCampaignData'],
     queryFn: async () => {
-      const { data } = await supabase.from('campaigns').select('id, target_amount, collected_amount').limit(1).maybeSingle();
-      return data || { target_amount: 350000, collected_amount: 0 };
+      const [campRes, targetSettingRes] = await Promise.all([
+        supabase.from('campaigns').select('id, target_amount, collected_amount').limit(1).maybeSingle(),
+        supabase.from('settings').select('value').eq('key', 'campaign_target').maybeSingle(),
+      ]);
+      const isUnlimited = targetSettingRes.data?.value?.is_unlimited === true;
+      const targetAmount = isUnlimited ? 0 : (Number(targetSettingRes.data?.value?.target_amount || campRes.data?.target_amount) || 100000);
+      return {
+        ...(campRes.data || { id: '', collected_amount: 0 }),
+        target_amount: targetAmount,
+        is_unlimited: isUnlimited,
+      };
     },
     staleTime: 60000,
   });
@@ -143,12 +153,14 @@ export default function AdminDashboardPage() {
       }
     });
 
-    const target = Number(campaign?.target_amount) || 350000;
-    const remaining = Math.max(0, target - verifiedSum);
-    const progress = Math.min(100, Math.round((verifiedSum / target) * 100));
+    const isUnlimited = Boolean(campaign?.is_unlimited);
+    const target = isUnlimited ? 0 : (Number(campaign?.target_amount) || 100000);
+    const remaining = isUnlimited ? 0 : Math.max(0, target - verifiedSum);
+    const progress = isUnlimited ? 100 : Math.min(100, Math.round((verifiedSum / (target || 1)) * 100));
 
     return {
       target,
+      isUnlimited,
       verifiedSum,
       remaining,
       progress,
@@ -270,7 +282,9 @@ export default function AdminDashboardPage() {
               <span className="text-xs font-bold text-[#738079] dark:text-[#A7B4B0]">{t('egp')}</span>
             </div>
             <span className="text-[11px] font-semibold text-[#217A61] dark:text-[#24B58A] block">
-              {metrics.progress}% {language === 'ar' ? 'من الهدف' : 'of target'}
+              {metrics.isUnlimited 
+                ? (language === 'ar' ? 'مبادرة مستمرة مفتوحة' : 'Ongoing Campaign')
+                : `${metrics.progress}% ${language === 'ar' ? 'من الهدف' : 'of target'}`}
             </span>
           </div>
 
@@ -279,13 +293,27 @@ export default function AdminDashboardPage() {
               <span className="text-xs font-bold">{t('target')}</span>
               <TrendingUp className="w-4 h-4 text-[#B79B68] dark:text-[#C5A876]" />
             </div>
-            <div className="text-2xl sm:text-3xl font-black text-[#191F1C] dark:text-[#F3F5F4]">
-              {metrics.target.toLocaleString('en-US')}{' '}
-              <span className="text-xs font-bold text-[#738079] dark:text-[#A7B4B0]">{t('egp')}</span>
-            </div>
-            <span className="text-[11px] text-[#738079] dark:text-[#A7B4B0] block">
-              {t('remaining')}: {metrics.remaining.toLocaleString('en-US')} {t('egp')}
-            </span>
+            {metrics.isUnlimited ? (
+              <>
+                <div className="text-xl sm:text-2xl font-black text-purple-700 dark:text-purple-300 flex items-center gap-1.5">
+                  <Infinity className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+                  <span>{language === 'ar' ? 'هدف مفتوح' : 'Unlimited'}</span>
+                </div>
+                <span className="text-[11px] text-purple-600/80 dark:text-purple-300/80 block">
+                  {language === 'ar' ? 'الحملة بدون حد أقصى' : 'No maximum ceiling'}
+                </span>
+              </>
+            ) : (
+              <>
+                <div className="text-2xl sm:text-3xl font-black text-[#191F1C] dark:text-[#F3F5F4]">
+                  {metrics.target.toLocaleString('en-US')}{' '}
+                  <span className="text-xs font-bold text-[#738079] dark:text-[#A7B4B0]">{t('egp')}</span>
+                </div>
+                <span className="text-[11px] text-[#738079] dark:text-[#A7B4B0] block">
+                  {t('remaining')}: {metrics.remaining.toLocaleString('en-US')} {t('egp')}
+                </span>
+              </>
+            )}
           </div>
 
           <div className="p-5 rounded-2xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-subtle space-y-2">

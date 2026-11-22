@@ -35,14 +35,17 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // 1. Fetch Campaign Target
-    const { data: campaign } = await supabaseAdmin
-      .from('campaigns')
-      .select('target_amount')
-      .limit(1)
-      .maybeSingle();
+    // 1. Fetch Campaign Target & Unlimited status
+    const [campaignRes, targetSettingRes] = await Promise.all([
+      supabaseAdmin.from('campaigns').select('target_amount').limit(1).maybeSingle(),
+      supabaseAdmin.from('settings').select('value').eq('key', 'campaign_target').maybeSingle(),
+    ]);
 
-    const target = Number(campaign?.target_amount) || 350000;
+    const targetSetting = targetSettingRes?.data?.value;
+    const isUnlimited = targetSetting?.is_unlimited === true;
+    const target = isUnlimited 
+      ? 0 
+      : (Number(targetSetting?.target_amount || campaignRes?.data?.target_amount) || 100000);
 
     // 2. Fetch Aggregates using strictly minimal column projection
     // Try RPC first if migration was applied
@@ -88,12 +91,15 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const remaining = Math.max(0, target - totalCollected);
-    const progressPercent = Math.min(100, Math.round((totalCollected / target) * 100));
+    const remaining = isUnlimited ? 0 : Math.max(0, target - totalCollected);
+    const progressPercent = isUnlimited 
+      ? 100 
+      : Math.min(100, Math.round((totalCollected / (target || 1)) * 100));
 
     const result = {
       totalCollected,
       target,
+      isUnlimited,
       remaining,
       progressPercent,
       verifiedDonorsCount,

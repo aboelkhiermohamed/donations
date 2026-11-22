@@ -34,7 +34,9 @@ import {
   Layers,
   ChevronDown,
   Smartphone,
-  CreditCard
+  CreditCard,
+  Infinity,
+  Sparkles
 } from 'lucide-react';
 import canvasConfetti from 'canvas-confetti';
 import Link from 'next/link';
@@ -305,13 +307,15 @@ export default function PublicDonationPage() {
   });
 
   const aggregates = useMemo(() => {
-    const target = Number(activeCampaign.target_amount) || 350000;
+    const isUnlimited = Boolean(summaryData?.isUnlimited);
+    const target = isUnlimited ? 0 : (Number(summaryData?.target || activeCampaign.target_amount) || 100000);
     if (summaryData) {
       return {
         totalCollected: Number(summaryData.totalCollected) || 0,
-        target: Number(summaryData.target) || target,
-        remaining: Number(summaryData.remaining) ?? Math.max(0, target - (Number(summaryData.totalCollected) || 0)),
-        progressPercent: Number(summaryData.progressPercent) || 0,
+        target,
+        isUnlimited,
+        remaining: isUnlimited ? 0 : (Number(summaryData.remaining) ?? Math.max(0, target - (Number(summaryData.totalCollected) || 0))),
+        progressPercent: isUnlimited ? 100 : (Number(summaryData.progressPercent) || 0),
         verifiedDonorsCount: Number(summaryData.verifiedDonorsCount) || 0,
         totalDonationsCount: Number(summaryData.totalDonationsCount) || 0,
         maxDonation: Number(summaryData.maxDonation) || 0,
@@ -322,6 +326,7 @@ export default function PublicDonationPage() {
     return {
       totalCollected: 0,
       target,
+      isUnlimited: false,
       remaining: target,
       progressPercent: 0,
       verifiedDonorsCount: 0,
@@ -949,10 +954,17 @@ export default function PublicDonationPage() {
                   <span className="text-xs font-semibold text-[#738079] dark:text-[#A7B4B0] block mb-1">
                     {t('target')}
                   </span>
-                  <div className="text-2xl sm:text-3xl font-bold text-[#191F1C] dark:text-[#F3F5F4]">
-                    {aggregates.target.toLocaleString('en-US')}{' '}
-                    <span className="text-sm font-semibold text-[#738079] dark:text-[#A7B4B0]">{t('egp')}</span>
-                  </div>
+                  {aggregates.isUnlimited ? (
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 text-sm sm:text-base font-bold text-purple-800 dark:text-purple-300">
+                      <Infinity className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                      <span>{language === 'ar' ? 'هدف مفتوح (غير محدود)' : 'Open-Ended'}</span>
+                    </div>
+                  ) : (
+                    <div className="text-2xl sm:text-3xl font-bold text-[#191F1C] dark:text-[#F3F5F4]">
+                      {aggregates.target.toLocaleString('en-US')}{' '}
+                      <span className="text-sm font-semibold text-[#738079] dark:text-[#A7B4B0]">{t('egp')}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -960,13 +972,29 @@ export default function PublicDonationPage() {
               <div className="space-y-2">
                 <div className="h-4 w-full bg-[#EAE8DE] dark:bg-[#0B1220] rounded-full overflow-hidden p-0.5">
                   <div
-                    className="h-full bg-gradient-to-r from-[#153C32] to-[#217A61] dark:from-[#24B58A] dark:to-[#3CB895] rounded-full transition-all duration-1000 ease-out"
-                    style={{ width: `${Math.max(2, aggregates.progressPercent)}%` }}
+                    className={`h-full rounded-full transition-all duration-1000 ease-out ${
+                      aggregates.isUnlimited
+                        ? 'w-full bg-gradient-to-r from-[#153C32] via-[#24B58A] to-[#153C32] animate-pulse'
+                        : 'bg-gradient-to-r from-[#153C32] to-[#217A61] dark:from-[#24B58A] dark:to-[#3CB895]'
+                    }`}
+                    style={aggregates.isUnlimited ? undefined : { width: `${Math.max(2, aggregates.progressPercent)}%` }}
                   />
                 </div>
                 <div className="flex items-center justify-between text-xs font-semibold text-[#738079] dark:text-[#A7B4B0]">
-                  <span>{aggregates.progressPercent}% {language === 'ar' ? 'مكتمل' : 'completed'}</span>
-                  <span>{t('remaining')}: {aggregates.remaining.toLocaleString('en-US')} {t('egp')}</span>
+                  {aggregates.isUnlimited ? (
+                    <>
+                      <span className="text-purple-700 dark:text-purple-300 font-bold flex items-center gap-1">
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>{language === 'ar' ? 'مبادرة جارية ومستمرة' : 'Ongoing Initiative'}</span>
+                      </span>
+                      <span>{language === 'ar' ? 'باب الصدقة مفتوح دائمًا' : 'Donations Always Open'}</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>{aggregates.progressPercent}% {language === 'ar' ? 'مكتمل' : 'completed'}</span>
+                      <span>{t('remaining')}: {aggregates.remaining.toLocaleString('en-US')} {t('egp')}</span>
+                    </>
+                  )}
                 </div>
               </div>
 
