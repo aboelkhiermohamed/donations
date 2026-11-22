@@ -8,6 +8,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getActivePaymentMethods, DEFAULT_PAYMENT_METHODS } from '@/lib/paymentService';
 import { uploadScreenshotDirectly } from '@/lib/imageUpload';
 import ThemeToggle from '@/components/ThemeToggle';
+import LottieAnimation from '@/components/LottieAnimation';
 import {
   Heart,
   HeartHandshake,
@@ -103,7 +104,13 @@ export default function PublicDonationPage() {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
-  const [submittedDonation, setSubmittedDonation] = useState<{ id: string; amount: number; name: string; ref: string } | null>(null);
+  const [submittedDonation, setSubmittedDonation] = useState<{ 
+    id: string; 
+    amount: number; 
+    name: string; 
+    ref: string;
+    status: 'pending' | 'auto_verified' | 'manual_verified' | 'rejected';
+  } | null>(null);
 
   // Shuffled Vodafone Cash wallets: randomized on every page refresh/load to distribute incoming transfers evenly
   const [shuffledWallets, setShuffledWallets] = useState<WalletConfig[]>([]);
@@ -414,11 +421,13 @@ export default function PublicDonationPage() {
         colors: ['#153C32', '#217A61', '#24B58A', '#B79B68'],
       });
 
+      const isAutoMatched = Boolean(result.match?.matched);
       setSubmittedDonation({
         id: result.donationId,
         amount: Number(amount),
         name: name.trim(),
         ref: refNum.trim(),
+        status: isAutoMatched ? 'auto_verified' : 'pending',
       });
 
       setName('');
@@ -675,6 +684,16 @@ export default function PublicDonationPage() {
               <span>{language === 'ar' ? 'English' : 'العربية'}</span>
             </button>
 
+            {/* Admin Login Button */}
+            <Link
+              href="/admin/login"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-[#DDD9CC] dark:border-[#283849] bg-white dark:bg-[#172436] text-xs font-semibold text-[#3D4742] dark:text-[#F3F5F4] hover:bg-[#F4F3ED] dark:hover:bg-[#1f3047] shadow-subtle transition-colors"
+              title={language === 'ar' ? 'بوابة دخول الإدارة' : 'Admin Portal'}
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-[#153C32] dark:text-[#24B58A]" />
+              <span className="hidden sm:inline">{language === 'ar' ? 'دخول الإدارة' : 'Admin'}</span>
+            </Link>
+
             {/* Quick Donation Link */}
             <a
               href="#donate"
@@ -733,6 +752,16 @@ export default function PublicDonationPage() {
             >
               {t('nav_transparency')}
             </a>
+            <div className="pt-2 border-t border-[#EAE8DE] dark:border-[#283849]">
+              <Link
+                href="/admin/login"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-bold text-[#153C32] dark:text-[#24B58A] hover:bg-white dark:hover:bg-[#172436]"
+              >
+                <ShieldCheck className="w-4 h-4" />
+                <span>{language === 'ar' ? 'بوابة دخول الإدارة' : 'Admin Portal'}</span>
+              </Link>
+            </div>
           </div>
         )}
       </header>
@@ -1129,19 +1158,45 @@ export default function PublicDonationPage() {
                   
                   {submittedDonation ? (
                     <div className="p-8 sm:p-10 rounded-3xl bg-white dark:bg-[#172436] border border-[#217A61]/30 dark:border-[#24B58A]/30 shadow-editorial text-center space-y-6 animate-fadeIn">
-                      <div className="w-16 h-16 rounded-2xl bg-[#F0F9F6] dark:bg-[#111C2D] border border-[#217A61]/30 dark:border-[#24B58A]/30 mx-auto flex items-center justify-center text-[#217A61] dark:text-[#24B58A]">
-                        <CheckCircle2 className="w-8 h-8" />
+                      
+                      {/* Lottie Animation depending on real verification status */}
+                      <div className="flex justify-center">
+                        {submittedDonation.status === 'auto_verified' ? (
+                          <LottieAnimation animationPath="/animations/payment-success.json" className="w-28 h-28" />
+                        ) : (
+                          <LottieAnimation animationPath="/animations/payment-waiting.json" className="w-28 h-28" />
+                        )}
+                      </div>
+
+                      {/* Explicit Status Badge */}
+                      <div className="flex justify-center">
+                        {submittedDonation.status === 'auto_verified' ? (
+                          <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                            <span>{language === 'ar' ? 'حالة الطلب: موثق ومعتمد فورياً' : 'Status: Auto-Verified & Approved'}</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-xs font-bold text-amber-800 dark:text-amber-300">
+                            <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                            <span>{language === 'ar' ? 'حالة الطلب: قيد المراجعة والربط الآلي' : 'Status: Pending Verification'}</span>
+                          </span>
+                        )}
                       </div>
 
                       <div className="space-y-2">
                         <h3 className="text-2xl font-black text-[#153C32] dark:text-[#24B58A]">
-                          {t('success_title')}
+                          {submittedDonation.status === 'auto_verified'
+                            ? (language === 'ar' ? 'تم توثيق التبرع بنجاح!' : 'Donation Verified Successfully!')
+                            : (language === 'ar' ? 'تم استلام طلب التبرع بنجاح' : 'Donation Request Received')}
                         </h3>
                         <p className="text-sm text-[#55625B] dark:text-[#A7B4B0] leading-relaxed max-w-md mx-auto">
-                          {t('success_desc')}
+                          {submittedDonation.status === 'auto_verified'
+                            ? (language === 'ar' ? 'جزاكم الله خيرًا. تم التحقق من عملية التحويل ومطابقتها آلياً وتحديث لوحة الشفافية وإجمالي الحملة فوراً.' : 'Thank you! Your transaction was automatically matched and recorded.')
+                            : (language === 'ar' ? 'جزاكم الله خيرًا. تم استلام بيانات طلبكم وهو الآن قيد الربط الآلي أو المراجعة من مسؤولي الدفعة.' : 'Thank you! Your donation was recorded and is awaiting automated match or review.')}
                         </p>
                       </div>
 
+                      {/* Donor Summary Box with explicit status row */}
                       <div className="p-4 rounded-2xl bg-[#FAF9F5] dark:bg-[#111C2D] border border-[#EAE8DE] dark:border-[#283849] text-sm space-y-2 max-w-sm mx-auto text-start">
                         <div className="flex justify-between">
                           <span className="text-[#738079] dark:text-[#A7B4B0]">{t('field_name')}:</span>
@@ -1151,27 +1206,70 @@ export default function PublicDonationPage() {
                           <span className="text-[#738079] dark:text-[#A7B4B0]">{t('field_amount')}:</span>
                           <span className="font-bold text-[#153C32] dark:text-[#24B58A]">{submittedDonation.amount.toLocaleString('en-US')} {t('egp')}</span>
                         </div>
-                        <div className="flex justify-between">
-                          <span className="text-[#738079] dark:text-[#A7B4B0]">{t('field_ref')}:</span>
-                          <span className="font-mono text-xs font-bold text-[#191F1C] dark:text-[#F3F5F4]">{submittedDonation.ref}</span>
+                        {submittedDonation.ref && (
+                          <div className="flex justify-between">
+                            <span className="text-[#738079] dark:text-[#A7B4B0]">{t('field_ref')}:</span>
+                            <span className="font-mono text-xs font-bold text-[#191F1C] dark:text-[#F3F5F4]">{submittedDonation.ref}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between pt-1.5 border-t border-[#EAE8DE] dark:border-[#283849]">
+                          <span className="text-[#738079] dark:text-[#A7B4B0]">{language === 'ar' ? 'حالة التوثيق:' : 'Verification Status:'}</span>
+                          <span className={`text-xs font-bold ${
+                            submittedDonation.status === 'auto_verified' 
+                              ? 'text-emerald-700 dark:text-emerald-300' 
+                              : 'text-amber-700 dark:text-amber-400'
+                          }`}>
+                            {submittedDonation.status === 'auto_verified' 
+                              ? (language === 'ar' ? 'معتمد وموثق' : 'Approved') 
+                              : (language === 'ar' ? 'معلق (بانتظار التأكيد)' : 'Pending')}
+                          </span>
                         </div>
                       </div>
 
+                      {/* Instructions for Pending Submissions: wait up to 24h & track */}
+                      {submittedDonation.status !== 'auto_verified' && (
+                        <div className="p-4 rounded-2xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 text-xs text-start space-y-2 max-w-sm mx-auto">
+                          <div className="font-bold text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
+                            <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                            <span>{language === 'ar' ? 'ماذا تفعل الآن؟' : 'Next Steps'}</span>
+                          </div>
+                          <p className="text-[12px] text-amber-900/90 dark:text-amber-200/90 leading-relaxed">
+                            {language === 'ar' 
+                              ? 'يرجى الانتظار حتى 24 ساعة؛ حيث يقوم النظام بمطابقة التحويلات بنكياً أو مراجعتها يدوياً من مسؤولي الدفعة. يمكنك في أي وقت متابعة حالة طلبك ومعرفة ما إذا تم اعتماده عبر قسم "متابعة تبرعي" بالأسفل باستخدام رقم هاتفك أو الرقم المرجعي.'
+                              : 'Please allow up to 24 hours for bank reconciliation or admin review. You can track your donation status anytime in the "Track Contribution" section below using your phone or reference number.'}
+                          </p>
+                          <div className="pt-1">
+                            <a 
+                              href="#tracking" 
+                              onClick={() => {
+                                if (submittedDonation.ref) setTrackingQuery(submittedDonation.ref);
+                              }}
+                              className="inline-flex items-center gap-1 text-xs font-bold text-amber-900 dark:text-amber-300 hover:underline"
+                            >
+                              <span>{language === 'ar' ? 'الانتقال إلى قسم متابعة تبرعي' : 'Go to Track Contribution'}</span>
+                              <ArrowRight className="w-3.5 h-3.5 rtl:rotate-180" />
+                            </a>
+                          </div>
+                        </div>
+                      )}
+
                       <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
-                        <button
-                          type="button"
-                          onClick={() => handleGenerateReceiptPdf(submittedDonation)}
-                          disabled={isGeneratingPdf}
-                          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-[#153C32] dark:bg-[#24B58A] text-white dark:text-[#0B1220] text-xs font-bold hover:bg-[#1C4E41]"
-                        >
-                          {isGeneratingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
-                          <span>{t('receipt_btn')}</span>
-                        </button>
+                        {submittedDonation.status === 'auto_verified' && (
+                          <button
+                            type="button"
+                            onClick={() => handleGenerateReceiptPdf(submittedDonation)}
+                            disabled={isGeneratingPdf}
+                            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-[#153C32] dark:bg-[#24B58A] text-white dark:text-[#0B1220] text-xs font-bold hover:bg-[#1C4E41]"
+                          >
+                            {isGeneratingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+                            <span>{t('receipt_btn')}</span>
+                          </button>
+                        )}
 
                         <button
                           type="button"
                           onClick={() => setSubmittedDonation(null)}
-                          className="w-full sm:w-auto px-6 py-3 rounded-xl bg-white dark:bg-[#111C2D] border border-[#DDD9CC] dark:border-[#283849] text-xs font-semibold text-[#3D4742] dark:text-[#F3F5F4]"
+                          className="w-full sm:w-auto px-6 py-3 rounded-xl bg-white dark:bg-[#111C2D] border border-[#DDD9CC] dark:border-[#283849] text-xs font-semibold text-[#3D4742] dark:text-[#F3F5F4] hover:bg-[#F4F3ED] dark:hover:bg-[#1f3047]"
                         >
                           {t('new_submission_btn')}
                         </button>
@@ -1455,22 +1553,41 @@ export default function PublicDonationPage() {
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-2.5">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                           {isVerified ? (
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#F0F9F6] dark:bg-[#24B58A]/10 border border-[#217A61]/30 dark:border-[#24B58A]/30 text-xs font-bold text-[#217A61] dark:text-[#24B58A]">
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                              <span>{t('track_status_verified')}</span>
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <LottieAnimation animationPath="/animations/payment-success.json" className="w-9 h-9 flex-shrink-0" loop={false} />
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#F0F9F6] dark:bg-[#24B58A]/10 border border-[#217A61]/30 dark:border-[#24B58A]/30 text-xs font-bold text-[#217A61] dark:text-[#24B58A]">
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>{t('track_status_verified')}</span>
+                              </span>
+                            </div>
                           ) : isRejected ? (
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/40 text-xs font-bold text-red-700 dark:text-red-300">
-                              <X className="w-3.5 h-3.5" />
-                              <span>{t('track_status_rejected')}</span>
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <LottieAnimation animationPath="/animations/payment-failed.json" className="w-9 h-9 flex-shrink-0" loop={true} />
+                              <div className="flex flex-col items-start gap-0.5">
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/40 text-xs font-bold text-red-700 dark:text-red-300">
+                                  <X className="w-3.5 h-3.5" />
+                                  <span>{t('track_status_rejected')}</span>
+                                </span>
+                                <span className="text-[10px] text-red-600 dark:text-red-400">
+                                  {language === 'ar' ? 'تعذرت المطابقة — يرجى التواصل مع الإدارة' : 'Matching failed — please contact admin'}
+                                </span>
+                              </div>
+                            </div>
                           ) : (
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/40 text-xs font-bold text-amber-800 dark:text-amber-300">
-                              <Clock className="w-3.5 h-3.5" />
-                              <span>{t('track_status_pending')}</span>
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <LottieAnimation animationPath="/animations/payment-waiting.json" className="w-9 h-9 flex-shrink-0" loop={true} />
+                              <div className="flex flex-col items-start gap-0.5">
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/40 text-xs font-bold text-amber-800 dark:text-amber-300">
+                                  <Clock className="w-3.5 h-3.5" />
+                                  <span>{t('track_status_pending')}</span>
+                                </span>
+                                <span className="text-[10px] text-amber-700 dark:text-amber-400 font-medium">
+                                  {language === 'ar' ? 'يرجى الانتظار حتى 24 ساعة ومتابعة الطلب' : 'Please allow up to 24h for verification'}
+                                </span>
+                              </div>
+                            </div>
                           )}
 
                           {isVerified && (
