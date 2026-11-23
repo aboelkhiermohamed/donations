@@ -29,7 +29,7 @@ export async function callTelegramApi(endpoint: string, token: string, body?: an
             }
           : undefined,
         family: 4, // Strictly IPv4 - prevents AWS/Vercel IPv6 timeouts
-        timeout: 12000,
+        timeout: 25000,
       },
       (res) => {
         let raw = '';
@@ -46,7 +46,7 @@ export async function callTelegramApi(endpoint: string, token: string, body?: an
 
     req.on('timeout', () => {
       req.destroy();
-      resolve({ ok: false, error: 'Telegram connection timed out (IPv4)' });
+      resolve({ ok: false, error: 'Telegram connection timed out (IPv4 25s)' });
     });
 
     req.on('error', (err) => {
