@@ -17,8 +17,15 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  const token = searchParams.get('token') || process.env.TELEGRAM_BOT_TOKEN || '9104128470:AAGnsqLdgfyUg0giXHup4a8DdFbZEfImSQw';
-  let chatId = searchParams.get('chat_id') || process.env.TELEGRAM_CHAT_ID || '-5508827945';
+  const token = searchParams.get('token') || process.env.TELEGRAM_BOT_TOKEN;
+  let chatId = searchParams.get('chat_id') || process.env.TELEGRAM_CHAT_ID;
+
+  if (!token || !chatId) {
+    return NextResponse.json({
+      success: false,
+      error: 'TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID is missing in environment variables',
+    }, { status: 400 });
+  }
 
   const startTime = Date.now();
 
