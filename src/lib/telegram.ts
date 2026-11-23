@@ -1,8 +1,4 @@
-import dns from 'node:dns';
-
-try {
-  dns.setDefaultResultOrder('ipv4first');
-} catch {}
+import https from 'node:https';
 
 /**
  * Telegram Bot Integration
@@ -14,24 +10,54 @@ export function isTelegramConfigured(): boolean {
 }
 
 /**
- * Robust Telegram API caller that strictly forces IPv4.
- * Prevents Vercel/AWS Undici IPv6 blackhole timeouts.
+ * Robust Telegram API caller using Node's native https with family: 4.
+ * This completely avoids the Vercel / AWS Lambda IPv6 blackhole that causes fetch() to hang.
  */
 export async function callTelegramApi(endpoint: string, token: string, body?: any): Promise<any> {
-  const url = `https://api.telegram.org/bot${token}/${endpoint}`;
-  const options: RequestInit = {
-    method: body ? 'POST' : 'GET',
-    headers: body ? { 'Content-Type': 'application/json' } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-    signal: AbortSignal.timeout(15000),
-  };
+  return new Promise((resolve) => {
+    const postData = body ? JSON.stringify(body) : '';
+    const req = https.request(
+      {
+        hostname: 'api.telegram.org',
+        port: 443,
+        path: `/bot${token}/${endpoint}`,
+        method: body ? 'POST' : 'GET',
+        headers: body
+          ? {
+              'Content-Type': 'application/json',
+              'Content-Length': Buffer.byteLength(postData),
+            }
+          : undefined,
+        family: 4, // Strictly IPv4 - prevents AWS/Vercel IPv6 timeouts
+        timeout: 12000,
+      },
+      (res) => {
+        let raw = '';
+        res.on('data', (chunk) => (raw += chunk));
+        res.on('end', () => {
+          try {
+            resolve(JSON.parse(raw));
+          } catch {
+            resolve({ ok: false, error: 'Invalid JSON response from Telegram', raw });
+          }
+        });
+      }
+    );
 
-  try {
-    const res = await fetch(url, options);
-    return await res.json();
-  } catch (err: any) {
-    return { ok: false, error: err.message, description: err.message };
-  }
+    req.on('timeout', () => {
+      req.destroy();
+      resolve({ ok: false, error: 'Telegram connection timed out (IPv4)' });
+    });
+
+    req.on('error', (err) => {
+      resolve({ ok: false, error: err.message });
+    });
+
+    if (body) {
+      req.write(postData);
+    }
+    req.end();
+  });
 }
 
 interface SendTelegramOptions {

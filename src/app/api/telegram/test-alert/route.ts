@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const token = searchParams.get('token') || process.env.TELEGRAM_BOT_TOKEN || '8750386152:AAENQK_q7-B7SWJkwJ6Sir_7-83SHvJnB-A';
+  const token = searchParams.get('token') || process.env.TELEGRAM_BOT_TOKEN || '9282410484:AAEAw9GBu97si8367x3QmBIzMs8UkOdCQvs';
   let chatId = searchParams.get('chat_id') || process.env.TELEGRAM_CHAT_ID || '-5508827945';
 
   const startTime = Date.now();
@@ -38,8 +38,8 @@ export async function GET(req: NextRequest) {
     // 1. Try sending to the specified chat ID
     let result = await callTelegramApi('sendMessage', token, payload);
 
-    // 2. If chat not found and ID doesn't have -100 prefix, try supergroup prefix
-    if (!result.ok && chatId.startsWith('-') && !chatId.startsWith('-100')) {
+    // 2. Only retry if Telegram explicitly responded with "chat not found"
+    if (!result.ok && result.error_code === 400 && chatId.startsWith('-') && !chatId.startsWith('-100')) {
       const supergroupId = `-100${chatId.slice(1)}`;
       payload.chat_id = supergroupId;
       const superResult = await callTelegramApi('sendMessage', token, payload);
