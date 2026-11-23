@@ -1,3 +1,5 @@
+import https from 'node:https';
+
 /**
  * Telegram Bot Integration
  * Provides instant real-time alerts and stats dispatching for campaign organizers.
@@ -8,24 +10,60 @@ export function isTelegramConfigured(): boolean {
 }
 
 /**
- * Clean, simple, and direct Telegram API caller using standard fetch.
+ * Robust Telegram API caller forcing IPv4 (family: 4).
+ * Completely resolves the AWS Lambda / Vercel IPv6 blackhole timeout.
  */
 export async function callTelegramApi(endpoint: string, token: string, body?: any): Promise<any> {
-  const url = `https://api.telegram.org/bot${token}/${endpoint}`;
-  try {
-    const res = await fetch(url, {
-      method: body ? 'POST' : 'GET',
-      headers: {
-        ...(body ? { 'Content-Type': 'application/json' } : {}),
+  return new Promise((resolve) => {
+    const postData = body ? JSON.stringify(body) : '';
+    const headers: Record<string, string | number> = {
+      'Connection': 'close',
+      'User-Agent': 'DonationsBot/1.0',
+    };
+
+    if (body) {
+      headers['Content-Type'] = 'application/json';
+      headers['Content-Length'] = Buffer.byteLength(postData);
+    }
+
+    const req = https.request(
+      {
+        hostname: 'api.telegram.org',
+        port: 443,
+        path: `/bot${token}/${endpoint}`,
+        method: body ? 'POST' : 'GET',
+        headers,
+        family: 4,
+        agent: false,
+        timeout: 15000,
       },
-      body: body ? JSON.stringify(body) : undefined,
-      signal: AbortSignal.timeout(12000),
-      cache: 'no-store',
+      (res) => {
+        let raw = '';
+        res.on('data', (chunk) => (raw += chunk));
+        res.on('end', () => {
+          try {
+            resolve(JSON.parse(raw));
+          } catch {
+            resolve({ ok: false, error: 'Invalid JSON response from Telegram', raw });
+          }
+        });
+      }
+    );
+
+    req.on('timeout', () => {
+      req.destroy();
+      resolve({ ok: false, error: 'Telegram connection timed out (IPv4 15s)' });
     });
-    return await res.json();
-  } catch (err: any) {
-    return { ok: false, error: err.message, description: err.message };
-  }
+
+    req.on('error', (err) => {
+      resolve({ ok: false, error: err.message });
+    });
+
+    if (body) {
+      req.write(postData);
+    }
+    req.end();
+  });
 }
 
 interface SendTelegramOptions {
