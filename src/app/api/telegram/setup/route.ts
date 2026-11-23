@@ -29,20 +29,15 @@ export async function GET(req: NextRequest) {
   const startTime = Date.now();
 
   try {
-    // 1. Verify Bot via getMe using strict IPv4
-    let getMeData: any;
-    try {
-      getMeData = await callTelegramApi('getMe', token);
-    } catch (err: any) {
-      return NextResponse.json(
-        { ok: false, step: 'getMe', error: err.message, durationMs: Date.now() - startTime },
-        { status: 500 }
-      );
-    }
+    // 1. Directly call setWebhook (validates token & activates webhook in 1 single step)
+    const webhookData = await callTelegramApi('setWebhook', token, {
+      url: webhookUrl,
+      drop_pending_updates: true,
+    });
 
     // 2. Handle 429 Rate Limit directly and gracefully
-    if (!getMeData.ok && getMeData.error_code === 429) {
-      const retryAfter = getMeData.parameters?.retry_after || 25;
+    if (!webhookData.ok && webhookData.error_code === 429) {
+      const retryAfter = webhookData.parameters?.retry_after || 25;
 
       if (acceptsHtml) {
         const html = `<!DOCTYPE html>
@@ -134,41 +129,22 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    if (!getMeData.ok) {
-      return NextResponse.json(
-        {
-          ok: false,
-          step: 'getMe',
-          durationMs: Date.now() - startTime,
-          error: getMeData.description || 'Failed to authenticate Telegram bot',
-          details: getMeData,
-        },
-        { status: 500 }
-      );
-    }
-
-    // 3. Set Webhook to our Vercel endpoint via POST with drop_pending_updates
-    let webhookData: any;
-    try {
-      webhookData = await callTelegramApi('setWebhook', token, {
-        url: webhookUrl,
-        drop_pending_updates: true,
-      });
-    } catch (err: any) {
+    if (!webhookData.ok) {
       return NextResponse.json(
         {
           ok: false,
           step: 'setWebhook',
           durationMs: Date.now() - startTime,
-          error: err.message,
+          error: webhookData.description || 'Failed to set webhook',
+          details: webhookData,
         },
         { status: 500 }
       );
     }
 
-    // 4. Test sending greeting message to group
+    // 3. Test sending greeting message to group (non-blocking)
     let testMessageData: any = null;
-    if (chatId && webhookData.ok) {
+    if (chatId) {
       const text = `🌿 <b>تم تفعيل بوت التليجرام وربطه بالمنصة بنجاح!</b>\n\nستصل هنا جميع إشعارات التبرعات الجديدة ورسائل المحفظة لحظياً ⚡\nاكتب <b>/stats</b> للحصول على الإحصائيات الحالية في أي وقت.`;
 
       try {
@@ -203,9 +179,6 @@ export async function GET(req: NextRequest) {
     }
 
     if (acceptsHtml) {
-      const isSuccess = webhookData.ok;
-      const botUser = getMeData.result;
-
       const html = `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -236,7 +209,7 @@ export async function GET(req: NextRequest) {
       text-align: center;
     }
     .icon { font-size: 56px; margin-bottom: 16px; }
-    h1 { font-size: 22px; margin: 0 0 12px 0; color: #38bdf8; }
+    h1 { font-size: 22px; margin: 0 0 12px 0; color: #34d399; }
     p { color: #94a3b8; font-size: 14px; line-height: 1.6; margin: 0 0 24px 0; }
     .status-item {
       display: flex;
@@ -273,26 +246,19 @@ export async function GET(req: NextRequest) {
 </head>
 <body>
   <div class="card">
-    <div class="icon">${isSuccess ? '🚀' : '⚠️'}</div>
-    <h1>${isSuccess ? 'تم تفعيل بوت التليجرام بنجاح!' : 'تنبيه في التفعيل'}</h1>
-    <p>${isSuccess ? 'البوت متصل بالمنصة وسيرسل تنبيهات التبرعات ورسائل المحفظة لحظياً ⚡' : 'يرجى مراجعة التفاصيل أدناه:'}</p>
-
-    <div class="status-item">
-      <span>اسم البوت</span>
-      <span class="badge badge-ok">@${botUser?.username || 'متصل'}</span>
-    </div>
+    <div class="icon">🚀</div>
+    <h1>تم تفعيل بوت التليجرام بنجاح!</h1>
+    <p>البوت متصل بالمنصة الآن وسيرسل تنبيهات التبرعات ورسائل المحفظة لحظياً ⚡</p>
 
     <div class="status-item">
       <span>ربط الويب هوك (Webhook)</span>
-      <span class="badge ${webhookData.ok ? 'badge-ok' : 'badge-warn'}">
-        ${webhookData.ok ? '✅ مفعل 100%' : '⚠️ فشل: ' + (webhookData.description || 'خطأ')}
-      </span>
+      <span class="badge badge-ok">✅ مفعل 100%</span>
     </div>
 
     <div class="status-item">
       <span>رسالة تجريبية للجروب</span>
       <span class="badge ${testMessageData?.ok ? 'badge-ok' : 'badge-warn'}">
-        ${testMessageData?.ok ? '✅ تم الإرسال للجروب' : '⚠️ ' + (testMessageData?.description || 'لم يتم الإرسال')}
+        ${testMessageData?.ok ? '✅ تم الإرسال للجروب' : '⚠️ ' + (testMessageData?.description || 'تأكد من إضافة البوت للجروب')}
       </span>
     </div>
 
@@ -307,10 +273,8 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({
-      success: webhookData.ok,
+      success: true,
       durationMs: Date.now() - startTime,
-      bot: getMeData.result,
-      webhookUrl,
       webhookResult: webhookData,
       testMessageResult: testMessageData,
     });
