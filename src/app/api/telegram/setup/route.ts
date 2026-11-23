@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { callTelegramApi } from '@/lib/telegram';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,11 +28,8 @@ export async function GET(req: NextRequest) {
   const startTime = Date.now();
 
   try {
-    // 1. Verify Bot via getMe
-    const getMeRes = await fetch(`https://api.telegram.org/bot${token}/getMe`, {
-      signal: AbortSignal.timeout(8000),
-    });
-    const getMeData = await getMeRes.json();
+    // 1. Verify Bot via getMe using strict IPv4
+    const getMeData = await callTelegramApi('getMe', token);
 
     // 2. Handle 429 Rate Limit directly and gracefully
     if (!getMeData.ok && getMeData.error_code === 429) {
@@ -140,12 +138,11 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // 3. Set Webhook to our Vercel endpoint
-    const webhookRes = await fetch(
-      `https://api.telegram.org/bot${token}/setWebhook?url=${encodeURIComponent(webhookUrl)}`,
-      { signal: AbortSignal.timeout(8000) }
+    // 3. Set Webhook to our Vercel endpoint via IPv4
+    const webhookData = await callTelegramApi(
+      `setWebhook?url=${encodeURIComponent(webhookUrl)}`,
+      token
     );
-    const webhookData = await webhookRes.json();
 
     // 4. Test sending greeting message to group
     let testMessageData: any = null;
@@ -153,17 +150,11 @@ export async function GET(req: NextRequest) {
       const text = `🌿 <b>تم تفعيل بوت التليجرام وربطه بالمنصة بنجاح!</b>\n\nستصل هنا جميع إشعارات التبرعات الجديدة ورسائل المحفظة لحظياً ⚡\nاكتب <b>/stats</b> للحصول على الإحصائيات الحالية في أي وقت.`;
 
       try {
-        const msgRes = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chat_id: chatId,
-            text,
-            parse_mode: 'HTML',
-          }),
-          signal: AbortSignal.timeout(8000),
+        testMessageData = await callTelegramApi('sendMessage', token, {
+          chat_id: chatId,
+          text,
+          parse_mode: 'HTML',
         });
-        testMessageData = await msgRes.json();
 
         // If chat not found and ID starts with minus but not -100, try supergroup prefix -100
         if (
@@ -172,20 +163,11 @@ export async function GET(req: NextRequest) {
           !chatId.startsWith('-100')
         ) {
           const supergroupId = `-100${chatId.slice(1)}`;
-          const supergroupRes = await fetch(
-            `https://api.telegram.org/bot${token}/sendMessage`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                chat_id: supergroupId,
-                text,
-                parse_mode: 'HTML',
-              }),
-              signal: AbortSignal.timeout(8000),
-            }
-          );
-          const supergroupData = await supergroupRes.json();
+          const supergroupData = await callTelegramApi('sendMessage', token, {
+            chat_id: supergroupId,
+            text,
+            parse_mode: 'HTML',
+          });
           if (supergroupData.ok) {
             testMessageData = {
               ...supergroupData,

@@ -1,3 +1,5 @@
+import https from 'node:https';
+
 /**
  * Telegram Bot Integration
  * Provides instant real-time alerts and stats dispatching for campaign organizers.
@@ -5,6 +7,55 @@
 
 export function isTelegramConfigured(): boolean {
   return !!(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID);
+}
+
+/**
+ * Robust Telegram API caller that strictly forces IPv4.
+ * Prevents Vercel/AWS Undici IPv6 blackhole timeouts.
+ */
+export function callTelegramApi(endpoint: string, token: string, body?: any): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const postData = body ? JSON.stringify(body) : null;
+    const req = https.request(
+      {
+        hostname: 'api.telegram.org',
+        path: `/bot${token}/${endpoint}`,
+        method: body ? 'POST' : 'GET',
+        family: 4, // Strict IPv4 only to avoid unreachable IPv6 routes
+        headers: body
+          ? {
+              'Content-Type': 'application/json',
+              'Content-Length': Buffer.byteLength(postData),
+            }
+          : {},
+        timeout: 10000,
+      },
+      (res) => {
+        let data = '';
+        res.on('data', (chunk) => (data += chunk));
+        res.on('end', () => {
+          try {
+            resolve(JSON.parse(data));
+          } catch {
+            resolve({ ok: false, error: 'Invalid JSON from Telegram', raw: data });
+          }
+        });
+      }
+    );
+
+    req.on('timeout', () => {
+      req.destroy(new Error('Connection to Telegram timed out (IPv4)'));
+    });
+
+    req.on('error', (err) => {
+      reject(err);
+    });
+
+    if (postData) {
+      req.write(postData);
+    }
+    req.end();
+  });
 }
 
 interface SendTelegramOptions {
@@ -37,27 +88,14 @@ export async function sendTelegramMessage(
       payload.reply_markup = options.reply_markup;
     }
 
-    const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(7000), // Non-blocking 7s timeout
-    });
-
-    const result = await response.json();
+    const result = await callTelegramApi('sendMessage', token, payload);
 
     // Handle group migration to supergroup automatically
     if (!result.ok && result.parameters?.migrate_to_chat_id) {
       const newChatId = result.parameters.migrate_to_chat_id;
       console.warn(`[Telegram] Group migrated to supergroup: ${newChatId}. Retrying...`);
       payload.chat_id = newChatId;
-      const retryRes = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(7000),
-      });
-      const retryResult = await retryRes.json();
+      const retryResult = await callTelegramApi('sendMessage', token, payload);
       return retryResult.ok;
     }
 
