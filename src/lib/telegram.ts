@@ -1,3 +1,9 @@
+import dns from 'node:dns';
+
+try {
+  dns.setDefaultResultOrder('ipv4first');
+} catch {}
+
 /**
  * Telegram Bot Integration
  * Provides instant real-time alerts and stats dispatching for campaign organizers.
@@ -17,11 +23,15 @@ export async function callTelegramApi(endpoint: string, token: string, body?: an
     method: body ? 'POST' : 'GET',
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
     body: body ? JSON.stringify(body) : undefined,
-    signal: AbortSignal.timeout(20000),
+    signal: AbortSignal.timeout(15000),
   };
 
-  const res = await fetch(url, options);
-  return await res.json();
+  try {
+    const res = await fetch(url, options);
+    return await res.json();
+  } catch (err: any) {
+    return { ok: false, error: err.message, description: err.message };
+  }
 }
 
 interface SendTelegramOptions {

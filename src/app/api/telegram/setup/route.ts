@@ -1,3 +1,9 @@
+import dns from 'node:dns';
+
+try {
+  dns.setDefaultResultOrder('ipv4first');
+} catch {}
+
 import { NextRequest, NextResponse } from 'next/server';
 import { callTelegramApi } from '@/lib/telegram';
 

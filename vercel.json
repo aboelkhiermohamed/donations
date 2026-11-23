@@ -1,5 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "env": {
+    "NODE_OPTIONS": "--dns-result-order=ipv4first"
+  },
   "functions": {
     "src/app/api/**/*": {
       "maxDuration": 60
