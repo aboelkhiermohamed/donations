@@ -1,37 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60;
-
-/**
- * Smart fetch helper for Telegram Bot API with automatic rate-limit cooldown handling
- */
-async function fetchTelegramWithRetry(url: string, options: any = {}) {
-  try {
-    const res = await fetch(url, {
-      ...options,
-      signal: AbortSignal.timeout(12000),
-    });
-    const data = await res.json();
-
-    // If rate-limited by Telegram (429), wait out the cooldown and retry automatically
-    if (!data.ok && data.error_code === 429 && data.parameters?.retry_after) {
-      const waitSec = Math.min(Number(data.parameters.retry_after) + 2, 35);
-      console.warn(`[Telegram Setup] Rate limited (429). Waiting ${waitSec}s for cooldown...`);
-      await new Promise((resolve) => setTimeout(resolve, waitSec * 1000));
-
-      const retryRes = await fetch(url, {
-        ...options,
-        signal: AbortSignal.timeout(12000),
-      });
-      return await retryRes.json();
-    }
-
-    return data;
-  } catch (err: any) {
-    return { ok: false, error: err.message };
-  }
-}
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -41,6 +10,8 @@ export async function GET(req: NextRequest) {
   const token = tokenParam || process.env.TELEGRAM_BOT_TOKEN;
   const chatId = chatIdParam || process.env.TELEGRAM_CHAT_ID;
   const webhookUrl = 'https://donations-tau.vercel.app/api/telegram/webhook';
+
+  const acceptsHtml = req.headers.get('accept')?.includes('text/html');
 
   if (!token) {
     return NextResponse.json(
@@ -55,84 +26,183 @@ export async function GET(req: NextRequest) {
 
   const startTime = Date.now();
 
-  // 1. Verify Bot via getMe (with automatic rate-limit wait)
-  const getMeData = await fetchTelegramWithRetry(
-    `https://api.telegram.org/bot${token}/getMe`
-  );
+  try {
+    // 1. Verify Bot via getMe
+    const getMeRes = await fetch(`https://api.telegram.org/bot${token}/getMe`, {
+      signal: AbortSignal.timeout(8000),
+    });
+    const getMeData = await getMeRes.json();
 
-  if (!getMeData.ok) {
-    return NextResponse.json(
-      {
-        ok: false,
-        step: 'getMe',
-        durationMs: Date.now() - startTime,
-        error: getMeData.description || getMeData.error || 'Failed to connect to Telegram bot',
-        details: getMeData,
-      },
-      { status: getMeData.error_code === 429 ? 429 : 500 }
-    );
-  }
+    // 2. Handle 429 Rate Limit directly and gracefully
+    if (!getMeData.ok && getMeData.error_code === 429) {
+      const retryAfter = getMeData.parameters?.retry_after || 25;
 
-  // 2. Set Webhook to our Vercel endpoint
-  const webhookData = await fetchTelegramWithRetry(
-    `https://api.telegram.org/bot${token}/setWebhook?url=${encodeURIComponent(webhookUrl)}`
-  );
+      if (acceptsHtml) {
+        const html = `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>جارٍ تفعيل البوت... انتظر ثوانٍ</title>
+  <link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Alexandria', sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 16px;
+    }
+    .card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 20px;
+      padding: 36px;
+      max-width: 480px;
+      width: 100%;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+      text-align: center;
+    }
+    .icon { font-size: 56px; margin-bottom: 16px; animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+    h1 { font-size: 20px; margin: 0 0 12px 0; color: #38bdf8; }
+    p { color: #94a3b8; font-size: 14px; line-height: 1.6; margin: 0 0 24px 0; }
+    .countdown-box {
+      background: #0f172a;
+      border: 1px solid #0284c7;
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .number { font-size: 42px; font-weight: 700; color: #38bdf8; font-family: monospace; }
+    .label { font-size: 13px; color: #64748b; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">⏳</div>
+    <h1>تبريد أمان مؤقت من تيليجرام</h1>
+    <p>لحماية البوت، تيليجرام يطلب الانتظار ثوانٍ معدودة قبل إتمام الربط. سيتم التفعيل تلقائياً فور انتهاء العداد دون الحاجة للضغط على أي شيء:</p>
+    
+    <div class="countdown-box">
+      <div class="number" id="timer">${retryAfter}</div>
+      <div class="label">ثانية متبقية لإتمام التفعيل التلقائي</div>
+    </div>
 
-  // 3. Test sending a message to the group
-  let testMessageData: any = null;
-  if (chatId) {
-    const text = `🌿 <b>تم تفعيل بوت التليجرام وربطه بالمنصة بنجاح!</b>\n\nستصل هنا جميع إشعارات التبرعات الجديدة ورسائل المحفظة لحظياً ⚡\nاكتب <b>/stats</b> للحصول على الإحصائيات الحالية في أي وقت.`;
+    <p style="font-size: 12px; color: #64748b; margin: 0;">من فضلك لا تغلق هذه الصفحة، سيتم التحديث تلقائياً ⚡</p>
+  </div>
 
-    // Attempt with provided chat ID
-    testMessageData = await fetchTelegramWithRetry(
-      `https://api.telegram.org/bot${token}/sendMessage`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: chatId,
-          text,
-          parse_mode: 'HTML',
-        }),
+  <script>
+    let remaining = ${retryAfter};
+    const timer = document.getElementById('timer');
+    const interval = setInterval(() => {
+      remaining--;
+      if (timer) timer.innerText = remaining;
+      if (remaining <= 0) {
+        clearInterval(interval);
+        window.location.reload();
       }
-    );
+    }, 1000);
+  </script>
+</body>
+</html>`;
+        return new Response(html, {
+          headers: { 'Content-Type': 'text/html; charset=utf-8' },
+        });
+      }
 
-    // If chat not found and ID starts with minus but not -100, try supergroup prefix -100
-    if (
-      !testMessageData.ok &&
-      chatId.startsWith('-') &&
-      !chatId.startsWith('-100')
-    ) {
-      const supergroupId = `-100${chatId.slice(1)}`;
-      const supergroupAttempt = await fetchTelegramWithRetry(
-        `https://api.telegram.org/bot${token}/sendMessage`,
+      return NextResponse.json(
         {
+          ok: false,
+          rateLimited: true,
+          retryAfter,
+          durationMs: Date.now() - startTime,
+          message: `Telegram rate limit in effect. Retry after ${retryAfter} seconds.`,
+        },
+        { status: 429 }
+      );
+    }
+
+    if (!getMeData.ok) {
+      return NextResponse.json(
+        {
+          ok: false,
+          step: 'getMe',
+          durationMs: Date.now() - startTime,
+          error: getMeData.description || 'Failed to authenticate Telegram bot',
+          details: getMeData,
+        },
+        { status: 500 }
+      );
+    }
+
+    // 3. Set Webhook to our Vercel endpoint
+    const webhookRes = await fetch(
+      `https://api.telegram.org/bot${token}/setWebhook?url=${encodeURIComponent(webhookUrl)}`,
+      { signal: AbortSignal.timeout(8000) }
+    );
+    const webhookData = await webhookRes.json();
+
+    // 4. Test sending greeting message to group
+    let testMessageData: any = null;
+    if (chatId) {
+      const text = `🌿 <b>تم تفعيل بوت التليجرام وربطه بالمنصة بنجاح!</b>\n\nستصل هنا جميع إشعارات التبرعات الجديدة ورسائل المحفظة لحظياً ⚡\nاكتب <b>/stats</b> للحصول على الإحصائيات الحالية في أي وقت.`;
+
+      try {
+        const msgRes = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            chat_id: supergroupId,
+            chat_id: chatId,
             text,
             parse_mode: 'HTML',
           }),
+          signal: AbortSignal.timeout(8000),
+        });
+        testMessageData = await msgRes.json();
+
+        // If chat not found and ID starts with minus but not -100, try supergroup prefix -100
+        if (
+          !testMessageData.ok &&
+          chatId.startsWith('-') &&
+          !chatId.startsWith('-100')
+        ) {
+          const supergroupId = `-100${chatId.slice(1)}`;
+          const supergroupRes = await fetch(
+            `https://api.telegram.org/bot${token}/sendMessage`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                chat_id: supergroupId,
+                text,
+                parse_mode: 'HTML',
+              }),
+              signal: AbortSignal.timeout(8000),
+            }
+          );
+          const supergroupData = await supergroupRes.json();
+          if (supergroupData.ok) {
+            testMessageData = {
+              ...supergroupData,
+              note: `Used migrated supergroup ID: ${supergroupId}`,
+            };
+          }
         }
-      );
-      if (supergroupAttempt.ok) {
-        testMessageData = {
-          ...supergroupAttempt,
-          note: `Used migrated supergroup ID: ${supergroupId}`,
-        };
+      } catch (err: any) {
+        testMessageData = { error: err.message };
       }
     }
-  }
 
-  // Check if browser is requesting HTML
-  const acceptsHtml = req.headers.get('accept')?.includes('text/html');
+    if (acceptsHtml) {
+      const isSuccess = webhookData.ok;
+      const botUser = getMeData.result;
 
-  if (acceptsHtml) {
-    const isSuccess = webhookData.ok;
-    const botUser = getMeData.result;
-
-    const html = `<!DOCTYPE html>
+      const html = `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
@@ -155,7 +225,7 @@ export async function GET(req: NextRequest) {
       background: #1e293b;
       border: 1px solid #334155;
       border-radius: 20px;
-      padding: 32px;
+      padding: 36px;
       max-width: 520px;
       width: 100%;
       box-shadow: 0 20px 40px rgba(0,0,0,0.5);
@@ -199,9 +269,9 @@ export async function GET(req: NextRequest) {
 </head>
 <body>
   <div class="card">
-    <div class="icon">${isSuccess ? '🚀' : '⏳'}</div>
-    <h1>${isSuccess ? 'تم تفعيل بوت التليجرام بنجاح!' : 'جارٍ معالجة التفعيل'}</h1>
-    <p>${isSuccess ? 'البوت متصل بالمنصة وسيرسل تنبيهات التبرعات ورسائل المحفظة لحظياً.' : 'يرجى مراجعة التفاصيل أدناه:'}</p>
+    <div class="icon">${isSuccess ? '🚀' : '⚠️'}</div>
+    <h1>${isSuccess ? 'تم تفعيل بوت التليجرام بنجاح!' : 'تنبيه في التفعيل'}</h1>
+    <p>${isSuccess ? 'البوت متصل بالمنصة وسيرسل تنبيهات التبرعات ورسائل المحفظة لحظياً ⚡' : 'يرجى مراجعة التفاصيل أدناه:'}</p>
 
     <div class="status-item">
       <span>اسم البوت</span>
@@ -209,7 +279,7 @@ export async function GET(req: NextRequest) {
     </div>
 
     <div class="status-item">
-      <span>تفعيل الويب هوك (Webhook)</span>
+      <span>ربط الويب هوك (Webhook)</span>
       <span class="badge ${webhookData.ok ? 'badge-ok' : 'badge-warn'}">
         ${webhookData.ok ? '✅ مفعل 100%' : '⚠️ فشل: ' + (webhookData.description || 'خطأ')}
       </span>
@@ -227,17 +297,27 @@ export async function GET(req: NextRequest) {
 </body>
 </html>`;
 
-    return new Response(html, {
-      headers: { 'Content-Type': 'text/html; charset=utf-8' },
-    });
-  }
+      return new Response(html, {
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      });
+    }
 
-  return NextResponse.json({
-    success: webhookData.ok,
-    durationMs: Date.now() - startTime,
-    bot: getMeData.result,
-    webhookUrl,
-    webhookResult: webhookData,
-    testMessageResult: testMessageData,
-  });
+    return NextResponse.json({
+      success: webhookData.ok,
+      durationMs: Date.now() - startTime,
+      bot: getMeData.result,
+      webhookUrl,
+      webhookResult: webhookData,
+      testMessageResult: testMessageData,
+    });
+  } catch (err: any) {
+    return NextResponse.json(
+      {
+        ok: false,
+        durationMs: Date.now() - startTime,
+        error: err.message,
+      },
+      { status: 500 }
+    );
+  }
 }
