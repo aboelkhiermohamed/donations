@@ -53,8 +53,15 @@ export async function GET(req: NextRequest) {
     },
   };
 
+  const endpoint = searchParams.get('endpoint') || 'sendMessage';
+
   try {
-    const result = await callTelegramApi('sendMessage', token, payload);
+    let result;
+    if (endpoint === 'getMe') {
+      result = await callTelegramApi('getMe', token);
+    } else {
+      result = await callTelegramApi('sendMessage', token, payload);
+    }
     const durationMs = Date.now() - startTime;
 
     if (result.ok) {
