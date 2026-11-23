@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useLanguage } from '@/context/LanguageContext';
@@ -17,7 +17,11 @@ import {
   Bell,
   Loader2,
   Settings,
-  ExternalLink
+  ExternalLink,
+  CheckCheck,
+  Sparkles,
+  AlertCircle,
+  ArrowLeft
 } from 'lucide-react';
 import Link from 'next/link';
 import ThemeToggle from '@/components/ThemeToggle';
@@ -29,7 +33,7 @@ function getInitialAdminState() {
   if (typeof window === 'undefined') {
     return { isAdmin: false, isLoading: true, name: '' };
   }
-  
+
   // 1. Check memory cache (fastest, active during client-side navigation)
   if (memoryAdminCache && (Date.now() - memoryAdminCache.timestamp < 1000 * 60 * 30)) {
     return { isAdmin: true, isLoading: false, name: memoryAdminCache.name };
@@ -45,9 +49,26 @@ function getInitialAdminState() {
         return { isAdmin: true, isLoading: false, name: parsed.name || 'مسؤول الحملة' };
       }
     }
-  } catch {}
+  } catch { }
 
   return { isAdmin: false, isLoading: true, name: '' };
+}
+
+function formatTimeAgo(dateString: string, lang: string) {
+  try {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffSec = Math.floor((now.getTime() - date.getTime()) / 1000);
+    if (diffSec < 60) return lang === 'ar' ? 'الآن' : 'just now';
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return lang === 'ar' ? `منذ ${diffMin} دقيقة` : `${diffMin}m ago`;
+    const diffHr = Math.floor(diffMin / 60);
+    if (diffHr < 24) return lang === 'ar' ? `منذ ${diffHr} ساعة` : `${diffHr}h ago`;
+    const diffDay = Math.floor(diffHr / 24);
+    return lang === 'ar' ? `منذ ${diffDay} يوم` : `${diffDay}d ago`;
+  } catch {
+    return '';
+  }
 }
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -63,6 +84,80 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
   const [adminName, setAdminName] = useState(initialState.name);
 
+  // Notifications Popover State
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notificationsList, setNotificationsList] = useState<any[]>([]);
+  const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
+  const notificationsRef = useRef<HTMLDivElement>(null);
+
+  // Close notifications popover on click outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (notificationsRef.current && !notificationsRef.current.contains(event.target as Node)) {
+        setNotificationsOpen(false);
+      }
+    }
+    if (notificationsOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [notificationsOpen]);
+
+  // Fetch list of recent notifications
+  const fetchNotificationsList = async () => {
+    setIsLoadingNotifications(true);
+    try {
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(20);
+      if (!error && data) {
+        setNotificationsList(data);
+      }
+    } catch (err) {
+      console.error('Error fetching notifications list:', err);
+    } finally {
+      setIsLoadingNotifications(false);
+    }
+  };
+
+  useEffect(() => {
+    if (notificationsOpen) {
+      fetchNotificationsList();
+    }
+  }, [notificationsOpen]);
+
+  const handleMarkAllAsRead = async () => {
+    try {
+      await supabase.from('notifications').update({ is_read: true }).eq('is_read', false);
+      setUnreadNotificationsCount(0);
+      setNotificationsList(prev => prev.map(n => ({ ...n, is_read: true })));
+    } catch (err) {
+      console.error('Error marking notifications as read:', err);
+    }
+  };
+
+  const handleNotificationClick = async (notification: any) => {
+    try {
+      if (!notification.is_read) {
+        await supabase.from('notifications').update({ is_read: true }).eq('id', notification.id);
+        setUnreadNotificationsCount(prev => Math.max(0, prev - 1));
+        setNotificationsList(prev => prev.map(n => n.id === notification.id ? { ...n, is_read: true } : n));
+      }
+    } catch {}
+
+    setNotificationsOpen(false);
+
+    if (notification.type === 'new_sms') {
+      router.push('/admin/sms');
+    } else {
+      router.push('/admin/donations');
+    }
+  };
+
   // 1. Session verification & background revalidation
   useEffect(() => {
     let isMounted = true;
@@ -73,7 +168,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
         if (!session) {
           memoryAdminCache = null;
-          try { sessionStorage.removeItem('admin_session_cache'); } catch {}
+          try { sessionStorage.removeItem('admin_session_cache'); } catch { }
           if (isMounted) router.replace('/admin/login');
           return;
         }
@@ -95,7 +190,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
         if (error || !admin) {
           memoryAdminCache = null;
-          try { sessionStorage.removeItem('admin_session_cache'); } catch {}
+          try { sessionStorage.removeItem('admin_session_cache'); } catch { }
           await supabase.auth.signOut();
           if (isMounted) router.replace('/admin/login');
           return;
@@ -109,7 +204,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         memoryAdminCache = newCache;
         try {
           sessionStorage.setItem('admin_session_cache', JSON.stringify(newCache));
-        } catch {}
+        } catch { }
 
         if (isMounted) {
           setAdminName(newCache.name);
@@ -152,9 +247,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       .channel('admin_notifications_layout')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, () => {
         setUnreadNotificationsCount(prev => prev + 1);
+        fetchNotificationsList();
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'notifications' }, () => {
         fetchNotifications();
+        fetchNotificationsList();
       })
       .subscribe();
 
@@ -165,7 +262,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const handleLogout = async () => {
     memoryAdminCache = null;
-    try { sessionStorage.removeItem('admin_session_cache'); } catch {}
+    try { sessionStorage.removeItem('admin_session_cache'); } catch { }
     await supabase.auth.signOut();
     router.replace('/admin/login');
   };
@@ -319,20 +416,132 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             {/* Theme Toggle */}
             <ThemeToggle />
 
-            {/* Notifications Indicator */}
-            <div className="relative">
-              <Link
-                href="/admin/donations?status=pending"
-                className="p-2 rounded-xl border border-[#DDD9CC] dark:border-[#283849] bg-[#FAF9F5] dark:bg-[#111C2D] text-[#3D4742] dark:text-[#F3F5F4] hover:bg-[#F4F3ED] dark:hover:bg-[#172436] block relative"
-                title="التبرعات المعلقة"
+            {/* Notifications Dropdown */}
+            <div className="relative" ref={notificationsRef}>
+              <button
+                type="button"
+                onClick={() => setNotificationsOpen(prev => !prev)}
+                className={`p-2 rounded-xl border transition-colors relative block ${
+                  notificationsOpen
+                    ? 'border-[#153C32] dark:border-[#24B58A] bg-[#153C32]/10 dark:bg-[#24B58A]/10 text-[#153C32] dark:text-[#24B58A]'
+                    : 'border-[#DDD9CC] dark:border-[#283849] bg-[#FAF9F5] dark:bg-[#111C2D] text-[#3D4742] dark:text-[#F3F5F4] hover:bg-[#F4F3ED] dark:hover:bg-[#172436]'
+                }`}
+                title={language === 'ar' ? 'مركز التنبيهات' : 'Notifications'}
               >
                 <Bell className="w-4 h-4" />
                 {unreadNotificationsCount > 0 && (
-                  <span className="absolute -top-1 -end-1 w-5 h-5 rounded-full bg-red-600 text-white text-[10px] font-black flex items-center justify-center shadow-subtle">
+                  <span className="absolute -top-1.5 -end-1.5 min-w-5 h-5 px-1 rounded-full bg-red-600 text-white text-[10px] font-black flex items-center justify-center shadow-subtle animate-pulse">
                     {unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount}
                   </span>
                 )}
-              </Link>
+              </button>
+
+              {/* Popover Dropdown */}
+              {notificationsOpen && (
+                <div className="absolute top-full mt-2.5 end-0 w-80 sm:w-96 rounded-2xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-elevated z-50 overflow-hidden font-arabic">
+                  
+                  {/* Dropdown Header */}
+                  <div className="p-3.5 sm:p-4 border-b border-[#EAE8DE] dark:border-[#283849] flex items-center justify-between bg-[#FAF9F5] dark:bg-[#111C2D]">
+                    <div className="flex items-center gap-2">
+                      <Bell className="w-4 h-4 text-[#153C32] dark:text-[#24B58A]" />
+                      <h4 className="font-bold text-xs sm:text-sm text-[#191F1C] dark:text-[#F3F5F4]">
+                        {language === 'ar' ? 'مركز التنبيهات' : 'Notifications'}
+                      </h4>
+                      {unreadNotificationsCount > 0 && (
+                        <span className="px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-300 text-[10px] font-extrabold">
+                          {unreadNotificationsCount} {language === 'ar' ? 'جديد' : 'new'}
+                        </span>
+                      )}
+                    </div>
+
+                    {unreadNotificationsCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleMarkAllAsRead}
+                        className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-400 hover:underline"
+                      >
+                        <CheckCheck className="w-3.5 h-3.5" />
+                        <span>{language === 'ar' ? 'تحديد الكل كمقروء' : 'Mark all read'}</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Dropdown Body */}
+                  <div className="max-h-80 overflow-y-auto divide-y divide-[#EAE8DE] dark:divide-[#283849]">
+                    {isLoadingNotifications ? (
+                      <div className="p-8 text-center text-[#738079]">
+                        <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-[#153C32] dark:text-[#24B58A]" />
+                        <span className="text-xs">{language === 'ar' ? 'جارٍ تحميل التنبيهات...' : 'Loading notifications...'}</span>
+                      </div>
+                    ) : notificationsList.length === 0 ? (
+                      <div className="p-8 text-center space-y-2">
+                        <div className="w-10 h-10 rounded-full bg-[#FAF9F5] dark:bg-[#111C2D] flex items-center justify-center mx-auto text-[#738079]">
+                          <Bell className="w-5 h-5 opacity-40" />
+                        </div>
+                        <p className="text-xs text-[#738079] dark:text-[#A7B4B0]">
+                          {language === 'ar' ? 'لا توجد تنبيهات جديدة حالياً' : 'No notifications found'}
+                        </p>
+                      </div>
+                    ) : (
+                      notificationsList.map((item: any) => {
+                        const isUnread = !item.is_read;
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => handleNotificationClick(item)}
+                            className={`w-full p-3.5 text-start flex items-start gap-3 transition-colors hover:bg-[#FAF9F5] dark:hover:bg-[#111C2D] ${
+                              isUnread ? 'bg-emerald-50/40 dark:bg-emerald-950/20' : ''
+                            }`}
+                          >
+                            {/* Icon */}
+                            <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5 border border-[#EAE8DE] dark:border-[#283849] bg-white dark:bg-[#172436]">
+                              {item.type === 'new_donation' && <Coins className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />}
+                              {item.type === 'large_donation' && <Sparkles className="w-4 h-4 text-amber-500" />}
+                              {item.type === 'new_sms' && <MessageSquare className="w-4 h-4 text-blue-500" />}
+                              {item.type === 'verification_failed' && <AlertCircle className="w-4 h-4 text-red-500" />}
+                              {!['new_donation', 'large_donation', 'new_sms', 'verification_failed'].includes(item.type) && (
+                                <Bell className="w-4 h-4 text-[#738079]" />
+                              )}
+                            </div>
+
+                            {/* Content */}
+                            <div className="flex-1 min-w-0 space-y-0.5">
+                              <div className="flex items-center justify-between gap-1">
+                                <span className={`text-xs truncate ${isUnread ? 'font-bold text-[#191F1C] dark:text-[#F3F5F4]' : 'font-semibold text-[#55625B] dark:text-[#A7B4B0]'}`}>
+                                  {item.title}
+                                </span>
+                                {isUnread && (
+                                  <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
+                                )}
+                              </div>
+                              <p className="text-[11px] text-[#738079] dark:text-[#80918C] leading-snug line-clamp-2">
+                                {item.message}
+                              </p>
+                              <span className="text-[10px] text-[#A0ACA6] dark:text-[#64748B] block pt-0.5">
+                                {formatTimeAgo(item.created_at, language)}
+                              </span>
+                            </div>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {/* Dropdown Footer */}
+                  <div className="p-2.5 border-t border-[#EAE8DE] dark:border-[#283849] bg-[#FAF9F5] dark:bg-[#111C2D] text-center">
+                    <Link
+                      href="/admin/donations"
+                      onClick={() => setNotificationsOpen(false)}
+                      className="text-[11px] font-bold text-[#153C32] dark:text-[#24B58A] hover:underline inline-flex items-center gap-1"
+                    >
+                      <span>{language === 'ar' ? 'الانتقال إلى سجل التبرعات الكامل' : 'Go to all donations'}</span>
+                      <ArrowLeft className="w-3 h-3 rtl-flip" />
+                    </Link>
+                  </div>
+
+                </div>
+              )}
             </div>
 
             {/* Language Switch */}
