@@ -1,5 +1,3 @@
-import https from 'node:https';
-
 /**
  * Telegram Bot Integration
  * Provides instant real-time alerts and stats dispatching for campaign organizers.
@@ -13,49 +11,17 @@ export function isTelegramConfigured(): boolean {
  * Robust Telegram API caller that strictly forces IPv4.
  * Prevents Vercel/AWS Undici IPv6 blackhole timeouts.
  */
-export function callTelegramApi(endpoint: string, token: string, body?: any): Promise<any> {
-  return new Promise((resolve, reject) => {
-    const postData = body ? JSON.stringify(body) : null;
-    const req = https.request(
-      {
-        hostname: 'api.telegram.org',
-        path: `/bot${token}/${endpoint}`,
-        method: body ? 'POST' : 'GET',
-        family: 4, // Strict IPv4 only to avoid unreachable IPv6 routes
-        headers: body
-          ? {
-              'Content-Type': 'application/json',
-              'Content-Length': Buffer.byteLength(postData),
-            }
-          : {},
-        timeout: 20000,
-      },
-      (res) => {
-        let data = '';
-        res.on('data', (chunk) => (data += chunk));
-        res.on('end', () => {
-          try {
-            resolve(JSON.parse(data));
-          } catch {
-            resolve({ ok: false, error: 'Invalid JSON from Telegram', raw: data });
-          }
-        });
-      }
-    );
+export async function callTelegramApi(endpoint: string, token: string, body?: any): Promise<any> {
+  const url = `https://api.telegram.org/bot${token}/${endpoint}`;
+  const options: RequestInit = {
+    method: body ? 'POST' : 'GET',
+    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(10000),
+  };
 
-    req.on('timeout', () => {
-      req.destroy(new Error('Connection to Telegram timed out (IPv4)'));
-    });
-
-    req.on('error', (err) => {
-      reject(err);
-    });
-
-    if (postData) {
-      req.write(postData);
-    }
-    req.end();
-  });
+  const res = await fetch(url, options);
+  return await res.json();
 }
 
 interface SendTelegramOptions {
