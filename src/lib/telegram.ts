@@ -26,6 +26,9 @@ export async function callTelegramApi(endpoint: string, token: string, body?: an
       headers['Content-Length'] = Buffer.byteLength(postData);
     }
 
+    const t0 = Date.now();
+    const timings: Record<string, number> = {};
+
     const req = https.request(
       {
         hostname: 'api.telegram.org',
@@ -33,30 +36,48 @@ export async function callTelegramApi(endpoint: string, token: string, body?: an
         path: `/bot${token}/${endpoint}`,
         method: body ? 'POST' : 'GET',
         headers,
-        family: 4, // Strictly IPv4 - avoids Vercel/AWS IPv6 timeouts
+        family: 4,
         agent: false,
-        timeout: 15000,
+        timeout: 30000, // 30s so we don't prematurely abort before Telegram responds
       },
       (res) => {
+        timings.firstByteMs = Date.now() - t0;
         let raw = '';
         res.on('data', (chunk) => (raw += chunk));
         res.on('end', () => {
+          timings.totalMs = Date.now() - t0;
           try {
-            resolve(JSON.parse(raw));
+            const parsed = JSON.parse(raw);
+            resolve({ ...parsed, timings });
           } catch {
-            resolve({ ok: false, error: 'Invalid JSON response from Telegram', raw });
+            resolve({ ok: false, error: 'Invalid JSON', raw, timings });
           }
         });
       }
     );
 
+    req.on('socket', (socket) => {
+      socket.on('lookup', (err, address) => {
+        timings.dnsMs = Date.now() - t0;
+        timings.resolvedIp = address;
+      });
+      socket.on('connect', () => {
+        timings.tcpMs = Date.now() - t0;
+      });
+      socket.on('secureConnect', () => {
+        timings.tlsMs = Date.now() - t0;
+      });
+    });
+
     req.on('timeout', () => {
+      timings.timeoutAtMs = Date.now() - t0;
       req.destroy();
-      resolve({ ok: false, error: 'Telegram connection timed out (IPv4 15s)' });
+      resolve({ ok: false, error: 'Telegram connection timed out (30s)', timings });
     });
 
     req.on('error', (err) => {
-      resolve({ ok: false, error: err.message });
+      timings.errorMs = Date.now() - t0;
+      resolve({ ok: false, error: err.message, timings });
     });
 
     if (body) {
