@@ -37,6 +37,16 @@ setInterval(() => {
 const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
 
+// Public configuration status check
+export async function GET() {
+  const isR2 = isR2Configured();
+  return NextResponse.json({
+    storageProvider: isR2 ? 'r2' : 'supabase',
+    isR2Configured: isR2,
+    bucketName: process.env.R2_BUCKET_NAME || 'donations-receipts',
+  });
+}
+
 export async function POST(req: NextRequest) {
   try {
     const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';

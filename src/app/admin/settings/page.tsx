@@ -38,7 +38,8 @@ import {
   RotateCcw,
   Key,
   Mail,
-  User
+  User,
+  Cloud
 } from 'lucide-react';
 
 export default function AdminSettingsPage() {
@@ -119,6 +120,20 @@ export default function AdminSettingsPage() {
       }
       return res.json();
     },
+  });
+
+  // Fetch Storage Provider Status (Cloudflare R2 vs Supabase Storage Fallback)
+  const { data: storageStatus } = useQuery({
+    queryKey: ['adminStorageStatus'],
+    queryFn: async () => {
+      try {
+        const res = await fetch('/api/uploads/presigned-url');
+        return await res.json();
+      } catch {
+        return { isR2Configured: false, storageProvider: 'supabase' };
+      }
+    },
+    staleTime: 30000,
   });
 
   // 1. Fetch Campaign and Payment Config Data
@@ -1049,8 +1064,8 @@ export default function AdminSettingsPage() {
           </div>
         </section>
 
-        {/* 5. CAMPAIGN TARGET & MAINTENANCE */}
-        <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* 5. CAMPAIGN TARGET, MAINTENANCE & CLOUD STORAGE */}
+        <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           
           {/* Target Amount Box */}
           <div className="p-6 rounded-3xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-subtle space-y-5">
@@ -1226,6 +1241,48 @@ export default function AdminSettingsPage() {
             >
               {isSavingMaintenance ? 'جارٍ التحديث...' : 'تطبيق وضع الصيانة'}
             </button>
+          </div>
+
+          {/* Cloud Storage Status Box */}
+          <div className="p-6 rounded-3xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-subtle space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-[#EAE8DE] dark:border-[#283849]">
+              <div className="flex items-center gap-2">
+                <Cloud className={`w-5 h-5 ${storageStatus?.isR2Configured ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-500'}`} />
+                <h3 className="font-bold text-sm text-[#153C32] dark:text-[#F3F5F4]">
+                  {language === 'ar' ? 'سحابة التخزين' : 'Cloud Storage'}
+                </h3>
+              </div>
+              <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${
+                storageStatus?.isR2Configured
+                  ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 text-emerald-700 dark:text-emerald-300'
+                  : 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 text-amber-700 dark:text-amber-300'
+              }`}>
+                {storageStatus?.isR2Configured ? 'Cloudflare R2 (نشط)' : 'Supabase (احتياطي)'}
+              </span>
+            </div>
+
+            <p className="text-xs text-[#738079] dark:text-[#A7B4B0] leading-relaxed">
+              {storageStatus?.isR2Configured
+                ? (language === 'ar' 
+                    ? 'الرفع المباشر مفعل على Cloudflare R2 بدون استهلاك باندويث Supabase أو Vercel.'
+                    : 'Direct upload active on Cloudflare R2 with zero egress.')
+                : (language === 'ar'
+                    ? 'يعمل التخزين حاليًا عبر Supabase Storage كوضع احتياطي. لتفعيل Cloudflare R2، يرجى إضافة متغيرات R2 في إعدادات Vercel.'
+                    : 'Running via Supabase Storage fallback. Add R2 variables in Vercel to activate R2.')}
+            </p>
+
+            <div className="p-3 rounded-xl bg-[#FAF9F5] dark:bg-[#111C2D] border border-[#EAE8DE] dark:border-[#283849] text-[11px] font-mono space-y-1">
+              <div className="flex justify-between text-[#738079] dark:text-[#A7B4B0]">
+                <span>المزود:</span>
+                <span className="font-bold text-[#153C32] dark:text-[#24B58A]">
+                  {storageStatus?.isR2Configured ? 'Cloudflare R2' : 'Supabase Storage'}
+                </span>
+              </div>
+              <div className="flex justify-between text-[#738079] dark:text-[#A7B4B0]">
+                <span>الباكت:</span>
+                <span className="font-bold text-[#191F1C] dark:text-[#F3F5F4]">{storageStatus?.bucketName || 'donations-receipts'}</span>
+              </div>
+            </div>
           </div>
 
         </section>
