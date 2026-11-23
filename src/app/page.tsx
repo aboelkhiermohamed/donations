@@ -1882,6 +1882,17 @@ export default function PublicDonationPage() {
               )}
             </div>
 
+            {/* View Full Transparency Ledger Page Button */}
+            <div className="pt-4 text-center">
+              <Link
+                href="/transparency"
+                className="inline-flex items-center gap-2 px-6 sm:px-8 py-3.5 rounded-2xl bg-[#153C32] dark:bg-[#24B58A] text-white dark:text-[#0B1220] text-xs sm:text-sm font-bold shadow-subtle hover:bg-[#1C4E41] dark:hover:bg-[#1fa07a] transition-all hover:scale-[1.02] active:scale-[0.98]"
+              >
+                <span>{language === 'ar' ? 'عرض سجل الشفافية بالكامل (جميع المساهمات)' : 'View Full Transparency Ledger'}</span>
+                <ArrowRight className="w-4 h-4 rtl-flip" />
+              </Link>
+            </div>
+
           </div>
         </section>
 
