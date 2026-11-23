@@ -5,23 +5,22 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
+  const shouldSend = searchParams.get('send') === '1' || searchParams.get('send') === 'true';
+
+  // Safeguard: Prevent accidental loops or crawlers from spamming Telegram API
+  if (!shouldSend) {
+    return NextResponse.json({
+      ok: true,
+      status: 'idle',
+      message: 'نظام فحص تيليجرام جاهز ومحمي لمنع التكرار التلقائي. لإرسال الرسالة التجريبية أضف ?send=1 إلى الرابط.',
+      exampleUrl: 'https://donations-tau.vercel.app/api/telegram/test-alert?send=1',
+    });
+  }
+
   const token = searchParams.get('token') || process.env.TELEGRAM_BOT_TOKEN || '9104128470:AAGnsqLdgfyUg0giXHup4a8DdFbZEfImSQw';
   let chatId = searchParams.get('chat_id') || process.env.TELEGRAM_CHAT_ID || '-5508827945';
 
   const startTime = Date.now();
-
-  // 1. First check getMe to verify the bot token health
-  const me = await callTelegramApi('getMe', token);
-  if (!me.ok) {
-    return NextResponse.json({
-      success: false,
-      step: 'getMe',
-      tokenUsed: token.slice(0, 10) + '...',
-      durationMs: Date.now() - startTime,
-      error: me.description || me.error || 'Failed to authenticate bot',
-      details: me,
-    }, { status: 400 });
-  }
 
   const testMessage = `🌿 <b>إشعار تجريبي: تسجيل مساهمة جديدة!</b>\n` +
     `═════════════════════\n` +
@@ -48,23 +47,7 @@ export async function GET(req: NextRequest) {
   };
 
   try {
-    // 1. Try sending to the specified chat ID
-    let result = await callTelegramApi('sendMessage', token, payload);
-
-    // 2. Only retry if Telegram explicitly responded with "chat not found"
-    if (!result.ok && result.error_code === 400 && chatId.startsWith('-') && !chatId.startsWith('-100')) {
-      const supergroupId = `-100${chatId.slice(1)}`;
-      payload.chat_id = supergroupId;
-      const superResult = await callTelegramApi('sendMessage', token, payload);
-      if (superResult.ok) {
-        result = {
-          ...superResult,
-          note: `Auto-switched from ${chatId} to supergroup ${supergroupId}`,
-        };
-        chatId = supergroupId;
-      }
-    }
-
+    const result = await callTelegramApi('sendMessage', token, payload);
     const durationMs = Date.now() - startTime;
 
     if (result.ok) {
@@ -84,7 +67,7 @@ export async function GET(req: NextRequest) {
         chatId,
         error: result.description || result.error || 'فشل إرسال الرسالة',
         tip: result.error_code === 400 || result.error_code === 403
-          ? 'تأكد من إضافة البوت الجديد كعضو أو مسؤول في الجروب ومنحه صلاحية إرسال الرسائل.'
+          ? 'تأكد من إضافة البوت كعضو أو مشرف في الجروب ومنحه صلاحية إرسال الرسائل.'
           : result.description,
         telegramResult: result,
       },

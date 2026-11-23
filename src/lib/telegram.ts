@@ -35,7 +35,7 @@ export async function callTelegramApi(endpoint: string, token: string, body?: an
         headers,
         family: 4,
         agent: false,
-        timeout: 15000,
+        timeout: 35000,
       },
       (res) => {
         let raw = '';
