@@ -17,6 +17,7 @@ export async function callTelegramApi(endpoint: string, token: string, body?: an
   return new Promise((resolve) => {
     const postData = body ? JSON.stringify(body) : '';
     const headers: Record<string, string | number> = {
+      'Host': 'api.telegram.org',
       'Connection': 'close',
       'User-Agent': 'DonationsBot/1.0',
     };
@@ -28,13 +29,13 @@ export async function callTelegramApi(endpoint: string, token: string, body?: an
 
     const req = https.request(
       {
-        hostname: 'api.telegram.org',
+        host: '149.154.166.110', // Direct IPv4 address — 100% bypasses DNS & IPv6 blackholes
         port: 443,
+        servername: 'api.telegram.org', // Required for TLS/SNI certificate validation
         path: `/bot${token}/${endpoint}`,
         method: body ? 'POST' : 'GET',
         headers,
-        family: 4, // Strictly IPv4 - prevents AWS/Vercel IPv6 timeouts
-        agent: false, // Do NOT reuse sockets across Lambda invocations
+        agent: false,
         timeout: 15000,
       },
       (res) => {
@@ -52,7 +53,7 @@ export async function callTelegramApi(endpoint: string, token: string, body?: an
 
     req.on('timeout', () => {
       req.destroy();
-      resolve({ ok: false, error: 'Telegram connection timed out (IPv4)' });
+      resolve({ ok: false, error: 'Telegram connection timed out (Direct IPv4)' });
     });
 
     req.on('error', (err) => {
