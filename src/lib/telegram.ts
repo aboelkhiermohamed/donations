@@ -28,7 +28,7 @@ export function callTelegramApi(endpoint: string, token: string, body?: any): Pr
               'Content-Length': Buffer.byteLength(postData),
             }
           : {},
-        timeout: 10000,
+        timeout: 20000,
       },
       (res) => {
         let data = '';

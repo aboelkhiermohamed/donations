@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { callTelegramApi } from '@/lib/telegram';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -29,7 +30,15 @@ export async function GET(req: NextRequest) {
 
   try {
     // 1. Verify Bot via getMe using strict IPv4
-    const getMeData = await callTelegramApi('getMe', token);
+    let getMeData: any;
+    try {
+      getMeData = await callTelegramApi('getMe', token);
+    } catch (err: any) {
+      return NextResponse.json(
+        { ok: false, step: 'getMe', error: err.message, durationMs: Date.now() - startTime },
+        { status: 500 }
+      );
+    }
 
     // 2. Handle 429 Rate Limit directly and gracefully
     if (!getMeData.ok && getMeData.error_code === 429) {
@@ -138,15 +147,28 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // 3. Set Webhook to our Vercel endpoint via IPv4
-    const webhookData = await callTelegramApi(
-      `setWebhook?url=${encodeURIComponent(webhookUrl)}`,
-      token
-    );
+    // 3. Set Webhook to our Vercel endpoint via POST with drop_pending_updates
+    let webhookData: any;
+    try {
+      webhookData = await callTelegramApi('setWebhook', token, {
+        url: webhookUrl,
+        drop_pending_updates: true,
+      });
+    } catch (err: any) {
+      return NextResponse.json(
+        {
+          ok: false,
+          step: 'setWebhook',
+          durationMs: Date.now() - startTime,
+          error: err.message,
+        },
+        { status: 500 }
+      );
+    }
 
     // 4. Test sending greeting message to group
     let testMessageData: any = null;
-    if (chatId) {
+    if (chatId && webhookData.ok) {
       const text = `🌿 <b>تم تفعيل بوت التليجرام وربطه بالمنصة بنجاح!</b>\n\nستصل هنا جميع إشعارات التبرعات الجديدة ورسائل المحفظة لحظياً ⚡\nاكتب <b>/stats</b> للحصول على الإحصائيات الحالية في أي وقت.`;
 
       try {
