@@ -17,7 +17,7 @@ export async function callTelegramApi(endpoint: string, token: string, body?: an
     method: body ? 'POST' : 'GET',
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
     body: body ? JSON.stringify(body) : undefined,
-    signal: AbortSignal.timeout(10000),
+    signal: AbortSignal.timeout(20000),
   };
 
   const res = await fetch(url, options);
