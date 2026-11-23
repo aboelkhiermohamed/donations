@@ -16,20 +16,26 @@ export function isTelegramConfigured(): boolean {
 export async function callTelegramApi(endpoint: string, token: string, body?: any): Promise<any> {
   return new Promise((resolve) => {
     const postData = body ? JSON.stringify(body) : '';
+    const headers: Record<string, string | number> = {
+      'Connection': 'close',
+      'User-Agent': 'DonationsBot/1.0',
+    };
+
+    if (body) {
+      headers['Content-Type'] = 'application/json';
+      headers['Content-Length'] = Buffer.byteLength(postData);
+    }
+
     const req = https.request(
       {
         hostname: 'api.telegram.org',
         port: 443,
         path: `/bot${token}/${endpoint}`,
         method: body ? 'POST' : 'GET',
-        headers: body
-          ? {
-              'Content-Type': 'application/json',
-              'Content-Length': Buffer.byteLength(postData),
-            }
-          : undefined,
+        headers,
         family: 4, // Strictly IPv4 - prevents AWS/Vercel IPv6 timeouts
-        timeout: 25000,
+        agent: false, // Do NOT reuse sockets across Lambda invocations
+        timeout: 15000,
       },
       (res) => {
         let raw = '';
@@ -46,7 +52,7 @@ export async function callTelegramApi(endpoint: string, token: string, body?: an
 
     req.on('timeout', () => {
       req.destroy();
-      resolve({ ok: false, error: 'Telegram connection timed out (IPv4 25s)' });
+      resolve({ ok: false, error: 'Telegram connection timed out (IPv4)' });
     });
 
     req.on('error', (err) => {
