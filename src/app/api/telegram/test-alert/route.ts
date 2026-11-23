@@ -5,10 +5,23 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const token = searchParams.get('token') || process.env.TELEGRAM_BOT_TOKEN || '9157826263:AAE47vZXtdv6SnBBkBWiHmB-SXo3V9av0z8';
+  const token = searchParams.get('token') || '9157826263:AAE47vZXtdv6SnBBkBWiHmB-SXo3V9av0z8';
   let chatId = searchParams.get('chat_id') || process.env.TELEGRAM_CHAT_ID || '-5508827945';
 
   const startTime = Date.now();
+
+  // 1. First check getMe to verify the bot token health
+  const me = await callTelegramApi('getMe', token);
+  if (!me.ok) {
+    return NextResponse.json({
+      success: false,
+      step: 'getMe',
+      tokenUsed: token.slice(0, 10) + '...',
+      durationMs: Date.now() - startTime,
+      error: me.description || me.error || 'Failed to authenticate bot',
+      details: me,
+    }, { status: 400 });
+  }
 
   const testMessage = `🌿 <b>إشعار تجريبي: تسجيل مساهمة جديدة!</b>\n` +
     `═════════════════════\n` +
