@@ -22,26 +22,68 @@ import {
 import Link from 'next/link';
 import ThemeToggle from '@/components/ThemeToggle';
 
+// In-memory cache across client-side route transitions
+let memoryAdminCache: { id: string; name: string; timestamp: number } | null = null;
+
+function getInitialAdminState() {
+  if (typeof window === 'undefined') {
+    return { isAdmin: false, isLoading: true, name: '' };
+  }
+  
+  // 1. Check memory cache (fastest, active during client-side navigation)
+  if (memoryAdminCache && (Date.now() - memoryAdminCache.timestamp < 1000 * 60 * 30)) {
+    return { isAdmin: true, isLoading: false, name: memoryAdminCache.name };
+  }
+
+  // 2. Check sessionStorage (persists across page reloads in the same browser session)
+  try {
+    const raw = sessionStorage.getItem('admin_session_cache');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.id && (Date.now() - parsed.timestamp < 1000 * 60 * 60 * 2)) {
+        memoryAdminCache = parsed;
+        return { isAdmin: true, isLoading: false, name: parsed.name || 'مسؤول الحملة' };
+      }
+    }
+  } catch {}
+
+  return { isAdmin: false, isLoading: true, name: '' };
+}
+
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { language, dir, toggleLanguage, t } = useLanguage();
   const router = useRouter();
   const pathname = usePathname();
 
-  // State
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  // State initialized with cached session if available
+  const [initialState] = useState(getInitialAdminState);
+  const [isAdmin, setIsAdmin] = useState(initialState.isAdmin);
+  const [isLoading, setIsLoading] = useState(initialState.isLoading);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
-  const [adminName, setAdminName] = useState('');
+  const [adminName, setAdminName] = useState(initialState.name);
 
-  // 1. Session verification & redirection
+  // 1. Session verification & background revalidation
   useEffect(() => {
+    let isMounted = true;
+
     async function verifyAdmin() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
 
         if (!session) {
-          router.replace('/admin/login');
+          memoryAdminCache = null;
+          try { sessionStorage.removeItem('admin_session_cache'); } catch {}
+          if (isMounted) router.replace('/admin/login');
+          return;
+        }
+
+        // If memory cache is valid for this user, keep state active without full reload
+        if (memoryAdminCache && memoryAdminCache.id === session.user.id && (Date.now() - memoryAdminCache.timestamp < 1000 * 60 * 15)) {
+          if (isMounted) {
+            setIsAdmin(true);
+            setIsLoading(false);
+          }
           return;
         }
 
@@ -52,21 +94,41 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           .maybeSingle();
 
         if (error || !admin) {
+          memoryAdminCache = null;
+          try { sessionStorage.removeItem('admin_session_cache'); } catch {}
           await supabase.auth.signOut();
-          router.replace('/admin/login');
+          if (isMounted) router.replace('/admin/login');
           return;
         }
 
-        setAdminName(admin.name || 'مسؤول الحملة');
-        setIsAdmin(true);
-        setIsLoading(false);
+        const newCache = {
+          id: session.user.id,
+          name: admin.name || 'مسؤول الحملة',
+          timestamp: Date.now()
+        };
+        memoryAdminCache = newCache;
+        try {
+          sessionStorage.setItem('admin_session_cache', JSON.stringify(newCache));
+        } catch {}
+
+        if (isMounted) {
+          setAdminName(newCache.name);
+          setIsAdmin(true);
+          setIsLoading(false);
+        }
       } catch (err) {
         console.error('Admin session error:', err);
-        router.replace('/admin/login');
+        if (isMounted && !memoryAdminCache) {
+          router.replace('/admin/login');
+        }
       }
     }
 
     verifyAdmin();
+
+    return () => {
+      isMounted = false;
+    };
   }, [router]);
 
   // 2. Fetch notification count and listen to new ones
@@ -102,6 +164,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }, [isAdmin]);
 
   const handleLogout = async () => {
+    memoryAdminCache = null;
+    try { sessionStorage.removeItem('admin_session_cache'); } catch {}
     await supabase.auth.signOut();
     router.replace('/admin/login');
   };
@@ -181,11 +245,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm font-bold transition-all ${
-                  item.active
-                    ? 'bg-white/15 dark:bg-[#24B58A]/20 text-white shadow-subtle'
-                    : 'text-[#E2F3EE]/75 dark:text-[#A7B4B0] hover:bg-white/10 dark:hover:bg-[#172436] hover:text-white'
-                }`}
+                className={`flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm font-bold transition-all ${item.active
+                  ? 'bg-white/15 dark:bg-[#24B58A]/20 text-white shadow-subtle'
+                  : 'text-[#E2F3EE]/75 dark:text-[#A7B4B0] hover:bg-white/10 dark:hover:bg-[#172436] hover:text-white'
+                  }`}
               >
                 <Icon className={`w-5 h-5 ${item.active ? 'text-[#B79B68] dark:text-[#24B58A]' : 'text-[#E2F3EE]/60 dark:text-[#80918C]'}`} />
                 <span>{item.label}</span>
@@ -323,9 +386,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     key={item.href}
                     href={item.href}
                     onClick={() => setMobileMenuOpen(false)}
-                    className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold ${
-                      item.active ? 'bg-white/15 dark:bg-[#24B58A]/20 text-white' : 'text-[#E2F3EE]/75 dark:text-[#A7B4B0] hover:bg-white/10'
-                    }`}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold ${item.active ? 'bg-white/15 dark:bg-[#24B58A]/20 text-white' : 'text-[#E2F3EE]/75 dark:text-[#A7B4B0] hover:bg-white/10'
+                      }`}
                   >
                     <Icon className="w-5 h-5 text-[#B79B68] dark:text-[#24B58A]" />
                     <span>{item.label}</span>

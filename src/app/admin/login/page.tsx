@@ -55,6 +55,15 @@ export default function AdminLoginPage() {
         throw new Error(language === 'ar' ? 'ليس لديك صلاحية الوصول إلى هذه اللوحة.' : 'You do not have administrative permissions.');
       }
 
+      // Pre-warm admin cache so dashboard opens instantaneously
+      try {
+        sessionStorage.setItem('admin_session_cache', JSON.stringify({
+          id: data.user.id,
+          name: adminProfile.name || 'مسؤول الحملة',
+          timestamp: Date.now()
+        }));
+      } catch {}
+
       router.replace('/admin/dashboard');
     } catch (err: any) {
       console.error('Login error:', err);
