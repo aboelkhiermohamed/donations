@@ -18,7 +18,6 @@ import {
   Globe,
   Coins,
   Users,
-  TrendingUp,
   RotateCcw
 } from 'lucide-react';
 
@@ -238,7 +237,7 @@ export default function FullTransparencyLedgerPage() {
           </div>
 
           {/* Summary Metric Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-5">
+          <div className="grid grid-cols-2 gap-3 sm:gap-5 max-w-lg mx-auto">
             
             <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-subtle text-center space-y-1">
               <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto mb-2">
@@ -261,18 +260,6 @@ export default function FullTransparencyLedgerPage() {
               </span>
               <span className="text-lg sm:text-2xl font-black text-[#191F1C] dark:text-[#F3F5F4] block">
                 {totalCount.toLocaleString('en-US')}
-              </span>
-            </div>
-
-            <div className="col-span-2 sm:col-span-1 p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] shadow-subtle text-center space-y-1">
-              <div className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center mx-auto mb-2">
-                <TrendingUp className="w-4 h-4" />
-              </div>
-              <span className="text-[11px] sm:text-xs text-[#738079] dark:text-[#A7B4B0] font-medium block">
-                {language === 'ar' ? 'طريقة التحميل' : 'Loading Engine'}
-              </span>
-              <span className="text-xs sm:text-sm font-bold text-[#153C32] dark:text-[#24B58A] block pt-1">
-                {language === 'ar' ? 'دفعات ذكية (25 بكل دفعة)' : 'Smart Chunks (25/chunk)'}
               </span>
             </div>
 
