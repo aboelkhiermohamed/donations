@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const token = searchParams.get('token') || '9157826263:AAE47vZXtdv6SnBBkBWiHmB-SXo3V9av0z8';
+  const token = searchParams.get('token') || process.env.TELEGRAM_BOT_TOKEN || '9282410484:AAF5HY-I99PZo8Z2VnEXlD4QZj8my4KEl88';
   let chatId = searchParams.get('chat_id') || process.env.TELEGRAM_CHAT_ID || '-5508827945';
 
   const startTime = Date.now();
