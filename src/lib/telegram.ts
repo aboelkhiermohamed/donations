@@ -1,5 +1,3 @@
-import https from 'node:https';
-
 /**
  * Telegram Bot Integration
  * Provides instant real-time alerts and stats dispatching for campaign organizers.
@@ -10,81 +8,24 @@ export function isTelegramConfigured(): boolean {
 }
 
 /**
- * Robust Telegram API caller using Node's native https with family: 4.
- * This completely avoids the Vercel / AWS Lambda IPv6 blackhole that causes fetch() to hang.
+ * Clean, simple, and direct Telegram API caller using standard fetch.
  */
 export async function callTelegramApi(endpoint: string, token: string, body?: any): Promise<any> {
-  return new Promise((resolve) => {
-    const postData = body ? JSON.stringify(body) : '';
-    const headers: Record<string, string | number> = {
-      'Connection': 'close',
-      'User-Agent': 'DonationsPlatform/1.0',
-    };
-
-    if (body) {
-      headers['Content-Type'] = 'application/json';
-      headers['Content-Length'] = Buffer.byteLength(postData);
-    }
-
-    const t0 = Date.now();
-    const timings: Record<string, number> = {};
-
-    const req = https.request(
-      {
-        hostname: 'api.telegram.org',
-        port: 443,
-        path: `/bot${token}/${endpoint}`,
-        method: body ? 'POST' : 'GET',
-        headers,
-        family: 4,
-        agent: false,
-        timeout: 30000, // 30s so we don't prematurely abort before Telegram responds
+  const url = `https://api.telegram.org/bot${token}/${endpoint}`;
+  try {
+    const res = await fetch(url, {
+      method: body ? 'POST' : 'GET',
+      headers: {
+        ...(body ? { 'Content-Type': 'application/json' } : {}),
       },
-      (res) => {
-        timings.firstByteMs = Date.now() - t0;
-        let raw = '';
-        res.on('data', (chunk) => (raw += chunk));
-        res.on('end', () => {
-          timings.totalMs = Date.now() - t0;
-          try {
-            const parsed = JSON.parse(raw);
-            resolve({ ...parsed, timings });
-          } catch {
-            resolve({ ok: false, error: 'Invalid JSON', raw, timings });
-          }
-        });
-      }
-    );
-
-    req.on('socket', (socket) => {
-      socket.on('lookup', (err, address) => {
-        timings.dnsMs = Date.now() - t0;
-        timings.resolvedIp = address;
-      });
-      socket.on('connect', () => {
-        timings.tcpMs = Date.now() - t0;
-      });
-      socket.on('secureConnect', () => {
-        timings.tlsMs = Date.now() - t0;
-      });
+      body: body ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(12000),
+      cache: 'no-store',
     });
-
-    req.on('timeout', () => {
-      timings.timeoutAtMs = Date.now() - t0;
-      req.destroy();
-      resolve({ ok: false, error: 'Telegram connection timed out (30s)', timings });
-    });
-
-    req.on('error', (err) => {
-      timings.errorMs = Date.now() - t0;
-      resolve({ ok: false, error: err.message, timings });
-    });
-
-    if (body) {
-      req.write(postData);
-    }
-    req.end();
-  });
+    return await res.json();
+  } catch (err: any) {
+    return { ok: false, error: err.message, description: err.message };
+  }
 }
 
 interface SendTelegramOptions {
