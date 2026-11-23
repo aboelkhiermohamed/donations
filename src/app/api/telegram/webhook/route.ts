@@ -2,6 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { sendTelegramMessage } from '@/lib/telegram';
 
+export const dynamic = 'force-dynamic';
+
+export async function GET() {
+  return NextResponse.json({
+    ok: true,
+    status: 'Telegram Webhook is live and ready to receive updates',
+  });
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
