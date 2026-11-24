@@ -31,7 +31,8 @@ export function isTelegramConfigured(): boolean {
 export async function sendTelegramApiRaw(
   endpoint: string,
   payload: Record<string, any> = {},
-  timeoutMs: number = 25000
+  timeoutMs: number = 25000,
+  customBaseUrl?: string
 ): Promise<TelegramSendResult> {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) {
@@ -43,7 +44,8 @@ export async function sendTelegramApiRaw(
     };
   }
 
-  const url = `https://api.telegram.org/bot${token}/${endpoint}`;
+  const base = (customBaseUrl || process.env.TELEGRAM_API_BASE_URL || 'https://api.telegram.org').replace(/\/$/, '');
+  const url = `${base}/bot${token}/${endpoint}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -155,7 +157,8 @@ export async function sendTelegramApiRaw(
 export async function sendTelegramMessageDirect(
   chatId: string,
   payload: NotificationPayload,
-  timeoutMs: number = 25000
+  timeoutMs: number = 25000,
+  customBaseUrl?: string
 ): Promise<TelegramSendResult> {
   const body = {
     chat_id: chatId,
@@ -166,14 +169,14 @@ export async function sendTelegramMessageDirect(
     ...(payload.reply_markup ? { reply_markup: payload.reply_markup } : {}),
   };
 
-  const result = await sendTelegramApiRaw('sendMessage', body, timeoutMs);
+  const result = await sendTelegramApiRaw('sendMessage', body, timeoutMs, customBaseUrl);
 
   // Auto-handle group migrated to supergroup
   if (!result.success && result.rawResponse?.parameters?.migrate_to_chat_id) {
     const newChatId = String(result.rawResponse.parameters.migrate_to_chat_id);
     console.warn(`[Telegram] Group migrated to supergroup: ${newChatId}. Retrying with new ID...`);
     body.chat_id = newChatId;
-    return sendTelegramApiRaw('sendMessage', body, timeoutMs);
+    return sendTelegramApiRaw('sendMessage', body, timeoutMs, customBaseUrl);
   }
 
   return result;
