@@ -15,26 +15,41 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  const success = await notifyNewDonation({
-    name: 'فاعل خير (تجربة نظام التنبيهات)',
-    amount: 500,
-    payment_method: 'vodafone_cash',
-    ref: 'TEST-ALERT-OK',
-    status: 'auto_verified',
-  });
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
 
-  if (success) {
+  if (!token || !chatId) {
     return NextResponse.json({
-      success: true,
-      message: 'تم إرسال إشعار التبرع التجريبي إلى جروب تليجرام بنجاح! 🚀',
-    });
+      success: false,
+      error: 'TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID is missing in Vercel environment variables',
+      hasToken: !!token,
+      hasChatId: !!chatId,
+    }, { status: 400 });
   }
 
-  return NextResponse.json(
-    {
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: '🌿 <b>إشعار تجريبي: فحص ربط البوت</b>\n\nنظام التنبيهات شغال بنجاح! 🚀',
+        parse_mode: 'HTML',
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+
+    const data = await res.json();
+
+    return NextResponse.json({
+      success: data.ok === true,
+      chatId,
+      telegramResponse: data,
+    }, { status: data.ok ? 200 : 400 });
+  } catch (err: any) {
+    return NextResponse.json({
       success: false,
-      message: 'فشل إرسال الإشعار. تأكد من صحة التوكن في Environment Variables وإضافة البوت للجروب.',
-    },
-    { status: 500 }
-  );
+      error: err.message,
+    }, { status: 500 });
+  }
 }
