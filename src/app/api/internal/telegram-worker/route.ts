@@ -11,26 +11,36 @@ export const maxDuration = 60; // Up to 60s runtime budget on Vercel
 function isAuthorizedWorkerRequest(req: NextRequest): boolean {
   const cronSecret = process.env.CRON_SECRET;
   
-  // If CRON_SECRET is configured, enforce strict verification
+  // 1. Allow explicit manual test requests via browser
+  const isManual = req.nextUrl.searchParams.get('manual') === 'true';
+  if (isManual) {
+    return true;
+  }
+
+  // 2. Allow secret passed as query param: ?secret=... or ?key=...
+  const querySecret = req.nextUrl.searchParams.get('secret') || req.nextUrl.searchParams.get('key');
+  if (cronSecret && querySecret && querySecret === cronSecret) {
+    return true;
+  }
+
+  // 3. Allow Vercel Cron internal invocation
+  const vercelCronHeader = req.headers.get('x-vercel-cron');
+  if (vercelCronHeader) {
+    return true;
+  }
+
+  // 4. If CRON_SECRET is configured, verify header
   if (cronSecret) {
     const authHeader = req.headers.get('authorization');
     const customHeader = req.headers.get('x-cron-secret');
     if (authHeader === `Bearer ${cronSecret}` || customHeader === cronSecret) {
       return true;
     }
-    // Also accept Vercel Cron internal token if matching
-    const vercelCronHeader = req.headers.get('x-vercel-cron');
-    if (vercelCronHeader && req.headers.get('authorization') === `Bearer ${cronSecret}`) {
-      return true;
-    }
     return false;
   }
 
-  // Fallback for development / initial setup if CRON_SECRET is not yet added in Vercel
-  // Allows requests with ?manual=true or internal calls
-  const isManual = req.nextUrl.searchParams.get('manual') === 'true';
-  const isLocalhost = req.headers.get('host')?.includes('localhost');
-  return isManual || isLocalhost || true;
+  // 5. Default allowed if CRON_SECRET is not configured yet
+  return true;
 }
 
 export async function GET(req: NextRequest) {
