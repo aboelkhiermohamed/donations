@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { findMatchForDonation } from '@/lib/matchingEngine';
 import { getActivePaymentMethods } from '@/lib/paymentService';
-import { notifyNewDonation } from '@/lib/telegram';
+import { enqueueDonationNotification } from '@/lib/telegram';
 
 // Anti-Spam Sliding-window rate limiter: max 15 donation attempts per IP per 10 minutes
 const donationRateLimitMap = new Map<string, { count: number; resetAt: number }>();
@@ -269,15 +269,19 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Dispatch Telegram Alert to Organizers (Non-blocking)
-    notifyNewDonation({
-      id: donation.id,
-      name: name.trim(),
-      amount: parsedAmount,
-      payment_method: payment_method,
-      ref: transaction_ref || null,
-      status: matchOutcome ? 'auto_verified' : 'pending',
-    }).catch(e => console.error('Telegram notification error:', e));
+    // Enqueue Telegram Notification into Durable Queue (Non-blocking to Telegram, durable in DB)
+    try {
+      await enqueueDonationNotification({
+        id: donation.id,
+        name: name.trim(),
+        amount: Number(amount),
+        paymentMethod: paymentMethod,
+        ref: transactionRef?.trim() || null,
+        status: matchOutcome.matched ? 'auto_verified' : 'pending',
+      });
+    } catch (notifErr: any) {
+      console.error('[Donations API] Non-fatal notification enqueue error:', notifErr.message);
+    }
 
     return NextResponse.json({
       success: true,

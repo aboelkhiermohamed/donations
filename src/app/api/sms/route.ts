@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { parseSMS } from '@/lib/smsParser';
 import { findMatch } from '@/lib/matchingEngine';
-import { notifyIncomingSms } from '@/lib/telegram';
+import { enqueueSmsNotification } from '@/lib/telegram';
 
 const smsRequestSchema = z.object({
   sender: z.string().min(1),
@@ -264,13 +264,18 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Non-blocking Telegram Notification for incoming wallet SMS
-    notifyIncomingSms({
-      sender,
-      amount: parsedSMS.amount,
-      transactionRef: parsedSMS.transaction_ref,
-      matched: matchResult.confidence === 100,
-    }).catch(e => console.error('Telegram SMS alert error:', e));
+    // Enqueue Telegram Notification into Durable Queue (Non-blocking to Telegram, durable in DB)
+    try {
+      await enqueueSmsNotification({
+        id: insertedTx.id,
+        sender,
+        amount: parsedSMS.amount,
+        transactionRef: parsedSMS.transaction_ref,
+        matched: matchResult.confidence === 100,
+      });
+    } catch (notifErr: any) {
+      console.error('[SMS API] Non-fatal notification enqueue error:', notifErr.message);
+    }
 
     return NextResponse.json({
       success: true,

@@ -1,139 +1,247 @@
 import https from 'node:https';
 import dns from 'node:dns';
+import { enqueueNotificationJob, NotificationPayload } from './notificationQueue';
 
-// Force IPv4 DNS resolution across Node.js process to bypass Vercel/AWS Lambda IPv6 blackhole
+// Ensure IPv4 resolution is prioritized across the Node.js process
 try {
   dns.setDefaultResultOrder('ipv4first');
 } catch {}
 
-/**
- * Direct Telegram API caller forcing IPv4 (family: 4).
- * Completely eliminates the AWS Lambda / Vercel IPv6 blackhole timeout.
- */
-export async function callTelegramApi(endpoint: string, token: string, body?: any): Promise<any> {
-  return new Promise((resolve) => {
-    const postData = body ? JSON.stringify(body) : '';
-    const headers: Record<string, string | number> = {
-      'User-Agent': 'DonationsApp/1.0',
-    };
+export type TelegramErrorType =
+  | 'rate_limited'
+  | 'invalid_request'
+  | 'unauthorized'
+  | 'forbidden'
+  | 'server_error'
+  | 'timeout'
+  | 'network_error';
 
-    if (body) {
-      headers['Content-Type'] = 'application/json';
-      headers['Content-Length'] = Buffer.byteLength(postData);
-    }
-
-    const req = https.request(
-      {
-        hostname: 'api.telegram.org',
-        port: 443,
-        path: `/bot${token}/${endpoint}`,
-        method: body ? 'POST' : 'GET',
-        headers,
-        family: 4,
-        timeout: 10000,
-      },
-      (res) => {
-        let raw = '';
-        res.on('data', (chunk) => (raw += chunk));
-        res.on('end', () => {
-          try {
-            resolve(JSON.parse(raw));
-          } catch {
-            resolve({ ok: false, error: 'Invalid JSON response from Telegram', raw });
-          }
-        });
-      }
-    );
-
-    req.on('timeout', () => {
-      req.destroy();
-      resolve({ ok: false, error: 'Telegram connection timed out (10s)' });
-    });
-
-    req.on('error', (err) => {
-      resolve({ ok: false, error: err.message });
-    });
-
-    if (body) {
-      req.write(postData);
-    }
-    req.end();
-  });
+export interface TelegramSendResult {
+  success: boolean;
+  messageId?: number;
+  errorType?: TelegramErrorType;
+  errorMessage?: string;
+  retryAfter?: number; // In seconds
+  isPermanentError?: boolean;
+  rawResponse?: any;
 }
 
 export function isTelegramConfigured(): boolean {
   return !!(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID);
 }
 
-interface SendTelegramOptions {
-  parse_mode?: 'HTML' | 'Markdown' | 'MarkdownV2';
-  reply_markup?: any;
-  silent?: boolean;
-}
-
 /**
- * Core function to send a message to the configured Telegram chat.
+ * Direct low-level dispatcher to api.telegram.org.
+ * Enforces IPv4, request timeout, and comprehensive error classification.
+ * NEVER exposes the bot token in logs.
  */
-export async function sendTelegramMessage(
-  text: string,
-  options: SendTelegramOptions = { parse_mode: 'HTML' }
-): Promise<boolean> {
+export async function sendTelegramApiRaw(
+  endpoint: string,
+  payload: Record<string, any>,
+  timeoutMs: number = 8000
+): Promise<TelegramSendResult> {
   const token = process.env.TELEGRAM_BOT_TOKEN;
-  let chatId = process.env.TELEGRAM_CHAT_ID;
-
-  if (!token || !chatId) {
-    console.warn('[Telegram] Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID in environment');
-    return false;
-  }
-
-  try {
-    const payload: any = {
-      chat_id: chatId,
-      text: text,
-      parse_mode: options.parse_mode || 'HTML',
-      disable_web_page_preview: true,
-      disable_notification: options.silent || false,
+  if (!token) {
+    return {
+      success: false,
+      errorType: 'unauthorized',
+      errorMessage: 'TELEGRAM_BOT_TOKEN is not configured in environment variables',
+      isPermanentError: true,
     };
-
-    if (options.reply_markup) {
-      payload.reply_markup = options.reply_markup;
-    }
-
-    const data = await callTelegramApi('sendMessage', token, payload);
-
-    // If group migrated to supergroup, auto-update chat_id and retry once
-    if (!data.ok && data.parameters?.migrate_to_chat_id) {
-      const newChatId = data.parameters.migrate_to_chat_id;
-      console.warn(`[Telegram] Group migrated to supergroup: ${newChatId}. Retrying...`);
-      payload.chat_id = newChatId;
-      const retryData = await callTelegramApi('sendMessage', token, payload);
-      return retryData.ok === true;
-    }
-
-    if (!data.ok) {
-      console.error('[Telegram] API Error:', data.description || data.error || data);
-      return false;
-    }
-
-    return true;
-  } catch (err: any) {
-    console.error('[Telegram] Dispatch Error:', err.message);
-    return false;
   }
+
+  const postData = JSON.stringify(payload);
+
+  return new Promise((resolve) => {
+    let resolved = false;
+
+    const req = https.request(
+      {
+        hostname: 'api.telegram.org',
+        port: 443,
+        path: `/bot${token}/${endpoint}`,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(postData),
+          'User-Agent': 'DonationsApp-Dispatcher/2.0',
+        },
+        family: 4,
+        timeout: timeoutMs,
+      },
+      (res) => {
+        let raw = '';
+        res.on('data', (chunk) => (raw += chunk));
+        res.on('end', () => {
+          if (resolved) return;
+          resolved = true;
+
+          try {
+            const data = JSON.parse(raw);
+            const statusCode = res.statusCode || 200;
+
+            if (data.ok) {
+              return resolve({
+                success: true,
+                messageId: data.result?.message_id,
+                rawResponse: data,
+              });
+            }
+
+            // Error Classification
+            const description = data.description || 'Unknown Telegram API error';
+            const retryAfter = data.parameters?.retry_after;
+
+            if (statusCode === 429 || retryAfter) {
+              return resolve({
+                success: false,
+                errorType: 'rate_limited',
+                errorMessage: description,
+                retryAfter: retryAfter || 30,
+                isPermanentError: false,
+                rawResponse: data,
+              });
+            }
+
+            if (statusCode === 401) {
+              return resolve({
+                success: false,
+                errorType: 'unauthorized',
+                errorMessage: description,
+                isPermanentError: true,
+                rawResponse: data,
+              });
+            }
+
+            if (statusCode === 403) {
+              return resolve({
+                success: false,
+                errorType: 'forbidden',
+                errorMessage: description,
+                isPermanentError: true,
+                rawResponse: data,
+              });
+            }
+
+            if (statusCode === 400) {
+              return resolve({
+                success: false,
+                errorType: 'invalid_request',
+                errorMessage: description,
+                isPermanentError: true,
+                rawResponse: data,
+              });
+            }
+
+            if (statusCode >= 500) {
+              return resolve({
+                success: false,
+                errorType: 'server_error',
+                errorMessage: `Telegram server error (${statusCode}): ${description}`,
+                isPermanentError: false,
+                rawResponse: data,
+              });
+            }
+
+            return resolve({
+              success: false,
+              errorType: 'network_error',
+              errorMessage: description,
+              isPermanentError: false,
+              rawResponse: data,
+            });
+          } catch {
+            return resolve({
+              success: false,
+              errorType: 'network_error',
+              errorMessage: 'Invalid JSON response from Telegram server',
+              isPermanentError: false,
+            });
+          }
+        });
+      }
+    );
+
+    req.on('timeout', () => {
+      if (resolved) return;
+      resolved = true;
+      req.destroy();
+      return resolve({
+        success: false,
+        errorType: 'timeout',
+        errorMessage: `Telegram request timed out after ${timeoutMs}ms`,
+        isPermanentError: false,
+      });
+    });
+
+    req.on('error', (err) => {
+      if (resolved) return;
+      resolved = true;
+      return resolve({
+        success: false,
+        errorType: 'network_error',
+        errorMessage: err.message,
+        isPermanentError: false,
+      });
+    });
+
+    req.write(postData);
+    req.end();
+  });
 }
 
 /**
- * 1. Notify organizers when a new donation submission is registered
+ * Dispatch a message payload to Telegram with group migration handling.
  */
-export async function notifyNewDonation(donation: {
-  id?: string;
+export async function sendTelegramMessageDirect(
+  chatId: string,
+  payload: NotificationPayload,
+  timeoutMs: number = 8000
+): Promise<TelegramSendResult> {
+  const body = {
+    chat_id: chatId,
+    text: payload.text,
+    parse_mode: payload.parse_mode || 'HTML',
+    disable_web_page_preview: payload.disable_web_page_preview !== false,
+    disable_notification: payload.disable_notification || false,
+    ...(payload.reply_markup ? { reply_markup: payload.reply_markup } : {}),
+  };
+
+  const result = await sendTelegramApiRaw('sendMessage', body, timeoutMs);
+
+  // Auto-handle group migrated to supergroup
+  if (!result.success && result.rawResponse?.parameters?.migrate_to_chat_id) {
+    const newChatId = String(result.rawResponse.parameters.migrate_to_chat_id);
+    console.warn(`[Telegram] Group migrated to supergroup: ${newChatId}. Retrying with new ID...`);
+    body.chat_id = newChatId;
+    return sendTelegramApiRaw('sendMessage', body, timeoutMs);
+  }
+
+  return result;
+}
+
+// ==========================================
+// BUSINESS EVENT ENQUEUEING FUNCTIONS
+// ==========================================
+
+/**
+ * 1. Enqueue notification for newly registered donation
+ */
+export async function enqueueDonationNotification(donation: {
+  id: string;
   name: string;
   amount: number;
-  payment_method: string;
+  paymentMethod: string;
   ref?: string | null;
   status: string;
 }) {
-  const methodLabel = donation.payment_method === 'vodafone_cash' ? 'فودافون كاش 📱' : 'InstaPay ⚡';
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  if (!chatId) {
+    console.warn('[Telegram] Skipping notification: TELEGRAM_CHAT_ID is not configured');
+    return { success: false, error: 'TELEGRAM_CHAT_ID not configured' };
+  }
+
+  const methodLabel = donation.paymentMethod === 'vodafone_cash' ? 'فودافون كاش 📱' : 'InstaPay ⚡';
   const statusLabel =
     donation.status === 'auto_verified'
       ? '✅ <b>معتمد ومطابق آلياً فوراً</b>'
@@ -159,19 +267,35 @@ export async function notifyNewDonation(donation: {
     ],
   };
 
-  return sendTelegramMessage(text, { parse_mode: 'HTML', reply_markup: inlineKeyboard });
+  return enqueueNotificationJob({
+    eventType: 'new_donation',
+    destinationChatId: chatId,
+    messagePayload: {
+      text,
+      parse_mode: 'HTML',
+      reply_markup: inlineKeyboard,
+    },
+    idempotencyKey: `donation_${donation.id}`,
+  });
 }
 
 /**
- * 2. Notify organizers when an incoming SMS arrives on the Gateway
+ * 2. Enqueue notification for incoming wallet SMS
  */
-export async function notifyIncomingSms(sms: {
+export async function enqueueSmsNotification(sms: {
+  id: string;
   sender: string;
   amount?: number | null;
   transactionRef?: string | null;
   matched: boolean;
   donorName?: string | null;
 }) {
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  if (!chatId) {
+    console.warn('[Telegram] Skipping notification: TELEGRAM_CHAT_ID is not configured');
+    return { success: false, error: 'TELEGRAM_CHAT_ID not configured' };
+  }
+
   const matchStatus = sms.matched
     ? `✅ <b>تمت المطابقة والاعتماد التلقائي!</b>\n👤 <b>المتبرع:</b> ${sms.donorName || 'مساهم'}`
     : '⚠️ <b>لم يتم ربطه بعد (بانتظار تسجيل المتبرع أو مراجعة يدوية)</b>';
@@ -194,23 +318,49 @@ export async function notifyIncomingSms(sms: {
     ],
   };
 
-  return sendTelegramMessage(text, { parse_mode: 'HTML', reply_markup: inlineKeyboard });
+  return enqueueNotificationJob({
+    eventType: 'incoming_sms',
+    destinationChatId: chatId,
+    messagePayload: {
+      text,
+      parse_mode: 'HTML',
+      reply_markup: inlineKeyboard,
+    },
+    idempotencyKey: `sms_${sms.id}`,
+  });
 }
 
 /**
- * 3. Notify organizers when a donation is manually verified by an admin
+ * 3. Enqueue notification for manually verified donation
  */
-export async function notifyDonationManualApproval(donation: {
+export async function enqueueManualApprovalNotification(donation: {
+  id: string;
   name: string;
   amount: number;
   adminName?: string;
   ref?: string | null;
 }) {
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  if (!chatId) return { success: false, error: 'TELEGRAM_CHAT_ID not configured' };
+
   const text = `✅ <b>تم اعتماد توثيق تبرع يدوياً</b>\n\n` +
     `👤 <b>المساهم:</b> ${donation.name}\n` +
     `💰 <b>المبلغ:</b> <b>${Number(donation.amount).toLocaleString('en-US')} ج.م</b>\n` +
     `${donation.ref ? `🔢 <b>الرقم المرجعي:</b> <code>${donation.ref}</code>\n` : ''}` +
     `👮‍♂️ <b>المعتمد:</b> ${donation.adminName || 'مسؤول الحملة'}`;
 
-  return sendTelegramMessage(text, { parse_mode: 'HTML' });
+  return enqueueNotificationJob({
+    eventType: 'manual_approval',
+    destinationChatId: chatId,
+    messagePayload: {
+      text,
+      parse_mode: 'HTML',
+    },
+    idempotencyKey: `approval_${donation.id}`,
+  });
 }
+
+// Backwards compatibility aliases for existing imports
+export const notifyNewDonation = enqueueDonationNotification;
+export const notifyIncomingSms = enqueueSmsNotification;
+export const notifyDonationManualApproval = enqueueManualApprovalNotification;

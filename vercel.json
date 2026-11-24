@@ -3,6 +3,12 @@
   "env": {
     "NODE_OPTIONS": "--dns-result-order=ipv4first"
   },
+  "crons": [
+    {
+      "path": "/api/internal/telegram-worker",
+      "schedule": "* * * * *"
+    }
+  ],
   "functions": {
     "src/app/api/**/*": {
       "maxDuration": 60
