@@ -1,20 +1,49 @@
 import { NextRequest, NextResponse, after } from 'next/server';
-import { enqueueNotificationJob } from '@/lib/notificationQueue';
-import { sendTelegramMessageDirect } from '@/lib/telegram';
+import { enqueueNotificationJob, clearNotificationQueue } from '@/lib/notificationQueue';
+import { sendTelegramMessageDirect, sendTelegramApiRaw } from '@/lib/telegram';
 import { runTelegramWorker } from '@/lib/notificationWorker';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
+
+  // 1. Handle Queue / Rate Limit Reset if requested (?reset=1 or ?clear_queue=1)
+  const shouldReset = searchParams.get('reset') === '1' || searchParams.get('clear_queue') === '1';
+  if (shouldReset) {
+    const resetResult = await clearNotificationQueue({ resetRateLimits: true });
+    return NextResponse.json({
+      ok: true,
+      message: 'تم تصفية طابور الرسائل وإعادة ضبط حدود الـ Rate Limits بنجاح!',
+      purged: resetResult,
+    });
+  }
+
+  // 2. Handle Bot Diagnostic / getMe (?get_me=1)
+  if (searchParams.get('get_me') === '1') {
+    const getMeResult = await sendTelegramApiRaw('getMe', {}, 6000);
+    return NextResponse.json({
+      ok: getMeResult.success,
+      botTokenConfigured: !!process.env.TELEGRAM_BOT_TOKEN,
+      configuredChatId: process.env.TELEGRAM_CHAT_ID || 'NOT_CONFIGURED',
+      getMe: getMeResult,
+    });
+  }
+
   const shouldSend = searchParams.get('send') === '1' || searchParams.get('send') === 'true';
 
   if (!shouldSend) {
     return NextResponse.json({
       ok: true,
-      message: 'نظام فحص التنبيهات جاهز ومحمي. لإرسال إشعار تجريبي عبر طابور المهام، أضف ?send=1.',
-      example: 'https://donations-tau.vercel.app/api/telegram/test-alert?send=1',
-      workerUrl: 'https://donations-tau.vercel.app/api/internal/telegram-worker',
+      status: 'Diagnostic endpoint ready',
+      configuredChatId: process.env.TELEGRAM_CHAT_ID || 'NOT_SET',
+      botTokenSet: !!process.env.TELEGRAM_BOT_TOKEN,
+      examples: {
+        sendViaQueue: '/api/telegram/test-alert?send=1',
+        sendDirectWithChatId: '/api/telegram/test-alert?send=1&direct=1&chat_id=-1004417332581',
+        clearOldStuckQueue: '/api/telegram/test-alert?reset=1',
+        checkBotIdentity: '/api/telegram/test-alert?get_me=1',
+      },
     });
   }
 
@@ -22,26 +51,28 @@ export async function GET(req: NextRequest) {
   if (!chatId) {
     return NextResponse.json({
       success: false,
-      error: 'TELEGRAM_CHAT_ID is missing in environment variables',
+      error: 'TELEGRAM_CHAT_ID is missing in environment variables and was not passed in query',
     }, { status: 400 });
   }
 
   const isDirect = searchParams.get('direct') === '1';
 
   const testPayload = {
-    text: `🌿 <b>إشعار تجريبي: فحص ربط طابور الإشعارات</b>\n` +
+    text: `🌿 <b>إشعار تجريبي: فحص ربط البوت</b>\n` +
       `═════════════════════\n` +
-      `✅ <b>الحالة:</b> نظام طابور الرسائل يعمل بنجاح!\n` +
+      `✅ <b>الحالة:</b> البوت متصل بنجاح وجاهز لاستقبال التبرعات!\n` +
+      `🎯 <b>معرف الجروب:</b> <code>${chatId}</code>\n` +
       `🕒 <i>وقت الفحص: ${new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</i>`,
     parse_mode: 'HTML' as const,
   };
 
+  // Direct send mode (bypasses queue for instant Telegram API verification)
   if (isDirect) {
-    // Direct send test
-    const result = await sendTelegramMessageDirect(chatId, testPayload);
+    const result = await sendTelegramMessageDirect(chatId, testPayload, 10000);
     return NextResponse.json({
       success: result.success,
       mode: 'direct',
+      chatId,
       result,
     }, { status: result.success ? 200 : 400 });
   }
@@ -66,6 +97,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     success: enqueueResult.success,
     mode: 'durable_queue',
+    chatId,
     jobId: enqueueResult.jobId,
     message: 'تم إدراج الإشعار التجريبي في طابور المهام بنجاح 🚀 تم تشغيل الـ Worker في الخلفية فورياً عبر after().',
   });

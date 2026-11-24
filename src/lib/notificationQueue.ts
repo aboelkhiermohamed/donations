@@ -504,3 +504,81 @@ export async function setChatRateLimitState(chatId: string, blockedUntil: Date):
     console.error('[NotificationQueue] Save Rate Limit State Error:', err.message);
   }
 }
+
+/**
+ * Clear or reset notification queue and rate limits.
+ * Useful for purging stuck jobs with invalid chat IDs and resetting rate limits.
+ */
+export async function clearNotificationQueue(options: {
+  destinationChatId?: string;
+  resetRateLimits?: boolean;
+} = {}): Promise<{ deletedFromTable: number; deletedFromFallback: number }> {
+  let deletedFromTable = 0;
+  let deletedFromFallback = 0;
+
+  // 1. Clear from dedicated table if available
+  try {
+    let query = supabaseAdmin.from('notification_jobs').delete();
+    if (options.destinationChatId) {
+      query = query.eq('destination_chat_id', options.destinationChatId);
+    } else {
+      query = query.neq('status', 'sent');
+    }
+    const { data } = await query.select('id');
+    deletedFromTable = data?.length || 0;
+  } catch {
+    // ignore
+  }
+
+  // 2. Clear from fallback settings store
+  try {
+    const { data: row } = await supabaseAdmin
+      .from('settings')
+      .select('*')
+      .eq('key', FALLBACK_SETTINGS_KEY)
+      .maybeSingle();
+
+    if (row && Array.isArray(row.value)) {
+      const beforeCount = row.value.length;
+      let remaining = row.value;
+      if (options.destinationChatId) {
+        remaining = row.value.filter((j: any) => j.destination_chat_id !== options.destinationChatId);
+      } else {
+        remaining = [];
+      }
+      deletedFromFallback = beforeCount - remaining.length;
+
+      await supabaseAdmin.from('settings').update({
+        value: remaining,
+        updated_at: new Date().toISOString(),
+      }).eq('key', FALLBACK_SETTINGS_KEY);
+    }
+  } catch {
+    // ignore
+  }
+
+  // 3. Reset rate limits if requested
+  if (options.resetRateLimits) {
+    try {
+      if (options.destinationChatId) {
+        await supabaseAdmin.from('telegram_rate_limits').delete().eq('chat_id', options.destinationChatId);
+      } else {
+        await supabaseAdmin.from('telegram_rate_limits').delete().neq('chat_id', '__none__');
+      }
+    } catch {}
+
+    try {
+      if (options.destinationChatId) {
+        const { data: rRow } = await supabaseAdmin.from('settings').select('*').eq('key', RATE_LIMIT_SETTINGS_KEY).maybeSingle();
+        if (rRow?.value && typeof rRow.value === 'object') {
+          delete rRow.value[options.destinationChatId];
+          await supabaseAdmin.from('settings').update({ value: rRow.value, updated_at: new Date().toISOString() }).eq('key', RATE_LIMIT_SETTINGS_KEY);
+        }
+      } else {
+        await supabaseAdmin.from('settings').update({ value: {}, updated_at: new Date().toISOString() }).eq('key', RATE_LIMIT_SETTINGS_KEY);
+      }
+    } catch {}
+  }
+
+  return { deletedFromTable, deletedFromFallback };
+}
