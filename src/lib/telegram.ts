@@ -31,7 +31,7 @@ export function isTelegramConfigured(): boolean {
 export async function sendTelegramApiRaw(
   endpoint: string,
   payload: Record<string, any> = {},
-  timeoutMs: number = 25000,
+  timeoutMs: number = 35000,
   customBaseUrl?: string
 ): Promise<TelegramSendResult> {
   const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -157,7 +157,7 @@ export async function sendTelegramApiRaw(
 export async function sendTelegramMessageDirect(
   chatId: string,
   payload: NotificationPayload,
-  timeoutMs: number = 25000,
+  timeoutMs: number = 35000,
   customBaseUrl?: string
 ): Promise<TelegramSendResult> {
   const body = {

@@ -100,8 +100,8 @@ export async function runTelegramWorker(options: WorkerOptions = {}): Promise<Wo
         continue;
       }
 
-      // Dispatch message to Telegram
-      const result = await sendTelegramMessageDirect(job.destination_chat_id, job.message_payload, 8000);
+      // Dispatch message to Telegram (35s timeout allows capturing 429 tarpit responses cleanly)
+      const result = await sendTelegramMessageDirect(job.destination_chat_id, job.message_payload, 35000);
 
       if (result.success) {
         await updateNotificationJobResult({

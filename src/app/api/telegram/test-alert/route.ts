@@ -39,14 +39,14 @@ export async function GET(req: NextRequest) {
     };
 
     // Step A: Check getMe (Bot Identity & API reachability)
-    const getMe = await sendTelegramApiRaw('getMe', {}, 15000, customBaseUrl);
+    const getMe = await sendTelegramApiRaw('getMe', {}, 35000, customBaseUrl);
     diagnosticReport.getMe = getMe;
 
     const botId = getMe.rawResponse?.result?.id;
 
     if (targetChatId) {
       // Step B: Check getChat (Chat exists & Type)
-      const getChat = await sendTelegramApiRaw('getChat', { chat_id: targetChatId }, 15000, customBaseUrl);
+      const getChat = await sendTelegramApiRaw('getChat', { chat_id: targetChatId }, 35000, customBaseUrl);
       diagnosticReport.getChat = getChat;
 
       // Step C: Check bot membership status in the group
@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
         const getMember = await sendTelegramApiRaw(
           'getChatMember',
           { chat_id: targetChatId, user_id: botId },
-          15000,
+          35000,
           customBaseUrl
         );
         diagnosticReport.botMembership = getMember;
@@ -100,9 +100,9 @@ export async function GET(req: NextRequest) {
   };
 
   // Direct send mode (bypasses queue for instant Telegram API verification)
-  // Timeout set to 25s to capture actual response even if Telegram is tarpitting
+  // Timeout set to 35s to capture actual response even if Telegram is tarpitting
   if (isDirect) {
-    const result = await sendTelegramMessageDirect(targetChatId, testPayload, 25000, customBaseUrl);
+    const result = await sendTelegramMessageDirect(targetChatId, testPayload, 35000, customBaseUrl);
     return NextResponse.json({
       success: result.success,
       mode: 'direct',
