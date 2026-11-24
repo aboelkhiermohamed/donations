@@ -1,11 +1,4 @@
-import https from 'node:https';
-import dns from 'node:dns';
 import { enqueueNotificationJob, NotificationPayload } from './notificationQueue';
-
-// Ensure IPv4 resolution is prioritized across the Node.js process
-try {
-  dns.setDefaultResultOrder('ipv4first');
-} catch {}
 
 export type TelegramErrorType =
   | 'rate_limited'
@@ -31,14 +24,14 @@ export function isTelegramConfigured(): boolean {
 }
 
 /**
- * Direct low-level dispatcher to api.telegram.org.
- * Enforces IPv4, request timeout, and comprehensive error classification.
- * NEVER exposes the bot token in logs.
+ * Native fetch-based Telegram Bot API dispatcher.
+ * Uses standard Next.js 15 global fetch (undici) with RFC 8305 Happy Eyeballs.
+ * Enforces AbortSignal timeouts, comprehensive error classification, and never leaks bot token in logs.
  */
 export async function sendTelegramApiRaw(
   endpoint: string,
-  payload: Record<string, any>,
-  timeoutMs: number = 8000
+  payload: Record<string, any> = {},
+  timeoutMs: number = 25000
 ): Promise<TelegramSendResult> {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) {
@@ -50,144 +43,110 @@ export async function sendTelegramApiRaw(
     };
   }
 
-  const postData = JSON.stringify(payload);
+  const url = `https://api.telegram.org/bot${token}/${endpoint}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-  return new Promise((resolve) => {
-    let resolved = false;
-
-    const req = https.request(
-      {
-        hostname: 'api.telegram.org',
-        port: 443,
-        path: `/bot${token}/${endpoint}`,
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(postData),
-          'User-Agent': 'DonationsApp-Dispatcher/2.0',
-        },
-        family: 4,
-        timeout: timeoutMs,
+  try {
+    const isGet = Object.keys(payload).length === 0;
+    const res = await fetch(url, {
+      method: isGet ? 'GET' : 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'DonationsApp-Dispatcher/3.0',
       },
-      (res) => {
-        let raw = '';
-        res.on('data', (chunk) => (raw += chunk));
-        res.on('end', () => {
-          if (resolved) return;
-          resolved = true;
-
-          try {
-            const data = JSON.parse(raw);
-            const statusCode = res.statusCode || 200;
-
-            if (data.ok) {
-              return resolve({
-                success: true,
-                messageId: data.result?.message_id,
-                rawResponse: data,
-              });
-            }
-
-            // Error Classification
-            const description = data.description || 'Unknown Telegram API error';
-            const retryAfter = data.parameters?.retry_after;
-
-            if (statusCode === 429 || retryAfter) {
-              return resolve({
-                success: false,
-                errorType: 'rate_limited',
-                errorMessage: description,
-                retryAfter: retryAfter || 30,
-                isPermanentError: false,
-                rawResponse: data,
-              });
-            }
-
-            if (statusCode === 401) {
-              return resolve({
-                success: false,
-                errorType: 'unauthorized',
-                errorMessage: description,
-                isPermanentError: true,
-                rawResponse: data,
-              });
-            }
-
-            if (statusCode === 403) {
-              return resolve({
-                success: false,
-                errorType: 'forbidden',
-                errorMessage: description,
-                isPermanentError: true,
-                rawResponse: data,
-              });
-            }
-
-            if (statusCode === 400) {
-              return resolve({
-                success: false,
-                errorType: 'invalid_request',
-                errorMessage: description,
-                isPermanentError: true,
-                rawResponse: data,
-              });
-            }
-
-            if (statusCode >= 500) {
-              return resolve({
-                success: false,
-                errorType: 'server_error',
-                errorMessage: `Telegram server error (${statusCode}): ${description}`,
-                isPermanentError: false,
-                rawResponse: data,
-              });
-            }
-
-            return resolve({
-              success: false,
-              errorType: 'network_error',
-              errorMessage: description,
-              isPermanentError: false,
-              rawResponse: data,
-            });
-          } catch {
-            return resolve({
-              success: false,
-              errorType: 'network_error',
-              errorMessage: 'Invalid JSON response from Telegram server',
-              isPermanentError: false,
-            });
-          }
-        });
-      }
-    );
-
-    req.on('timeout', () => {
-      if (resolved) return;
-      resolved = true;
-      req.destroy();
-      return resolve({
-        success: false,
-        errorType: 'timeout',
-        errorMessage: `Telegram request timed out after ${timeoutMs}ms`,
-        isPermanentError: false,
-      });
+      ...(isGet ? {} : { body: JSON.stringify(payload) }),
+      signal: controller.signal,
     });
+    clearTimeout(timer);
 
-    req.on('error', (err) => {
-      if (resolved) return;
-      resolved = true;
-      return resolve({
+    const data = await res.json().catch(() => null);
+    if (!data) {
+      return {
         success: false,
         errorType: 'network_error',
-        errorMessage: err.message,
+        errorMessage: `Empty or non-JSON response from Telegram server (HTTP ${res.status})`,
         isPermanentError: false,
-      });
-    });
+      };
+    }
 
-    req.write(postData);
-    req.end();
-  });
+    if (data.ok) {
+      return {
+        success: true,
+        messageId: data.result?.message_id,
+        rawResponse: data,
+      };
+    }
+
+    const description = data.description || 'Unknown Telegram API error';
+    const retryAfter = data.parameters?.retry_after;
+
+    if (res.status === 429 || retryAfter) {
+      return {
+        success: false,
+        errorType: 'rate_limited',
+        errorMessage: description,
+        retryAfter: retryAfter || 30,
+        isPermanentError: false,
+        rawResponse: data,
+      };
+    }
+
+    if (res.status === 401) {
+      return {
+        success: false,
+        errorType: 'unauthorized',
+        errorMessage: description,
+        isPermanentError: true,
+        rawResponse: data,
+      };
+    }
+
+    if (res.status === 403) {
+      return {
+        success: false,
+        errorType: 'forbidden',
+        errorMessage: description,
+        isPermanentError: true,
+        rawResponse: data,
+      };
+    }
+
+    if (res.status === 400) {
+      return {
+        success: false,
+        errorType: 'invalid_request',
+        errorMessage: description,
+        isPermanentError: true,
+        rawResponse: data,
+      };
+    }
+
+    return {
+      success: false,
+      errorType: res.status >= 500 ? 'server_error' : 'network_error',
+      errorMessage: description,
+      isPermanentError: false,
+      rawResponse: data,
+    };
+  } catch (err: any) {
+    clearTimeout(timer);
+    const isTimeout =
+      err.name === 'AbortError' ||
+      err.name === 'TimeoutError' ||
+      err.code === 20 ||
+      err.message?.toLowerCase().includes('timeout') ||
+      err.message?.toLowerCase().includes('aborted');
+
+    return {
+      success: false,
+      errorType: isTimeout ? 'timeout' : 'network_error',
+      errorMessage: isTimeout
+        ? `Telegram request timed out after ${timeoutMs}ms (server unreachable or rate-limiting tarpit)`
+        : err.message,
+      isPermanentError: false,
+    };
+  }
 }
 
 /**
@@ -196,7 +155,7 @@ export async function sendTelegramApiRaw(
 export async function sendTelegramMessageDirect(
   chatId: string,
   payload: NotificationPayload,
-  timeoutMs: number = 8000
+  timeoutMs: number = 25000
 ): Promise<TelegramSendResult> {
   const body = {
     chat_id: chatId,
@@ -360,7 +319,7 @@ export async function enqueueManualApprovalNotification(donation: {
   });
 }
 
-// Backwards compatibility aliases for existing imports
+// Backwards compatibility aliases
 export const notifyNewDonation = enqueueDonationNotification;
 export const notifyIncomingSms = enqueueSmsNotification;
 export const notifyDonationManualApproval = enqueueManualApprovalNotification;

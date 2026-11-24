@@ -4,11 +4,12 @@ import { sendTelegramMessageDirect, sendTelegramApiRaw } from '@/lib/telegram';
 import { runTelegramWorker } from '@/lib/notificationWorker';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
 
-  // 1. Handle Queue / Rate Limit Reset if requested (?reset=1 or ?clear_queue=1)
+  // 1. Reset / Purge Queue & Rate Limits (?reset=1)
   const shouldReset = searchParams.get('reset') === '1' || searchParams.get('clear_queue') === '1';
   if (shouldReset) {
     const resetResult = await clearNotificationQueue({ resetRateLimits: true });
@@ -19,15 +20,45 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  // 2. Handle Bot Diagnostic / getMe (?get_me=1)
-  if (searchParams.get('get_me') === '1') {
-    const getMeResult = await sendTelegramApiRaw('getMe', {}, 6000);
-    return NextResponse.json({
-      ok: getMeResult.success,
-      botTokenConfigured: !!process.env.TELEGRAM_BOT_TOKEN,
-      configuredChatId: process.env.TELEGRAM_CHAT_ID || 'NOT_CONFIGURED',
-      getMe: getMeResult,
-    });
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const configuredChatId = process.env.TELEGRAM_CHAT_ID;
+  const targetChatId = searchParams.get('chat_id') || configuredChatId;
+
+  // 2. Full Diagnostic Mode (?diagnose=1 or ?check=1)
+  // Tests getMe, getChat, and getChatMember to identify exact permissions and validity
+  const shouldDiagnose = searchParams.get('diagnose') === '1' || searchParams.get('check') === '1';
+  if (shouldDiagnose) {
+    const diagnosticReport: Record<string, any> = {
+      timestamp: new Date().toISOString(),
+      botTokenConfigured: !!token,
+      botTokenPrefix: token ? `${token.slice(0, 10)}...` : null,
+      configuredChatId: configuredChatId || 'NOT_SET',
+      targetChatId: targetChatId || 'NOT_SET',
+    };
+
+    // Step A: Check getMe (Bot Identity & API reachability)
+    const getMe = await sendTelegramApiRaw('getMe', {}, 15000);
+    diagnosticReport.getMe = getMe;
+
+    const botId = getMe.rawResponse?.result?.id;
+
+    if (targetChatId) {
+      // Step B: Check getChat (Chat exists & Type)
+      const getChat = await sendTelegramApiRaw('getChat', { chat_id: targetChatId }, 15000);
+      diagnosticReport.getChat = getChat;
+
+      // Step C: Check bot membership status in the group
+      if (botId) {
+        const getMember = await sendTelegramApiRaw(
+          'getChatMember',
+          { chat_id: targetChatId, user_id: botId },
+          15000
+        );
+        diagnosticReport.botMembership = getMember;
+      }
+    }
+
+    return NextResponse.json(diagnosticReport);
   }
 
   const shouldSend = searchParams.get('send') === '1' || searchParams.get('send') === 'true';
@@ -36,19 +67,18 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       status: 'Diagnostic endpoint ready',
-      configuredChatId: process.env.TELEGRAM_CHAT_ID || 'NOT_SET',
-      botTokenSet: !!process.env.TELEGRAM_BOT_TOKEN,
-      examples: {
-        sendViaQueue: '/api/telegram/test-alert?send=1',
-        sendDirectWithChatId: '/api/telegram/test-alert?send=1&direct=1&chat_id=-1004417332581',
-        clearOldStuckQueue: '/api/telegram/test-alert?reset=1',
-        checkBotIdentity: '/api/telegram/test-alert?get_me=1',
+      configuredChatId: configuredChatId || 'NOT_SET',
+      botTokenSet: !!token,
+      endpoints: {
+        diagnoseFullBotAndChat: `/api/telegram/test-alert?diagnose=1${targetChatId ? `&chat_id=${targetChatId}` : ''}`,
+        sendDirectTest: `/api/telegram/test-alert?send=1&direct=1${targetChatId ? `&chat_id=${targetChatId}` : ''}`,
+        sendViaDurableQueue: `/api/telegram/test-alert?send=1${targetChatId ? `&chat_id=${targetChatId}` : ''}`,
+        resetAndClearQueue: '/api/telegram/test-alert?reset=1',
       },
     });
   }
 
-  const chatId = searchParams.get('chat_id') || process.env.TELEGRAM_CHAT_ID;
-  if (!chatId) {
+  if (!targetChatId) {
     return NextResponse.json({
       success: false,
       error: 'TELEGRAM_CHAT_ID is missing in environment variables and was not passed in query',
@@ -61,18 +91,19 @@ export async function GET(req: NextRequest) {
     text: `🌿 <b>إشعار تجريبي: فحص ربط البوت</b>\n` +
       `═════════════════════\n` +
       `✅ <b>الحالة:</b> البوت متصل بنجاح وجاهز لاستقبال التبرعات!\n` +
-      `🎯 <b>معرف الجروب:</b> <code>${chatId}</code>\n` +
+      `🎯 <b>معرف الجروب:</b> <code>${targetChatId}</code>\n` +
       `🕒 <i>وقت الفحص: ${new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</i>`,
     parse_mode: 'HTML' as const,
   };
 
   // Direct send mode (bypasses queue for instant Telegram API verification)
+  // Timeout set to 25s to capture actual response even if Telegram is tarpitting
   if (isDirect) {
-    const result = await sendTelegramMessageDirect(chatId, testPayload, 10000);
+    const result = await sendTelegramMessageDirect(targetChatId, testPayload, 25000);
     return NextResponse.json({
       success: result.success,
       mode: 'direct',
-      chatId,
+      chatId: targetChatId,
       result,
     }, { status: result.success ? 200 : 400 });
   }
@@ -80,7 +111,7 @@ export async function GET(req: NextRequest) {
   // Queue-based test (Durable Queue)
   const enqueueResult = await enqueueNotificationJob({
     eventType: 'test_alert',
-    destinationChatId: chatId,
+    destinationChatId: targetChatId,
     messagePayload: testPayload,
     idempotencyKey: `test_alert_${Date.now()}`,
   });
@@ -88,7 +119,7 @@ export async function GET(req: NextRequest) {
   // Trigger immediate background drain using Next.js 15 after()
   after(async () => {
     try {
-      await runTelegramWorker({ maxBudgetMs: 15000, batchSize: 5 });
+      await runTelegramWorker({ maxBudgetMs: 20000, batchSize: 5 });
     } catch (err: any) {
       console.error('[after:test-alert] Background worker error:', err?.message);
     }
@@ -97,7 +128,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     success: enqueueResult.success,
     mode: 'durable_queue',
-    chatId,
+    chatId: targetChatId,
     jobId: enqueueResult.jobId,
     message: 'تم إدراج الإشعار التجريبي في طابور المهام بنجاح 🚀 تم تشغيل الـ Worker في الخلفية فورياً عبر after().',
   });
