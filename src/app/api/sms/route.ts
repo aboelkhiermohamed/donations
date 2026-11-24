@@ -1,10 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { z } from 'zod';
 import crypto from 'crypto';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { parseSMS } from '@/lib/smsParser';
 import { findMatch } from '@/lib/matchingEngine';
 import { enqueueSmsNotification } from '@/lib/telegram';
+import { runTelegramWorker } from '@/lib/notificationWorker';
 
 const smsRequestSchema = z.object({
   sender: z.string().min(1),
@@ -276,6 +277,15 @@ export async function POST(req: NextRequest) {
     } catch (notifErr: any) {
       console.error('[SMS API] Non-fatal notification enqueue error:', notifErr.message);
     }
+
+    // Trigger immediate background drain using Next.js 15 after()
+    after(async () => {
+      try {
+        await runTelegramWorker({ maxBudgetMs: 15000, batchSize: 5 });
+      } catch (workerErr: any) {
+        console.error('[after:sms] Background worker error:', workerErr?.message);
+      }
+    });
 
     return NextResponse.json({
       success: true,

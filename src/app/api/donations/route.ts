@@ -1,9 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { z } from 'zod';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { findMatchForDonation } from '@/lib/matchingEngine';
 import { getActivePaymentMethods } from '@/lib/paymentService';
 import { enqueueDonationNotification } from '@/lib/telegram';
+import { runTelegramWorker } from '@/lib/notificationWorker';
 
 // Anti-Spam Sliding-window rate limiter: max 15 donation attempts per IP per 10 minutes
 const donationRateLimitMap = new Map<string, { count: number; resetAt: number }>();
@@ -282,6 +283,16 @@ export async function POST(req: NextRequest) {
     } catch (notifErr: any) {
       console.error('[Donations API] Non-fatal notification enqueue error:', notifErr.message);
     }
+
+    // Trigger immediate background drain using Next.js 15 after()
+    // Returns response to client immediately, executes queue delivery right after
+    after(async () => {
+      try {
+        await runTelegramWorker({ maxBudgetMs: 15000, batchSize: 5 });
+      } catch (workerErr: any) {
+        console.error('[after:donations] Background worker error:', workerErr?.message);
+      }
+    });
 
     return NextResponse.json({
       success: true,

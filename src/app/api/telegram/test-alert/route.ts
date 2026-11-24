@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { enqueueNotificationJob } from '@/lib/notificationQueue';
 import { sendTelegramMessageDirect } from '@/lib/telegram';
+import { runTelegramWorker } from '@/lib/notificationWorker';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,11 +54,19 @@ export async function GET(req: NextRequest) {
     idempotencyKey: `test_alert_${Date.now()}`,
   });
 
+  // Trigger immediate background drain using Next.js 15 after()
+  after(async () => {
+    try {
+      await runTelegramWorker({ maxBudgetMs: 15000, batchSize: 5 });
+    } catch (err: any) {
+      console.error('[after:test-alert] Background worker error:', err?.message);
+    }
+  });
+
   return NextResponse.json({
     success: enqueueResult.success,
     mode: 'durable_queue',
     jobId: enqueueResult.jobId,
-    message: 'تم إدراج الإشعار التجريبي في طابور المهام بنجاح 🚀 سيقوم الـ Worker بمعالجته فوراً.',
-    tip: 'يمكنك استدعاء /api/internal/telegram-worker لتنفيذ الطابور لحظياً.',
+    message: 'تم إدراج الإشعار التجريبي في طابور المهام بنجاح 🚀 تم تشغيل الـ Worker في الخلفية فورياً عبر after().',
   });
 }
