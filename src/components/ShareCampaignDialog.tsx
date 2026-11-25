@@ -131,18 +131,32 @@ export default function ShareCampaignDialog({
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
-  // 4. Native Web Share API
+  // 4. Native Web Share API (Shares actual Image File if supported)
   const handleNativeShare = async () => {
-    if (navigator.share) {
-      try {
+    if (!navigator.share) return;
+    try {
+      // Fetch dynamic OG image as a Blob to share the actual file on mobile
+      const res = await fetch(ogImageUrl);
+      const blob = await res.blob();
+      const file = new File([blob], 'sadaqah-jariyah-campaign.png', { type: 'image/png' });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
+          files: [file],
           title: campaignTitle,
-          text: shareText,
-          url: shareUrl,
+          text: `${shareText}${shareUrl}`,
         });
-      } catch (err) {
-        // User cancelled or aborted
+        return;
       }
+
+      // Fallback to URL/Text share if files not supported on this browser
+      await navigator.share({
+        title: campaignTitle,
+        text: shareText,
+        url: shareUrl,
+      });
+    } catch (err) {
+      // User cancelled
     }
   };
 
