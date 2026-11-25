@@ -17,13 +17,13 @@ import {
 interface ShareCampaignDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  campaign: {
-    id: string;
+  campaign?: {
+    id?: string;
     name_ar?: string;
     description_ar?: string;
     target_amount?: number;
     collected_amount?: number;
-  };
+  } | null;
   language?: 'ar' | 'en';
 }
 
@@ -38,8 +38,8 @@ export default function ShareCampaignDialog({
   const [imageLoaded, setImageLoaded] = useState(false);
   const [canNativeShare, setCanNativeShare] = useState(false);
 
-  const campaignId = campaign.id || 'c580436d-9654-4720-bc2f-a9cb6bf0f7a0';
-  const campaignTitle = campaign.name_ar || 'صدقة جارية — إهداء لروح د. حسين علي الأمير ود. ندى هاني حامد';
+  const campaignId = campaign?.id || 'c580436d-9654-4720-bc2f-a9cb6bf0f7a0';
+  const campaignTitle = campaign?.name_ar || 'صدقة جارية — إهداء لروح د. حسين علي الأمير ود. ندى هاني حامد';
 
   // Compute absolute share URL & dynamic OG image URL
   const [origin, setOrigin] = useState('https://donations-tau.vercel.app');
@@ -146,7 +146,7 @@ export default function ShareCampaignDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200">
       {/* Backdrop */}
       <div 
         className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity"

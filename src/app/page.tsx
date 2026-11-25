@@ -2042,6 +2042,14 @@ export default function PublicDonationPage({ initialCampaignId }: { initialCampa
         </div>
       </footer>
 
+      {/* Campaign Share Dialog Modal */}
+      <ShareCampaignDialog
+        isOpen={shareDialogOpen}
+        onClose={() => setShareDialogOpen(false)}
+        campaign={activeCampaign}
+        language={language}
+      />
+
     </div>
   );
 }
