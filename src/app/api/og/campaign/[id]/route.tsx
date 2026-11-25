@@ -380,7 +380,7 @@ export async function GET(
         fonts,
         headers: {
           'Content-Type': 'image/png',
-          'Cache-Control': 'public, max-age=60, s-maxage=300, stale-while-revalidate=600',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
         },
       }
     );

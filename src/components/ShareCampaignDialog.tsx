@@ -225,7 +225,7 @@ export default function ShareCampaignDialog({
               )}
 
               <img
-                src={ogImageUrl}
+                src={`${ogImageUrl}?t=${origin}`}
                 alt="Dynamic Campaign Share Card"
                 className={`w-full h-full object-cover transition-opacity duration-300 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
                 onLoad={() => setImageLoaded(true)}
