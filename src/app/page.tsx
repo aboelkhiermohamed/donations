@@ -36,7 +36,8 @@ import {
   Smartphone,
   CreditCard,
   Infinity,
-  Sparkles
+  Sparkles,
+  ArrowDown
 } from 'lucide-react';
 import canvasConfetti from 'canvas-confetti';
 import Link from 'next/link';
@@ -196,8 +197,10 @@ export default function PublicDonationPage({ initialCampaignId }: { initialCampa
   // Shuffled Vodafone Cash wallets: randomized on every page refresh/load to distribute incoming transfers evenly
   const [shuffledWallets, setShuffledWallets] = useState<WalletConfig[]>([]);
 
-  // Copy feedback
+  // Copy feedback & floating interaction banner
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [showCopyBanner, setShowCopyBanner] = useState(false);
+  const [copiedWalletNumber, setCopiedWalletNumber] = useState<string | null>(null);
 
   // Tracking state
   const [trackingQuery, setTrackingQuery] = useState('');
@@ -370,14 +373,34 @@ export default function PublicDonationPage({ initialCampaignId }: { initialCampa
     refetchOnWindowFocus: false,
   });
 
-  // Copy handler with tactile feedback
+  // Copy handler with tactile feedback & smart guidance prompt
   const handleCopy = (text?: string | null, key: string = '') => {
     if (!text) return;
     try {
       navigator.clipboard.writeText(text);
       setCopiedKey(key);
+      setCopiedWalletNumber(text);
+      setShowCopyBanner(true);
       setTimeout(() => setCopiedKey(null), 2500);
     } catch {}
+  };
+
+  // Smooth scroll to donation form & highlight transaction ref input
+  const scrollToForm = () => {
+    const formElem = document.getElementById('donation-form-container');
+    if (formElem) {
+      formElem.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setTimeout(() => {
+        const refInput = document.getElementById('transaction-ref-input') as HTMLInputElement | null;
+        if (refInput) {
+          refInput.focus();
+          refInput.classList.add('ring-4', 'ring-[#217A61]/40');
+          setTimeout(() => {
+            refInput.classList.remove('ring-4', 'ring-[#217A61]/40');
+          }, 2500);
+        }
+      }, 450);
+    }
   };
 
   // Preset amount click handler
@@ -1199,6 +1222,18 @@ export default function PublicDonationPage({ initialCampaignId }: { initialCampa
                       </p>
                     </div>
 
+                    {/* 2-Step Donation Journey Indicator */}
+                    <div className="p-3.5 rounded-2xl bg-[#E2F3EE]/70 dark:bg-[#111C2D] border border-[#217A61]/25 dark:border-[#24B58A]/25 space-y-2.5">
+                      <div className="flex items-center gap-2.5 text-xs font-bold text-[#153C32] dark:text-[#24B58A]">
+                        <span className="w-5 h-5 rounded-full bg-[#153C32] dark:bg-[#24B58A] text-white dark:text-[#111C2D] flex items-center justify-center text-[11px] font-mono flex-shrink-0">1</span>
+                        <span>{language === 'ar' ? 'الخطوة 1: انسخ الرقم وحوّل تبرعك من محفظتك' : 'Step 1: Copy number & transfer from your wallet'}</span>
+                      </div>
+                      <div className="flex items-center gap-2.5 text-xs font-semibold text-[#55625B] dark:text-[#A7B4B0]">
+                        <span className="w-5 h-5 rounded-full bg-[#DDD9CC] dark:bg-[#283849] text-[#191F1C] dark:text-[#F3F5F4] flex items-center justify-center text-[11px] font-mono flex-shrink-0">2</span>
+                        <span>{language === 'ar' ? 'الخطوة 2: سجّل رقم العملية بالأسفل لتوثيق تبرعك واستلام الإيصال' : 'Step 2: Enter transaction ref below to get receipt'}</span>
+                      </div>
+                    </div>
+
                     {/* Method Selector Tabs (Only show if multiple active methods) */}
                     {activeMethods.length > 1 && (
                       <div className="grid grid-cols-2 gap-2 p-1 bg-[#EAE8DE] dark:bg-[#111C2D] rounded-xl text-xs font-bold">
@@ -1317,12 +1352,24 @@ export default function PublicDonationPage({ initialCampaignId }: { initialCampa
                       </div>
                     )}
 
+                    {/* Action button to jump down to the form */}
+                    <div className="pt-2 border-t border-[#EAE8DE] dark:border-[#283849]">
+                      <button
+                        type="button"
+                        onClick={scrollToForm}
+                        className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-[#153C32] dark:bg-[#24B58A] text-white dark:text-[#111C2D] font-bold text-xs sm:text-sm shadow-subtle hover:bg-[#1C4E41] dark:hover:bg-[#2bd19f] transition-all group active:scale-[0.99]"
+                      >
+                        <span>{language === 'ar' ? 'أتممت التحويل؟ سجّل رقم العملية هنا' : 'Done transferring? Record ref here'}</span>
+                        <ArrowDown className="w-4 h-4 group-hover:translate-y-0.5 transition-transform" />
+                      </button>
+                    </div>
+
                   </div>
 
                 </div>
 
                 {/* Donation Form Container (col-span-7) */}
-                <div className="lg:col-span-7">
+                <div id="donation-form-container" className="lg:col-span-7 scroll-mt-24">
                   
                   {submittedDonation ? (
                     <div className="p-5 sm:p-8 md:p-10 rounded-2xl sm:rounded-3xl bg-white dark:bg-[#172436] border border-[#217A61]/30 dark:border-[#24B58A]/30 shadow-editorial text-center space-y-6 animate-fadeIn">
@@ -1575,6 +1622,7 @@ export default function PublicDonationPage({ initialCampaignId }: { initialCampa
                           {t('field_ref')} <span className="text-red-500">*</span>
                         </label>
                         <input
+                          id="transaction-ref-input"
                           type="text"
                           value={refNum}
                           onChange={e => {
@@ -1583,7 +1631,7 @@ export default function PublicDonationPage({ initialCampaignId }: { initialCampa
                           }}
                           placeholder={t('field_ref_placeholder')}
                           dir="ltr"
-                          className={`w-full py-2.5 px-3.5 rounded-xl bg-[#FAF9F5] dark:bg-[#111C2D] border text-sm font-mono text-[#191F1C] dark:text-[#F3F5F4] focus:outline-none ${
+                          className={`w-full py-2.5 px-3.5 rounded-xl bg-[#FAF9F5] dark:bg-[#111C2D] border text-sm font-mono text-[#191F1C] dark:text-[#F3F5F4] focus:outline-none transition-all ${
                             formErrors.refNum ? 'border-red-400' : 'border-[#DDD9CC] dark:border-[#283849]'
                           }`}
                         />
@@ -2038,6 +2086,67 @@ export default function PublicDonationPage({ initialCampaignId }: { initialCampa
         campaign={activeCampaign}
         language={language}
       />
+
+      {/* Smart Floating Bottom Interaction Banner (Mobile UX Guidance) */}
+      {showCopyBanner && (
+        <div 
+          className="fixed bottom-4 inset-x-3 sm:inset-x-auto sm:end-6 sm:max-w-md z-50 animate-slide-up shadow-2xl"
+          dir={dir}
+        >
+          <div className="p-4 rounded-2xl bg-white/95 dark:bg-[#172436]/95 backdrop-blur-md border-2 border-[#217A61] dark:border-[#24B58A] text-[#191F1C] dark:text-[#F3F5F4] shadow-editorial space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 text-[#153C32] dark:text-[#24B58A] flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <div>
+                  <h4 className="text-xs sm:text-sm font-extrabold text-[#153C32] dark:text-[#24B58A] flex items-center flex-wrap gap-1.5">
+                    <span>{language === 'ar' ? 'تم نسخ الرقم بنجاح! 📱' : 'Number Copied! 📱'}</span>
+                    {copiedWalletNumber && (
+                      <span className="font-mono text-[11px] px-1.5 py-0.5 rounded bg-[#FAF9F5] dark:bg-[#111C2D] border border-[#DDD9CC] dark:border-[#283849] text-[#738079] dark:text-[#A7B4B0]" dir="ltr">
+                        {copiedWalletNumber}
+                      </span>
+                    )}
+                  </h4>
+                  <p className="text-[11px] text-[#55625B] dark:text-[#A7B4B0] leading-snug mt-1">
+                    {language === 'ar' 
+                      ? 'بعد إتمام التحويل من محفظتك، اضغط أدناه لملء الاستمارة وتوثيق تبرعك في سجل الشفافية واستلام إيصالك الرسمي 📋'
+                      : 'After transferring from your wallet, tap below to fill the form and verify your donation 📋'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCopyBanner(false)}
+                className="p-1.5 rounded-lg text-[#738079] hover:text-[#191F1C] dark:text-[#A7B4B0] dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-colors flex-shrink-0"
+                aria-label="إغلاق"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  scrollToForm();
+                }}
+                className="flex-1 py-2.5 px-3 rounded-xl bg-[#153C32] dark:bg-[#24B58A] text-white dark:text-[#111C2D] text-xs font-bold flex items-center justify-center gap-2 hover:bg-[#1C4E41] dark:hover:bg-[#2bd19f] shadow-subtle transition-all active:scale-[0.99]"
+              >
+                <span>{language === 'ar' ? 'الانتقال لملء الاستمارة الآن' : 'Jump to Form Now'}</span>
+                <ArrowDown className="w-3.5 h-3.5 animate-bounce" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowCopyBanner(false)}
+                className="py-2.5 px-3 rounded-xl bg-[#FAF9F5] dark:bg-[#111C2D] border border-[#DDD9CC] dark:border-[#283849] text-xs font-semibold text-[#738079] dark:text-[#A7B4B0] hover:text-[#191F1C]"
+              >
+                {language === 'ar' ? 'لاحقاً' : 'Dismiss'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
