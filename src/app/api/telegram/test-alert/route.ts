@@ -89,15 +89,37 @@ export async function GET(req: NextRequest) {
   }
 
   const isDirect = searchParams.get('direct') === '1';
+  const isSmsTest = searchParams.get('type') === 'sms' || searchParams.get('sms') === '1';
 
-  const testPayload = {
-    text: `🌿 <b>إشعار تجريبي: فحص ربط البوت</b>\n` +
-      `═════════════════════\n` +
-      `✅ <b>الحالة:</b> البوت متصل بنجاح وجاهز لاستقبال التبرعات!\n` +
-      `🎯 <b>معرف الجروب:</b> <code>${targetChatId}</code>\n` +
-      `🕒 <i>وقت الفحص: ${new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</i>`,
-    parse_mode: 'HTML' as const,
-  };
+  const testPayload = isSmsTest
+    ? {
+        text: `📩 <b>إشعار تحويل وارد من محفظة الدفع (SMS)</b>\n\n` +
+          `💵 <b>المبلغ:</b> <b>1,000 ج.م</b>\n` +
+          `📱 <b>المرسل:</b> <code>+201555585154</code>\n` +
+          `🔢 <b>رقم العملية:</b> <code>026998152680</code>\n` +
+          `⚡ <b>حالة الربط:</b> ⚠️ <b>لم يتم ربطه بعد (بانتظار تسجيل المتبرع أو مراجعة يدوية)</b>\n` +
+          `💬 <b>نص الرسالة:</b>\n<code>تم استلام مبلغ 1,000.00 ج.م من 01555585154 بنجاح. رقم العملية: 026998152680</code>\n` +
+          `🕒 <b>الوقت:</b> ${new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}`,
+        parse_mode: 'HTML' as const,
+        reply_markup: {
+          inline_keyboard: [
+            [
+              {
+                text: '💬 فحص بوابة الرسائل',
+                url: 'https://donations-tau.vercel.app/admin/sms',
+              },
+            ],
+          ],
+        },
+      }
+    : {
+        text: `🌿 <b>إشعار تجريبي: فحص ربط البوت</b>\n` +
+          `═════════════════════\n` +
+          `✅ <b>الحالة:</b> البوت متصل بنجاح وجاهز لاستقبال التبرعات!\n` +
+          `🎯 <b>معرف الجروب:</b> <code>${targetChatId}</code>\n` +
+          `🕒 <i>وقت الفحص: ${new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</i>`,
+        parse_mode: 'HTML' as const,
+      };
 
   // Direct send mode (bypasses queue for instant Telegram API verification)
   // Timeout set to 35s to capture actual response even if Telegram is tarpitting

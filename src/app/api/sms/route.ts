@@ -267,12 +267,15 @@ export async function POST(req: NextRequest) {
 
     // Enqueue Telegram Notification into Durable Queue (Non-blocking to Telegram, durable in DB)
     try {
+      const matchedDonation = formattedPending.find(p => p.id === matchResult.donationId);
       await enqueueSmsNotification({
         id: insertedTx.id,
         sender,
         amount: parsedSMS.amount,
         transactionRef: parsedSMS.transaction_ref,
         matched: matchResult.confidence === 100,
+        donorName: matchedDonation?.donor?.name || null,
+        rawMessage: message,
       });
     } catch (notifErr: any) {
       console.error('[SMS API] Non-fatal notification enqueue error:', notifErr.message);

@@ -241,6 +241,13 @@ export async function enqueueDonationNotification(donation: {
   });
 }
 
+function escapeTelegramHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 /**
  * 2. Enqueue notification for incoming wallet SMS
  */
@@ -251,6 +258,7 @@ export async function enqueueSmsNotification(sms: {
   transactionRef?: string | null;
   matched: boolean;
   donorName?: string | null;
+  rawMessage?: string | null;
 }) {
   const chatId = process.env.TELEGRAM_CHAT_ID;
   if (!chatId) {
@@ -262,11 +270,16 @@ export async function enqueueSmsNotification(sms: {
     ? `✅ <b>تمت المطابقة والاعتماد التلقائي!</b>\n👤 <b>المتبرع:</b> ${sms.donorName || 'مساهم'}`
     : '⚠️ <b>لم يتم ربطه بعد (بانتظار تسجيل المتبرع أو مراجعة يدوية)</b>';
 
+  const rawMessageBlock = sms.rawMessage
+    ? `💬 <b>نص الرسالة:</b>\n<code>${escapeTelegramHtml(sms.rawMessage.trim())}</code>\n`
+    : '';
+
   const text = `📩 <b>إشعار تحويل وارد من محفظة الدفع (SMS)</b>\n\n` +
     `💵 <b>المبلغ:</b> ${sms.amount ? `<b>${sms.amount.toLocaleString('en-US')} ج.م</b>` : 'غير محدد'}\n` +
     `📱 <b>المرسل:</b> <code>${sms.sender}</code>\n` +
     `${sms.transactionRef ? `🔢 <b>رقم العملية:</b> <code>${sms.transactionRef}</code>\n` : ''}` +
     `⚡ <b>حالة الربط:</b> ${matchStatus}\n` +
+    rawMessageBlock +
     `🕒 <b>الوقت:</b> ${new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}`;
 
   const inlineKeyboard = {
