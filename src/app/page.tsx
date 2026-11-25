@@ -42,6 +42,7 @@ import canvasConfetti from 'canvas-confetti';
 import Link from 'next/link';
 // @ts-ignore
 import { jsPDF } from 'jspdf';
+import ShareCampaignDialog from '@/components/ShareCampaignDialog';
 
 const fireConfetti = (options?: canvasConfetti.Options) => {
   try {
@@ -84,7 +85,7 @@ function shuffleWallets<T>(items: T[]): T[] {
   return arr;
 }
 
-export default function PublicDonationPage() {
+export default function PublicDonationPage({ initialCampaignId }: { initialCampaignId?: string } = {}) {
   const { language, dir, toggleLanguage, t } = useLanguage();
   const queryClient = useQueryClient();
 
@@ -205,6 +206,7 @@ export default function PublicDonationPage() {
   const [trackingSearched, setTrackingSearched] = useState(false);
   const [trackingError, setTrackingError] = useState<string | null>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
@@ -221,14 +223,14 @@ export default function PublicDonationPage() {
 
   // 1. Fetch Campaign Details
   const { data: campaign } = useQuery<Campaign>({
-    queryKey: ['campaignPublic'],
+    queryKey: ['campaignPublic', initialCampaignId],
     queryFn: async () => {
       try {
-        const { data, error } = await supabase
-          .from('campaigns')
-          .select('*')
-          .limit(1)
-          .maybeSingle();
+        let q = supabase.from('campaigns').select('*');
+        if (initialCampaignId) {
+          q = q.eq('id', initialCampaignId);
+        }
+        const { data, error } = await q.limit(1).maybeSingle();
 
         if (error) {
           return CANONICAL_CAMPAIGN;
@@ -780,6 +782,17 @@ export default function PublicDonationPage() {
               <span className="inline sm:hidden font-mono">{language === 'ar' ? 'EN' : 'ع'}</span>
             </button>
 
+            {/* Share Campaign Button */}
+            <button
+              type="button"
+              onClick={() => setShareDialogOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 sm:py-2 rounded-xl border border-[#B79B68]/40 dark:border-[#C5A876]/40 bg-white dark:bg-[#172436] text-xs font-bold text-[#153C32] dark:text-[#F3F5F4] hover:bg-[#FAF9F5] dark:hover:bg-[#1f3047] shadow-subtle transition-all flex-shrink-0"
+              title={language === 'ar' ? 'شارك الحملة' : 'Share Campaign'}
+            >
+              <Share2 className="w-3.5 h-3.5 text-[#B79B68] dark:text-[#C5A876]" />
+              <span className="hidden sm:inline">{language === 'ar' ? 'شارك الحملة' : 'Share'}</span>
+            </button>
+
             {/* Admin Login Button */}
             <Link
               href="/admin/login"
@@ -848,7 +861,19 @@ export default function PublicDonationPage() {
             >
               {t('nav_transparency')}
             </a>
-            <div className="pt-2 border-t border-[#EAE8DE] dark:border-[#283849]">
+            <div className="pt-2 border-t border-[#EAE8DE] dark:border-[#283849] space-y-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  setShareDialogOpen(true);
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2 rounded-lg text-sm font-bold text-[#B79B68] dark:text-[#C5A876] hover:bg-white dark:hover:bg-[#172436]"
+              >
+                <Share2 className="w-4 h-4" />
+                <span>{language === 'ar' ? 'شارك الحملة' : 'Share Campaign'}</span>
+              </button>
+
               <Link
                 href="/admin/login"
                 onClick={() => setMobileMenuOpen(false)}
@@ -909,18 +934,27 @@ export default function PublicDonationPage() {
             </blockquote>
 
             {/* CTAs */}
-            <div className="pt-2 flex flex-wrap items-center justify-center gap-4">
+            <div className="pt-2 flex flex-wrap items-center justify-center gap-3 sm:gap-4">
               <a
                 href="#donate"
-                className="inline-flex items-center justify-center gap-2.5 px-8 py-4 rounded-xl bg-[#153C32] dark:bg-[#24B58A] text-white dark:text-[#0B1220] text-base font-bold shadow-elevated hover:bg-[#1C4E41] dark:hover:bg-[#1fa37b] transition-all transform active:scale-[0.98]"
+                className="inline-flex items-center justify-center gap-2.5 px-7 sm:px-8 py-3.5 sm:py-4 rounded-xl bg-[#153C32] dark:bg-[#24B58A] text-white dark:text-[#0B1220] text-sm sm:text-base font-bold shadow-elevated hover:bg-[#1C4E41] dark:hover:bg-[#1fa37b] transition-all transform active:scale-[0.98]"
               >
-                <Heart className="w-5 h-5 fill-white/20 dark:fill-[#0B1220]/20" />
+                <Heart className="w-4 sm:w-5 h-4 sm:h-5 fill-white/20 dark:fill-[#0B1220]/20" />
                 <span>{t('hero_cta_donate')}</span>
               </a>
 
+              <button
+                type="button"
+                onClick={() => setShareDialogOpen(true)}
+                className="inline-flex items-center justify-center gap-2 px-6 py-3.5 sm:py-4 rounded-xl bg-white dark:bg-[#172436] border border-[#B79B68]/60 dark:border-[#C5A876]/60 text-[#153C32] dark:text-[#F3F5F4] text-sm sm:text-base font-bold hover:bg-[#FAF9F5] dark:hover:bg-[#1f3047] shadow-subtle transition-all transform active:scale-[0.98] group"
+              >
+                <Share2 className="w-4 sm:w-5 h-4 sm:h-5 text-[#B79B68] dark:text-[#C5A876] group-hover:scale-110 transition-transform" />
+                <span>{language === 'ar' ? 'شارك الحملة' : 'Share Campaign'}</span>
+              </button>
+
               <a
                 href="#about"
-                className="inline-flex items-center justify-center gap-2 px-6 py-4 rounded-xl bg-white dark:bg-[#172436] border border-[#DDD9CC] dark:border-[#283849] text-[#3D4742] dark:text-[#F3F5F4] text-base font-semibold hover:bg-[#F4F3ED] dark:hover:bg-[#1f3047] transition-colors"
+                className="inline-flex items-center justify-center gap-2 px-5 sm:px-6 py-3.5 sm:py-4 rounded-xl bg-white dark:bg-[#172436] border border-[#DDD9CC] dark:border-[#283849] text-[#3D4742] dark:text-[#F3F5F4] text-sm sm:text-base font-semibold hover:bg-[#F4F3ED] dark:hover:bg-[#1f3047] transition-colors"
               >
                 <span>{t('hero_cta_about')}</span>
                 <ArrowRight className="w-4 h-4 rtl-flip" />
@@ -1034,6 +1068,32 @@ export default function PublicDonationPage() {
                     {aggregates.progressPercent >= 100 ? (language === 'ar' ? 'اكتمل بنجاح' : 'Achieved') : (language === 'ar' ? 'حملة جارية' : 'In Progress')}
                   </span>
                 </div>
+              </div>
+
+              {/* Share Campaign CTA in Progress Section */}
+              <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-2xl bg-white dark:bg-[#111C2D] border border-[#EAE8DE] dark:border-[#283849]">
+                <div className="flex items-center gap-3 text-start">
+                  <div className="w-10 h-10 rounded-xl bg-[#FAF9F5] dark:bg-[#0B1220] border border-[#DDD9CC] dark:border-[#283849] flex items-center justify-center flex-shrink-0 text-[#B79B68]">
+                    <Sparkles className="w-5 h-5 text-[#B79B68]" />
+                  </div>
+                  <div>
+                    <span className="text-xs sm:text-sm font-bold text-[#153C32] dark:text-[#F3F5F4] block">
+                      {language === 'ar' ? '«الدال على الخير كفاعله»' : 'Multiply the impact of this cause'}
+                    </span>
+                    <span className="text-[11px] text-[#738079] dark:text-[#A7B4B0]">
+                      {language === 'ar' ? 'مشاركتك للحملة تساعد في وصولها لعدد أكبر من المساهمين' : 'Sharing this campaign helps reach more caring donors'}
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShareDialogOpen(true)}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[#153C32] hover:bg-[#1C4E41] text-white dark:bg-[#217A61] dark:hover:bg-[#24B58A] text-xs font-bold transition-all shadow-subtle transform active:scale-95"
+                >
+                  <Share2 className="w-4 h-4 text-[#34d399]" />
+                  <span>{language === 'ar' ? 'شارك الحملة الآن' : 'Share Campaign'}</span>
+                </button>
               </div>
 
             </div>
@@ -1404,6 +1464,15 @@ export default function PublicDonationPage() {
                             <span>{t('receipt_btn')}</span>
                           </button>
                         )}
+
+                        <button
+                          type="button"
+                          onClick={() => setShareDialogOpen(true)}
+                          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-[#FAF9F5] dark:bg-[#0B1220] border border-[#B79B68]/50 dark:border-[#C5A876]/50 text-[#153C32] dark:text-[#F3F5F4] text-xs font-bold hover:bg-[#F4F3ED] dark:hover:bg-[#1f3047] shadow-subtle transition-all"
+                        >
+                          <Share2 className="w-4 h-4 text-[#B79B68]" />
+                          <span>{language === 'ar' ? 'شارك الحملة' : 'Share Campaign'}</span>
+                        </button>
 
                         <button
                           type="button"

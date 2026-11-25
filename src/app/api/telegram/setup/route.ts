@@ -31,15 +31,23 @@ export async function GET(req: NextRequest) {
       allowed_updates: ['message', 'edited_message', 'callback_query'],
     });
 
-    // 3. Register Telegram Bot Commands Menu (so user sees [/] menu button in chat)
+    // 3. Register Telegram Bot Commands Menu (default + all group chats)
+    const commandsList = [
+      { command: 'start', description: '🚀 تشغيل البوت وعرض قائمة الأوامر' },
+      { command: 'stats', description: '📊 إحصائيات الحصيلة المباشرة' },
+      { command: 'today', description: '📅 ملخص مساهمات اليوم' },
+      { command: 'pending', description: '⏳ التبرعات المعلقة للاعتماد' },
+      { command: 'links', description: '🔗 روابط المنصة ولوحة التحكم' },
+      { command: 'help', description: '🌿 مساعدة وشرح الأوامر' },
+    ];
+
     const setCommandsRes = await sendTelegramApiRaw('setMyCommands', {
-      commands: [
-        { command: 'stats', description: '📊 إحصائيات الحصيلة المباشرة' },
-        { command: 'today', description: '📅 ملخص مساهمات اليوم' },
-        { command: 'pending', description: '⏳ التبرعات المعلقة للاعتماد' },
-        { command: 'links', description: '🔗 روابط المنصة الأساسية' },
-        { command: 'help', description: '🌿 مساعدة وشرح الأوامر' },
-      ],
+      commands: commandsList,
+    });
+
+    await sendTelegramApiRaw('setMyCommands', {
+      commands: commandsList,
+      scope: { type: 'all_group_chats' },
     });
 
     // 4. Optional greeting test to chat if requested via ?notify=1
