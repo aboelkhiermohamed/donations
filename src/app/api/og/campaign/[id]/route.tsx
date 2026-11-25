@@ -116,15 +116,15 @@ export async function GET(
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'space-between',
-            padding: '48px 56px',
+            padding: '44px 52px',
             backgroundColor: '#0a1a15',
             backgroundImage: 'radial-gradient(circle at 10% 10%, #153c32 0%, #0a1a15 70%)',
             color: '#ffffff',
             fontFamily: 'Cairo, sans-serif',
-            border: '8px solid #1c473c',
+            border: '6px solid #23584B',
           }}
         >
-          {/* Top Header Row */}
+          {/* 1. Top Header Row */}
           <div
             style={{
               display: 'flex',
@@ -137,97 +137,108 @@ export async function GET(
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '12px',
-                background: 'rgba(255, 255, 255, 0.08)',
-                padding: '10px 22px',
+                background: 'rgba(183, 155, 104, 0.15)',
+                padding: '8px 22px',
                 borderRadius: '999px',
-                border: '1px solid rgba(255, 255, 255, 0.15)',
+                border: '1px solid rgba(183, 155, 104, 0.4)',
+                color: '#e5c992',
+                fontSize: '17px',
+                fontWeight: 500,
               }}
             >
-              <span style={{ fontSize: '26px' }}>🌿</span>
-              <span style={{ fontSize: '22px', fontWeight: 700, color: '#34d399' }}>
-                {fixArabic('منصة صدقة جارية')}
-              </span>
+              {fixArabic('أطباء الدفعة التاسعة — طب كفر الشيخ')}
             </div>
 
             <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                background: 'rgba(183, 155, 104, 0.15)',
-                padding: '8px 20px',
+                gap: '10px',
+                background: 'rgba(255, 255, 255, 0.08)',
+                padding: '8px 22px',
                 borderRadius: '999px',
-                border: '1px solid rgba(183, 155, 104, 0.4)',
-                color: '#e5c992',
-                fontSize: '18px',
-                fontWeight: 500,
+                border: '1px solid rgba(255, 255, 255, 0.15)',
               }}
             >
-              {fixArabic(organizer)}
+              <span style={{ fontSize: '20px', fontWeight: 700, color: '#34d399' }}>
+                {fixArabic('منصة صدقة جارية')}
+              </span>
+              <span style={{ fontSize: '22px' }}>🌿</span>
             </div>
           </div>
 
-          {/* Middle Campaign Title & Details */}
+          {/* 2. Main Dedication Section */}
           <div
             style={{
               display: 'flex',
               flexDirection: 'column',
-              gap: '6px',
-              alignItems: 'flex-end',
+              gap: '8px',
+              alignItems: 'center',
               width: '100%',
+              textAlign: 'center',
             }}
           >
+            {/* Golden Badge */}
             <div
               style={{
-                fontSize: '25px',
-                fontWeight: 700,
-                color: '#e5c992',
                 display: 'flex',
-                justifyContent: 'flex-end',
-                width: '100%',
+                alignItems: 'center',
+                background: 'rgba(229, 201, 146, 0.12)',
+                padding: '6px 20px',
+                borderRadius: '999px',
+                border: '1px solid rgba(229, 201, 146, 0.35)',
+                color: '#e5c992',
+                fontSize: '18px',
+                fontWeight: 700,
               }}
             >
               {fixArabic('صدقة جارية — إهداء إلى روح الفقيدين')}
             </div>
+
+            {/* Names Line (Large, Prestigious) */}
             <div
               style={{
-                fontSize: '38px',
+                fontSize: '40px',
                 fontWeight: 700,
                 color: '#ffffff',
                 display: 'flex',
-                justifyContent: 'flex-end',
+                justifyContent: 'center',
                 width: '100%',
+                letterSpacing: '-0.5px',
               }}
             >
-              {fixArabic('د. حسين علي الأمير  ود. ندى هاني حامد')}
+              {fixArabic('الدكتور حسين علي الأمير   •   الدكتورة ندى هاني حامد')}
             </div>
+
+            {/* Project Description Line */}
             <div
               style={{
-                fontSize: '19px',
+                fontSize: '20px',
                 fontWeight: 500,
                 color: '#94a3b8',
                 display: 'flex',
-                justifyContent: 'flex-end',
+                justifyContent: 'center',
                 width: '100%',
-                marginTop: '4px',
               }}
             >
               {fixArabic('مبادرة لتوفير جهاز تنفس صناعي لوحدة العناية المركزة بمستشفيات جامعة كفر الشيخ')}
             </div>
           </div>
 
-          {/* Stats & Progress Box */}
+          {/* 3. Stats Box (Card) */}
           <div
             style={{
               display: 'flex',
               flexDirection: 'column',
-              gap: '16px',
+              gap: '14px',
               background: 'rgba(21, 60, 50, 0.75)',
-              padding: '24px 34px',
-              borderRadius: '24px',
+              padding: '20px 32px',
+              borderRadius: '22px',
               border: '1px solid #23584b',
+              width: '100%',
             }}
           >
+            {/* Metrics Columns (RTL layout: Right is Collected, Center is Target, Left is Donors) */}
             <div
               style={{
                 display: 'flex',
@@ -236,8 +247,15 @@ export async function GET(
                 width: '100%',
               }}
             >
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                <span style={{ fontSize: '16px', color: '#94a3b8' }}>
+              {/* Column 3 (Left on screen): Donors Count */}
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'flex-start',
+                }}
+              >
+                <span style={{ fontSize: '15px', color: '#94a3b8' }}>
                   {fixArabic('المساهمات الموثقة')}
                 </span>
                 <span style={{ fontSize: '26px', fontWeight: 700, color: '#ffffff' }}>
@@ -245,8 +263,15 @@ export async function GET(
                 </span>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <span style={{ fontSize: '16px', color: '#94a3b8' }}>
+              {/* Column 2 (Center): Target */}
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                }}
+              >
+                <span style={{ fontSize: '15px', color: '#94a3b8' }}>
                   {fixArabic('المستهدف المالي')}
                 </span>
                 <span style={{ fontSize: '26px', fontWeight: 700, color: '#e5c992' }}>
@@ -254,8 +279,15 @@ export async function GET(
                 </span>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                <span style={{ fontSize: '16px', color: '#94a3b8' }}>
+              {/* Column 1 (Right on screen): Total Collected */}
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'flex-end',
+                }}
+              >
+                <span style={{ fontSize: '15px', color: '#94a3b8' }}>
                   {fixArabic('إجمالي الحصيلة')}
                 </span>
                 <span style={{ fontSize: '38px', fontWeight: 700, color: '#34d399' }}>
@@ -264,19 +296,19 @@ export async function GET(
               </div>
             </div>
 
-            {/* Progress Bar or Continuous Banner */}
+            {/* Banner or Progress */}
             {isUnlimited ? (
               <div
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  padding: '10px 16px',
+                  padding: '9px 16px',
                   borderRadius: '12px',
                   background: 'rgba(52, 211, 153, 0.12)',
                   border: '1px solid rgba(52, 211, 153, 0.3)',
                   color: '#34d399',
-                  fontSize: '17px',
+                  fontSize: '16px',
                   fontWeight: 500,
                 }}
               >
@@ -314,28 +346,17 @@ export async function GET(
             )}
           </div>
 
-          {/* Footer Motivational Bar */}
+          {/* 4. Footer Bar */}
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
               borderTop: '1px solid rgba(255, 255, 255, 0.12)',
-              paddingTop: '16px',
+              paddingTop: '14px',
               width: '100%',
             }}
           >
-            <span
-              style={{
-                fontSize: '18px',
-                color: '#e2f3ee',
-                fontStyle: 'italic',
-                opacity: 0.9,
-              }}
-            >
-              {fixArabic('«ساهم في إحداث فرق.. مشاركتك قد تكون سبباً في وصول الخير»')}
-            </span>
-
             <div
               style={{
                 display: 'flex',
@@ -343,14 +364,25 @@ export async function GET(
                 gap: '8px',
                 background: '#34d399',
                 color: '#0a1a15',
-                padding: '10px 22px',
+                padding: '9px 24px',
                 borderRadius: '12px',
                 fontWeight: 700,
-                fontSize: '17px',
+                fontSize: '16px',
               }}
             >
               {fixArabic('تبرع وساهم الآن')}
             </div>
+
+            <span
+              style={{
+                fontSize: '17px',
+                color: '#cbd5e1',
+                fontStyle: 'italic',
+                opacity: 0.95,
+              }}
+            >
+              {fixArabic('ساهم في إحداث أثر طيب .. مشاركتك قد تكون سبباً في وصول الخير')}
+            </span>
           </div>
         </div>
       ),

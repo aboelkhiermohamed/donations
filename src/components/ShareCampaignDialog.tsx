@@ -51,8 +51,9 @@ export default function ShareCampaignDialog({
     }
   }, []);
 
-  const shareUrl = `${origin}/campaign/${campaignId}`;
-  const ogImageUrl = `${origin}/api/og/campaign/${campaignId}`;
+  // Use the platform root URL directly as requested by the user
+  const shareUrl = origin;
+  const ogImageUrl = `${origin}/api/og`;
 
   const shareText = language === 'ar'
     ? `🌿 صدقة جارية: ${campaignTitle}\n\n«ساهم في إحداث فرق.. مشاركتك قد تكون سبباً في وصول الخير»\n\nرابط المساهمة المباشر والتفاصيل:\n`
@@ -102,7 +103,7 @@ export default function ShareCampaignDialog({
       const blobUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = blobUrl;
-      link.download = `campaign-card-${campaignId.slice(0, 8)}.png`;
+      link.download = 'sadaqah-jariyah-campaign.png';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);

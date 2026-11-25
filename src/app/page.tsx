@@ -782,17 +782,6 @@ export default function PublicDonationPage({ initialCampaignId }: { initialCampa
               <span className="inline sm:hidden font-mono">{language === 'ar' ? 'EN' : 'ع'}</span>
             </button>
 
-            {/* Share Campaign Button */}
-            <button
-              type="button"
-              onClick={() => setShareDialogOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 sm:py-2 rounded-xl border border-[#B79B68]/40 dark:border-[#C5A876]/40 bg-white dark:bg-[#172436] text-xs font-bold text-[#153C32] dark:text-[#F3F5F4] hover:bg-[#FAF9F5] dark:hover:bg-[#1f3047] shadow-subtle transition-all flex-shrink-0"
-              title={language === 'ar' ? 'شارك الحملة' : 'Share Campaign'}
-            >
-              <Share2 className="w-3.5 h-3.5 text-[#B79B68] dark:text-[#C5A876]" />
-              <span className="hidden sm:inline">{language === 'ar' ? 'شارك الحملة' : 'Share'}</span>
-            </button>
-
             {/* Admin Login Button */}
             <Link
               href="/admin/login"
