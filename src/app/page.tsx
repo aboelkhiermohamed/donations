@@ -387,6 +387,7 @@ export default function PublicDonationPage({ initialCampaignId }: { initialCampa
 
   // Smooth scroll to donation form & highlight transaction ref input
   const scrollToForm = () => {
+    setShowCopyBanner(false);
     const formElem = document.getElementById('donation-form-container');
     if (formElem) {
       formElem.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1369,7 +1370,11 @@ export default function PublicDonationPage({ initialCampaignId }: { initialCampa
                 </div>
 
                 {/* Donation Form Container (col-span-7) */}
-                <div id="donation-form-container" className="lg:col-span-7 scroll-mt-24">
+                <div 
+                  id="donation-form-container" 
+                  className="lg:col-span-7 scroll-mt-24"
+                  onFocusCapture={() => setShowCopyBanner(false)}
+                >
                   
                   {submittedDonation ? (
                     <div className="p-5 sm:p-8 md:p-10 rounded-2xl sm:rounded-3xl bg-white dark:bg-[#172436] border border-[#217A61]/30 dark:border-[#24B58A]/30 shadow-editorial text-center space-y-6 animate-fadeIn">
