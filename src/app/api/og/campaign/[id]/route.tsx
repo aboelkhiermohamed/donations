@@ -19,6 +19,11 @@ const CANONICAL_CAMPAIGN = {
 let boldFontBuffer: Buffer | null = null;
 let mediumFontBuffer: Buffer | null = null;
 
+function fixArabic(str: string): string {
+  if (!str) return '';
+  return str.trim().split(/\s+/).reverse().join(' ');
+}
+
 function getFonts() {
   if (!boldFontBuffer) {
     try {
@@ -116,7 +121,6 @@ export async function GET(
             backgroundImage: 'radial-gradient(circle at 10% 10%, #153c32 0%, #0a1a15 70%)',
             color: '#ffffff',
             fontFamily: 'Cairo, sans-serif',
-            direction: 'rtl',
             border: '8px solid #1c473c',
           }}
         >
@@ -142,7 +146,7 @@ export async function GET(
             >
               <span style={{ fontSize: '26px' }}>🌿</span>
               <span style={{ fontSize: '22px', fontWeight: 700, color: '#34d399' }}>
-                منصة صدقة جارية
+                {fixArabic('منصة صدقة جارية')}
               </span>
             </div>
 
@@ -159,7 +163,7 @@ export async function GET(
                 fontWeight: 500,
               }}
             >
-              {organizer}
+              {fixArabic(organizer)}
             </div>
           </div>
 
@@ -168,32 +172,47 @@ export async function GET(
             style={{
               display: 'flex',
               flexDirection: 'column',
-              gap: '12px',
-              margin: '8px 0',
+              gap: '6px',
+              alignItems: 'flex-end',
+              width: '100%',
             }}
           >
+            <div
+              style={{
+                fontSize: '25px',
+                fontWeight: 700,
+                color: '#e5c992',
+                display: 'flex',
+                justifyContent: 'flex-end',
+                width: '100%',
+              }}
+            >
+              {fixArabic('صدقة جارية — إهداء إلى روح الفقيدين')}
+            </div>
             <div
               style={{
                 fontSize: '38px',
                 fontWeight: 700,
                 color: '#ffffff',
-                lineHeight: 1.35,
-                letterSpacing: '-0.5px',
+                display: 'flex',
+                justifyContent: 'flex-end',
+                width: '100%',
               }}
             >
-              {campaignTitle}
+              {fixArabic('د. حسين علي الأمير  ود. ندى هاني حامد')}
             </div>
             <div
               style={{
-                fontSize: '21px',
+                fontSize: '19px',
                 fontWeight: 500,
                 color: '#94a3b8',
-                lineHeight: 1.45,
-                maxHeight: '60px',
-                overflow: 'hidden',
+                display: 'flex',
+                justifyContent: 'flex-end',
+                width: '100%',
+                marginTop: '4px',
               }}
             >
-              {campaignDesc}
+              {fixArabic('مبادرة لتوفير جهاز تنفس صناعي لوحدة العناية المركزة بمستشفيات جامعة كفر الشيخ')}
             </div>
           </div>
 
@@ -217,35 +236,35 @@ export async function GET(
                 width: '100%',
               }}
             >
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
                 <span style={{ fontSize: '16px', color: '#94a3b8' }}>
-                  إجمالي الحصيلة حتى الآن
-                </span>
-                <span style={{ fontSize: '38px', fontWeight: 700, color: '#34d399' }}>
-                  {totalCollected.toLocaleString('en-US')} ج.م
-                </span>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                <span style={{ fontSize: '16px', color: '#94a3b8' }}>
-                  {isUnlimited ? 'المستهدف' : 'الهدف المالي'}
-                </span>
-                <span style={{ fontSize: '26px', fontWeight: 700, color: '#e5c992' }}>
-                  {isUnlimited ? 'هدف مفتوح (غير محدود) ♾️' : `${target.toLocaleString('en-US')} ج.م (${progressPercent}%)`}
-                </span>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                <span style={{ fontSize: '16px', color: '#94a3b8' }}>
-                  المساهمات الموثقة
+                  {fixArabic('المساهمات الموثقة')}
                 </span>
                 <span style={{ fontSize: '26px', fontWeight: 700, color: '#ffffff' }}>
-                  {donorsCount} مساهمة
+                  {donorsCount} {fixArabic('مساهمة')}
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <span style={{ fontSize: '16px', color: '#94a3b8' }}>
+                  {fixArabic('المستهدف المالي')}
+                </span>
+                <span style={{ fontSize: '26px', fontWeight: 700, color: '#e5c992' }}>
+                  {isUnlimited ? fixArabic('هدف مفتوح ♾️') : `${target.toLocaleString('en-US')} ${fixArabic('ج.م')} (${progressPercent}%)`}
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                <span style={{ fontSize: '16px', color: '#94a3b8' }}>
+                  {fixArabic('إجمالي الحصيلة')}
+                </span>
+                <span style={{ fontSize: '38px', fontWeight: 700, color: '#34d399' }}>
+                  {totalCollected.toLocaleString('en-US')} {fixArabic('ج.م')}
                 </span>
               </div>
             </div>
 
-            {/* Progress Bar (if target) or Continuous Banner (if unlimited) */}
+            {/* Progress Bar or Continuous Banner */}
             {isUnlimited ? (
               <div
                 style={{
@@ -261,7 +280,7 @@ export async function GET(
                   fontWeight: 500,
                 }}
               >
-                ✨ الحملة مستمرة في استقبال المساهمات وتوسيع أثر الصدقة الجارية
+                {fixArabic('الحملة مستمرة في استقبال المساهمات وتوسيع أثر الصدقة الجارية ✨')}
               </div>
             ) : (
               <div
@@ -301,18 +320,20 @@ export async function GET(
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
+              borderTop: '1px solid rgba(255, 255, 255, 0.12)',
+              paddingTop: '16px',
               width: '100%',
-              paddingTop: '6px',
             }}
           >
             <span
               style={{
                 fontSize: '18px',
-                color: '#cbd5e1',
+                color: '#e2f3ee',
                 fontStyle: 'italic',
+                opacity: 0.9,
               }}
             >
-              «ساهم في إحداث فرق.. مشاركتك قد تكون سبباً في وصول الخير»
+              {fixArabic('«ساهم في إحداث فرق.. مشاركتك قد تكون سبباً في وصول الخير»')}
             </span>
 
             <div
@@ -320,15 +341,15 @@ export async function GET(
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
-                padding: '8px 24px',
-                borderRadius: '999px',
-                backgroundColor: '#34d399',
+                background: '#34d399',
                 color: '#0a1a15',
-                fontSize: '17px',
+                padding: '10px 22px',
+                borderRadius: '12px',
                 fontWeight: 700,
+                fontSize: '17px',
               }}
             >
-              تبرع وساهم الآن
+              {fixArabic('تبرع وساهم الآن')}
             </div>
           </div>
         </div>
