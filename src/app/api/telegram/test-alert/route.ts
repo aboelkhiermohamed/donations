@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse, after } from 'next/server';
 import { enqueueNotificationJob, clearNotificationQueue } from '@/lib/notificationQueue';
-import { sendTelegramMessageDirect, sendTelegramApiRaw } from '@/lib/telegram';
+import { sendTelegramMessageDirect, sendTelegramApiRaw, formatCairoTime } from '@/lib/telegram';
 import { runTelegramWorker } from '@/lib/notificationWorker';
 
 export const dynamic = 'force-dynamic';
@@ -99,7 +99,7 @@ export async function GET(req: NextRequest) {
           `🔢 <b>رقم العملية:</b> <code>026998152680</code>\n` +
           `⚡ <b>حالة الربط:</b> ⚠️ <b>لم يتم ربطه بعد (بانتظار تسجيل المتبرع أو مراجعة يدوية)</b>\n` +
           `💬 <b>نص الرسالة:</b>\n<code>تم استلام مبلغ 1,000.00 ج.م من 01555585154 بنجاح. رقم العملية: 026998152680</code>\n` +
-          `🕒 <b>الوقت:</b> ${new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}`,
+          `🕒 <b>الوقت:</b> ${formatCairoTime()}`,
         parse_mode: 'HTML' as const,
         reply_markup: {
           inline_keyboard: [
@@ -117,7 +117,7 @@ export async function GET(req: NextRequest) {
           `═════════════════════\n` +
           `✅ <b>الحالة:</b> البوت متصل بنجاح وجاهز لاستقبال التبرعات!\n` +
           `🎯 <b>معرف الجروب:</b> <code>${targetChatId}</code>\n` +
-          `🕒 <i>وقت الفحص: ${new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</i>`,
+          `🕒 <i>وقت الفحص: ${formatCairoTime()}</i>`,
         parse_mode: 'HTML' as const,
       };
 

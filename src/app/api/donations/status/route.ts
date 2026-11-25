@@ -1,50 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { getClientIp, checkDonationStatusRateLimit } from '@/lib/rateLimit';
+
+export const dynamic = 'force-dynamic';
 
 const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// Sliding-window rate limiter: max 30 status checks per IP per minute
-const statusRateLimitMap = new Map<string, { count: number; resetAt: number }>();
-const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
-const MAX_REQUESTS_PER_WINDOW = 30;
-
-function isStatusRateLimited(ip: string): boolean {
-  const now = Date.now();
-  const entry = statusRateLimitMap.get(ip);
-
-  if (!entry || now > entry.resetAt) {
-    statusRateLimitMap.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
-    return false;
-  }
-
-  if (entry.count >= MAX_REQUESTS_PER_WINDOW) {
-    return true;
-  }
-
-  entry.count += 1;
-  return false;
-}
-
-// Periodic cleanup of rate limiter entries
-setInterval(() => {
-  const now = Date.now();
-  for (const [ip, entry] of statusRateLimitMap.entries()) {
-    if (now > entry.resetAt) {
-      statusRateLimitMap.delete(ip);
-    }
-  }
-}, 5 * 60 * 1000).unref?.();
-
 export async function GET(req: NextRequest) {
   try {
-    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
-    if (isStatusRateLimited(ip)) {
-      return NextResponse.json(
-        { error: 'Too many status check requests. Please wait a moment.' },
-        { status: 429 }
-      );
-    }
-
+    const ip = getClientIp(req);
     const { searchParams } = new URL(req.url);
     const idsParam = searchParams.get('ids');
     const phoneParam = searchParams.get('phone');
@@ -52,6 +16,32 @@ export async function GET(req: NextRequest) {
 
     if (!idsParam && !phoneParam && !refParam) {
       return NextResponse.json({ error: 'Missing query parameters: ids, phone, or ref' }, { status: 400 });
+    }
+
+    // Determine query type:
+    // - 'search' (phone / ref) has a strict limit (5 req / 5 min) to prevent PII harvesting
+    // - 'ids' has standard polling limit (30 req / 1 min)
+    const isSearchQuery = Boolean(phoneParam || refParam);
+    const queryType = isSearchQuery ? 'search' : 'ids';
+    const rateLimit = checkDonationStatusRateLimit(ip, queryType);
+
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        {
+          error: isSearchQuery
+            ? 'تم تجاوز الحد الأقصى لمحاولات الاستعلام (5 محاولات). يرجى الانتظار 5 دقائق لحماية خصوصية بيانات المتبرعين.'
+            : 'تم تجاوز الحد المسموح للاستعلامات المتكررة. يرجى الانتظار قليلاً.',
+          retryAfter: rateLimit.retryAfterSeconds,
+        },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(rateLimit.retryAfterSeconds),
+            'X-RateLimit-Remaining': '0',
+            'X-RateLimit-Reset': String(Math.ceil(rateLimit.resetAt / 1000)),
+          },
+        }
+      );
     }
 
     let query = supabaseAdmin

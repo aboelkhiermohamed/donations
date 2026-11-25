@@ -203,6 +203,7 @@ export default function PublicDonationPage() {
   const [trackedDonations, setTrackedDonations] = useState<any[]>([]);
   const [isTrackingLoading, setIsTrackingLoading] = useState(false);
   const [trackingSearched, setTrackingSearched] = useState(false);
+  const [trackingError, setTrackingError] = useState<string | null>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   useEffect(() => {
@@ -544,6 +545,7 @@ export default function PublicDonationPage() {
 
     setIsTrackingLoading(true);
     setTrackingSearched(true);
+    setTrackingError(null);
 
     try {
       const isRef = query.length < 9 || /[a-zA-Z]/.test(query);
@@ -552,7 +554,16 @@ export default function PublicDonationPage() {
         : `/api/donations/status?phone=${encodeURIComponent(query)}`;
 
       const res = await fetch(url);
-      if (!res.ok) throw new Error('Query failed');
+      if (!res.ok) {
+        if (res.status === 429) {
+          const errData = await res.json().catch(() => null);
+          const msg = errData?.error || (language === 'ar' ? 'تم تجاوز الحد الأقصى لمحاولات الاستعلام. يرجى الانتظار 5 دقائق.' : 'Too many inquiries. Please wait 5 minutes.');
+          setTrackingError(msg);
+          setTrackedDonations([]);
+          return;
+        }
+        throw new Error('Query failed');
+      }
       const data = await res.json();
       setTrackedDonations(data || []);
     } catch (err) {
@@ -1651,7 +1662,12 @@ export default function PublicDonationPage() {
 
             {trackingSearched && (
               <div className="max-w-2xl mx-auto space-y-4">
-                {trackedDonations.length === 0 ? (
+                {trackingError ? (
+                  <div className="p-6 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/40 text-center text-xs sm:text-sm text-amber-800 dark:text-amber-300 flex items-center justify-center gap-3">
+                    <AlertCircle className="w-5 h-5 flex-shrink-0 text-amber-600 dark:text-amber-400" />
+                    <span className="font-medium">{trackingError}</span>
+                  </div>
+                ) : trackedDonations.length === 0 ? (
                   <div className="p-8 rounded-2xl bg-white dark:bg-[#172436] border border-[#EAE8DE] dark:border-[#283849] text-center text-sm text-[#738079] dark:text-[#A7B4B0]">
                     <AlertCircle className="w-8 h-8 text-[#B79B68] mx-auto mb-2" />
                     <span>{t('track_no_results')}</span>

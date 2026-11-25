@@ -16,6 +16,8 @@ export default function AdminLoginPage() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [isLocked, setIsLocked] = useState(false);
+  const [lockSeconds, setLockSeconds] = useState(0);
 
   // Check if already logged in
   useEffect(() => {
@@ -28,38 +30,68 @@ export default function AdminLoginPage() {
     checkSession();
   }, [router]);
 
+  // Lockout countdown timer
+  useEffect(() => {
+    if (!isLocked || lockSeconds <= 0) return;
+    const timer = setInterval(() => {
+      setLockSeconds((prev) => {
+        if (prev <= 1) {
+          setIsLocked(false);
+          setErrorMsg('');
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [isLocked, lockSeconds]);
+
+  const formatLockTime = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) return;
+    if (!email || !password || isLocked) return;
 
     setIsLoading(true);
     setErrorMsg('');
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password: password,
+      const res = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.trim(),
+          password,
+        }),
       });
 
-      if (error) throw error;
+      const result = await res.json().catch(() => ({}));
 
-      // Verify that this user exists in our admins table
-      const { data: adminProfile, error: profileError } = await supabase
-        .from('admins')
-        .select('*')
-        .eq('id', data.user.id)
-        .maybeSingle();
+      if (!res.ok) {
+        if (res.status === 429) {
+          setIsLocked(true);
+          setLockSeconds(result.retryAfter || 900);
+        }
+        throw new Error(result.error || (language === 'ar' ? 'بيانات الدخول غير صحيحة' : 'Invalid credentials'));
+      }
 
-      if (profileError || !adminProfile) {
-        await supabase.auth.signOut();
-        throw new Error(language === 'ar' ? 'ليس لديك صلاحية الوصول إلى هذه اللوحة.' : 'You do not have administrative permissions.');
+      // Establish session in browser Supabase client
+      if (result.session) {
+        await supabase.auth.setSession({
+          access_token: result.session.access_token,
+          refresh_token: result.session.refresh_token,
+        });
       }
 
       // Pre-warm admin cache so dashboard opens instantaneously
       try {
         sessionStorage.setItem('admin_session_cache', JSON.stringify({
-          id: data.user.id,
-          name: adminProfile.name || 'مسؤول الحملة',
+          id: result.session?.user?.id || result.admin?.id,
+          name: result.admin?.name || 'مسؤول الحملة',
           timestamp: Date.now()
         }));
       } catch {}
@@ -67,7 +99,7 @@ export default function AdminLoginPage() {
       router.replace('/admin/dashboard');
     } catch (err: any) {
       console.error('Login error:', err);
-      setErrorMsg(err.message || 'بيانات الدخول غير صحيحة');
+      setErrorMsg(err.message || (language === 'ar' ? 'بيانات الدخول غير صحيحة' : 'Invalid credentials'));
       setIsLoading(false);
     }
   };
@@ -110,7 +142,7 @@ export default function AdminLoginPage() {
 
         {/* Error notification */}
         {errorMsg && (
-          <div className="p-4 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 text-red-800 dark:text-red-300 text-xs rounded-xl text-center leading-relaxed">
+          <div className={`p-4 ${isLocked ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200' : 'bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-900/50 text-red-800 dark:text-red-300'} border text-xs rounded-xl text-center leading-relaxed font-medium`}>
             {errorMsg}
           </div>
         )}
@@ -125,10 +157,11 @@ export default function AdminLoginPage() {
               <input 
                 type="email"
                 required
+                disabled={isLoading || isLocked}
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 placeholder="admin@charity.org"
-                className="w-full py-3 ps-10 pe-4 rounded-xl bg-[#FAF9F5] dark:bg-[#111C2D] border border-[#DDD9CC] dark:border-[#283849] text-sm text-[#191F1C] dark:text-[#F3F5F4] focus:bg-white dark:focus:bg-[#172436] focus:outline-none focus:border-[#153C32] dark:focus:border-[#24B58A] transition-colors"
+                className="w-full py-3 ps-10 pe-4 rounded-xl bg-[#FAF9F5] dark:bg-[#111C2D] border border-[#DDD9CC] dark:border-[#283849] text-sm text-[#191F1C] dark:text-[#F3F5F4] focus:bg-white dark:focus:bg-[#172436] focus:outline-none focus:border-[#153C32] dark:focus:border-[#24B58A] disabled:opacity-50 transition-colors"
               />
               <Mail className="w-4 h-4 text-[#738079] dark:text-[#A7B4B0] absolute top-1/2 -translate-y-1/2 start-3.5" />
             </div>
@@ -142,10 +175,11 @@ export default function AdminLoginPage() {
               <input 
                 type="password"
                 required
+                disabled={isLoading || isLocked}
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full py-3 ps-10 pe-4 rounded-xl bg-[#FAF9F5] dark:bg-[#111C2D] border border-[#DDD9CC] dark:border-[#283849] text-sm text-[#191F1C] dark:text-[#F3F5F4] focus:bg-white dark:focus:bg-[#172436] focus:outline-none focus:border-[#153C32] dark:focus:border-[#24B58A] transition-colors"
+                className="w-full py-3 ps-10 pe-4 rounded-xl bg-[#FAF9F5] dark:bg-[#111C2D] border border-[#DDD9CC] dark:border-[#283849] text-sm text-[#191F1C] dark:text-[#F3F5F4] focus:bg-white dark:focus:bg-[#172436] focus:outline-none focus:border-[#153C32] dark:focus:border-[#24B58A] disabled:opacity-50 transition-colors"
               />
               <Lock className="w-4 h-4 text-[#738079] dark:text-[#A7B4B0] absolute top-1/2 -translate-y-1/2 start-3.5" />
             </div>
@@ -153,14 +187,16 @@ export default function AdminLoginPage() {
 
           <button
             type="submit"
-            disabled={isLoading}
-            className="w-full py-3.5 rounded-xl bg-[#153C32] dark:bg-[#217A61] text-white text-sm font-bold shadow-elevated hover:bg-[#1C4E41] dark:hover:bg-[#24B58A] disabled:opacity-70 transition-all flex items-center justify-center gap-2 transform active:scale-[0.99] mt-2"
+            disabled={isLoading || isLocked}
+            className="w-full py-3.5 rounded-xl bg-[#153C32] dark:bg-[#217A61] text-white text-sm font-bold shadow-elevated hover:bg-[#1C4E41] dark:hover:bg-[#24B58A] disabled:opacity-60 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 transform active:scale-[0.99] mt-2"
           >
             {isLoading ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
                 <span>{language === 'ar' ? 'جارٍ التحقق...' : 'Signing in...'}</span>
               </>
+            ) : isLocked ? (
+              <span>{language === 'ar' ? `محظور مؤقتاً (${formatLockTime(lockSeconds)})` : `Locked (${formatLockTime(lockSeconds)})`}</span>
             ) : (
               <span>{language === 'ar' ? 'دخول لوحة التحكم' : 'Sign In'}</span>
             )}

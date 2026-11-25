@@ -187,6 +187,35 @@ export async function sendTelegramMessageDirect(
 // ==========================================
 
 /**
+ * Format date & time strictly according to Egypt Timezone (Africa/Cairo)
+ * Fixes timezone drift on serverless platforms (e.g. Vercel running in UTC).
+ */
+export function formatCairoTime(date: Date = new Date()): string {
+  return date.toLocaleTimeString('ar-EG', {
+    timeZone: 'Africa/Cairo',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+export function formatCairoDate(
+  date: Date = new Date(),
+  options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' }
+): string {
+  return date.toLocaleDateString('ar-EG', {
+    timeZone: 'Africa/Cairo',
+    ...options,
+  });
+}
+
+function escapeTelegramHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/**
  * 1. Enqueue notification for newly registered donation
  */
 export async function enqueueDonationNotification(donation: {
@@ -196,6 +225,7 @@ export async function enqueueDonationNotification(donation: {
   paymentMethod: string;
   ref?: string | null;
   status: string;
+  phone?: string | null;
 }) {
   const chatId = process.env.TELEGRAM_CHAT_ID;
   if (!chatId) {
@@ -209,13 +239,18 @@ export async function enqueueDonationNotification(donation: {
       ? '✅ <b>معتمد ومطابق آلياً فوراً</b>'
       : '⏳ <b>معلق (بانتظار المراجعة والربط)</b>';
 
+  const phoneLine = donation.phone
+    ? `📱 <b>رقم الهاتف:</b> <code>${escapeTelegramHtml(donation.phone)}</code>\n`
+    : '';
+
   const text = `🔔 <b>مساهمة جديدة تم تسجيلها على المنصة</b>\n\n` +
-    `👤 <b>المساهم:</b> ${donation.name}\n` +
+    `👤 <b>المساهم:</b> ${escapeTelegramHtml(donation.name)}\n` +
+    phoneLine +
     `💰 <b>المبلغ:</b> <b>${Number(donation.amount).toLocaleString('en-US')} ج.م</b>\n` +
     `💳 <b>وسيلة الدفع:</b> ${methodLabel}\n` +
-    `${donation.ref ? `🔢 <b>الرقم المرجعي:</b> <code>${donation.ref}</code>\n` : ''}` +
+    `${donation.ref ? `🔢 <b>الرقم المرجعي:</b> <code>${escapeTelegramHtml(donation.ref)}</code>\n` : ''}` +
     `📊 <b>الحالة:</b> ${statusLabel}\n` +
-    `🕒 <b>الوقت:</b> ${new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}\n\n` +
+    `🕒 <b>الوقت:</b> ${formatCairoTime()}\n\n` +
     `🌿 <i>صدقة جارية عن روح د. حسين علي الأمير ود. ندى هاني حامد</i>`;
 
   const inlineKeyboard = {
@@ -239,13 +274,6 @@ export async function enqueueDonationNotification(donation: {
     },
     idempotencyKey: `donation_${donation.id}`,
   });
-}
-
-function escapeTelegramHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
 }
 
 /**
@@ -276,11 +304,11 @@ export async function enqueueSmsNotification(sms: {
 
   const text = `📩 <b>إشعار تحويل وارد من محفظة الدفع (SMS)</b>\n\n` +
     `💵 <b>المبلغ:</b> ${sms.amount ? `<b>${sms.amount.toLocaleString('en-US')} ج.م</b>` : 'غير محدد'}\n` +
-    `📱 <b>المرسل:</b> <code>${sms.sender}</code>\n` +
-    `${sms.transactionRef ? `🔢 <b>رقم العملية:</b> <code>${sms.transactionRef}</code>\n` : ''}` +
+    `📱 <b>المرسل:</b> <code>${escapeTelegramHtml(sms.sender)}</code>\n` +
+    `${sms.transactionRef ? `🔢 <b>رقم العملية:</b> <code>${escapeTelegramHtml(sms.transactionRef)}</code>\n` : ''}` +
     `⚡ <b>حالة الربط:</b> ${matchStatus}\n` +
     rawMessageBlock +
-    `🕒 <b>الوقت:</b> ${new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}`;
+    `🕒 <b>الوقت:</b> ${formatCairoTime()}`;
 
   const inlineKeyboard = {
     inline_keyboard: [
@@ -314,15 +342,22 @@ export async function enqueueManualApprovalNotification(donation: {
   amount: number;
   adminName?: string;
   ref?: string | null;
+  phone?: string | null;
 }) {
   const chatId = process.env.TELEGRAM_CHAT_ID;
   if (!chatId) return { success: false, error: 'TELEGRAM_CHAT_ID not configured' };
 
+  const phoneLine = donation.phone
+    ? `📱 <b>رقم الهاتف:</b> <code>${escapeTelegramHtml(donation.phone)}</code>\n`
+    : '';
+
   const text = `✅ <b>تم اعتماد توثيق تبرع يدوياً</b>\n\n` +
-    `👤 <b>المساهم:</b> ${donation.name}\n` +
+    `👤 <b>المساهم:</b> ${escapeTelegramHtml(donation.name)}\n` +
+    phoneLine +
     `💰 <b>المبلغ:</b> <b>${Number(donation.amount).toLocaleString('en-US')} ج.م</b>\n` +
-    `${donation.ref ? `🔢 <b>الرقم المرجعي:</b> <code>${donation.ref}</code>\n` : ''}` +
-    `👮‍♂️ <b>المعتمد:</b> ${donation.adminName || 'مسؤول الحملة'}`;
+    `${donation.ref ? `🔢 <b>الرقم المرجعي:</b> <code>${escapeTelegramHtml(donation.ref)}</code>\n` : ''}` +
+    `👮‍♂️ <b>المعتمد:</b> ${escapeTelegramHtml(donation.adminName || 'مسؤول الحملة')}\n` +
+    `🕒 <b>الوقت:</b> ${formatCairoTime()}`;
 
   return enqueueNotificationJob({
     eventType: 'manual_approval',

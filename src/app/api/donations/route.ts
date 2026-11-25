@@ -275,6 +275,7 @@ export async function POST(req: NextRequest) {
       await enqueueDonationNotification({
         id: donation.id,
         name: name.trim(),
+        phone: phone.trim(),
         amount: Number(amount),
         paymentMethod: paymentMethod,
         ref: transactionRef?.trim() || null,

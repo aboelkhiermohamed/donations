@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { sendTelegramMessageDirect, sendTelegramApiRaw } from '@/lib/telegram';
+import { sendTelegramMessageDirect, sendTelegramApiRaw, formatCairoTime, formatCairoDate } from '@/lib/telegram';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -103,8 +103,9 @@ export async function POST(req: NextRequest) {
 
     // 3. /today or "اليوم"
     if (matchesCommand('today') || rawText.includes('اليوم')) {
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
+      // Calculate today's start strictly according to Cairo local time
+      const cairoDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Cairo' }).format(new Date());
+      const todayStart = new Date(`${cairoDate}T00:00:00+02:00`);
 
       const { data: todayDonations } = await supabaseAdmin
         .from('donations')
@@ -115,7 +116,7 @@ export async function POST(req: NextRequest) {
       const todayList = todayDonations || [];
       const todaySum = todayList.reduce((sum: number, d: any) => sum + (Number(d.amount) || 0), 0);
 
-      const todayMsg = `📅 <b>حصيلة تبرعات اليوم (${new Date().toLocaleDateString('ar-EG', { month: 'short', day: 'numeric' })}):</b>
+      const todayMsg = `📅 <b>حصيلة تبرعات اليوم (${formatCairoDate(new Date(), { month: 'short', day: 'numeric' })}):</b>
 ═════════════════════
 💰 <b>المبلغ المجموع اليوم:</b> <b>${todaySum.toLocaleString('en-US')} ج.م</b>
 📝 <b>عدد التبرعات المعتمدة:</b> ${todayList.length} تبرع
@@ -260,7 +261,7 @@ async function generateStatsMessage() {
 👥 <b>عدد المساهمين:</b> ${donorSet.size} مساهم (${donations.length} عملية موثقة)
 ⏳ <b>تبرعات معلقة للمراجعة:</b> <b>${pendingCount}</b> ${pendingCount > 0 ? '⚠️' : '✅'}
 ═════════════════════
-🕒 <i>محدث لحظياً: ${new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</i>`;
+🕒 <i>محدث لحظياً: ${formatCairoTime()}</i>`;
 
   return {
     text: statsMsg,
