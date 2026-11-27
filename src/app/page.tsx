@@ -63,8 +63,8 @@ const CANONICAL_CAMPAIGN: Campaign = {
   id: 'c580436d-9654-4720-bc2f-a9cb6bf0f7a0',
   name: 'Sadaqah Jariyah — In Loving Memory of Dr. Hussein Ali El-Amir & Dr. Nada Hani Hamed',
   name_ar: 'صدقة جارية — إهداء لروح د. حسين علي الأمير ود. ندى هاني حامد',
-  description: 'An enduring charity with lasting impact. Uniting to provide an advanced ICU ventilator for Kafr El-Sheikh University Hospitals, dedicated in memory of Dr. Hussein Ali El-Amir & Dr. Nada Hani Hamed.',
-  description_ar: 'بأثرٍ يبقى، وخيرٍ يمتد. نشارك معًا في توفير جهاز تنفس صناعي لدعم وحدة العناية المركزة بمستشفيات جامعة كفر الشيخ، صدقةً جارية عن روح فقيدينا الدكتور حسين علي الأمير والدكتورة ندى هاني حامد.',
+  description: 'An enduring charity with lasting impact. Uniting to support and equip the ICU at Kafr El-Sheikh University Hospitals, dedicated in memory of Dr. Hussein Ali El-Amir & Dr. Nada Hani Hamed.',
+  description_ar: 'بأثرٍ يبقى، وخيرٍ يمتد. نشارك معًا في دعم وتجهيز وحدة العناية المركزة بمستشفيات جامعة كفر الشيخ، صدقةً جارية عن روح فقيدينا الدكتور حسين علي الأمير والدكتورة ندى هاني حامد.',
   target_amount: 350000,
   collected_amount: 0,
   organizer: '9th Batch Physicians — Kafr El-Sheikh Medicine',
@@ -663,7 +663,7 @@ export default function PublicDonationPage({ initialCampaignId }: { initialCampa
 
       ctx.fillStyle = '#738079';
       ctx.font = '16px sans-serif';
-      ctx.fillText('مشروع توفير جهاز تنفس صناعي لدعم وحدة العناية المركزة بمستشفيات جامعة كفر الشيخ', 600, 445);
+      ctx.fillText('مشروع دعم وتجهيز وحدة العناية المركزة بمستشفيات جامعة كفر الشيخ', 600, 445);
 
       ctx.strokeStyle = '#EAE8DE';
       ctx.lineWidth = 1;

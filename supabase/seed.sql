@@ -4,10 +4,10 @@
 INSERT INTO campaigns (id, name, name_ar, description, description_ar, target_amount, collected_amount, organizer, organizer_ar, cover_image)
 VALUES (
     'c580436d-9654-4720-bc2f-a9cb6bf0f7a0',
-    'Medical Ventilator for Kafr El-Sheikh University Hospital - 9th Batch',
-    'جهاز تنفس صناعي لمستشفى كفر الشيخ الجامعي - الدفعة التاسعة',
-    'Donations campaign by the 9th Batch of Kafr El-Sheikh Medicine to purchase and provide a state-of-the-art ventilator to Kafr El-Sheikh University Hospital ICU.',
-    'حملة تبرعات الدفعة التاسعة طب كفر الشيخ لتوفير جهاز تنفس صناعي حديث لدعم وحدة العناية المركزة بمستشفيات جامعة كفر الشيخ وتأمين رعاية فائقة للمرضى.',
+    'ICU Equipment for Kafr El-Sheikh University Hospital - 9th Batch',
+    'دعم وتجهيز العناية المركزة لمستشفى كفر الشيخ الجامعي - الدفعة التاسعة',
+    'Donations campaign by the 9th Batch of Kafr El-Sheikh Medicine to support and equip Kafr El-Sheikh University Hospital ICU.',
+    'حملة تبرعات الدفعة التاسعة طب كفر الشيخ لدعم وتجهيز وحدة العناية المركزة بمستشفيات جامعة كفر الشيخ بأجهزة ومستلزمات طبية وتأمين رعاية فائقة للمرضى.',
     500000.00,
     0.00, -- will be re-tallied dynamically by triggers as donations are verified
     'Kafr El-Sheikh Medicine - 9th Batch',

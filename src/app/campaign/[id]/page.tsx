@@ -7,7 +7,7 @@ interface CampaignPageProps {
 }
 
 const DEFAULT_TITLE = 'صدقة جارية — الدفعة التاسعة طب كفر الشيخ | د. حسين علي الأمير ود. ندى هاني حامد';
-const DEFAULT_DESC = 'مبادرة صدقة جارية لتوفير جهاز تنفس صناعي لوحدة العناية المركزة بمستشفيات جامعة كفر الشيخ، صدقةً جارية عن روح الفقيدين د. حسين علي الأمير ود. ندى هاني حامد رحمة الله عليهما.';
+const DEFAULT_DESC = 'مبادرة صدقة جارية لدعم وتجهيز وحدة العناية المركزة بمستشفيات جامعة كفر الشيخ، صدقةً جارية عن روح الفقيدين د. حسين علي الأمير ود. ندى هاني حامد رحمة الله عليهما.';
 
 export async function generateMetadata({ params }: CampaignPageProps): Promise<Metadata> {
   const { id } = await params;

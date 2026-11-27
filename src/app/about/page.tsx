@@ -112,8 +112,8 @@ export default function AboutPage() {
               </h3>
               <p className="text-sm text-[#55625B] dark:text-[#A7B4B0] leading-relaxed">
                 {language === 'ar'
-                  ? 'توفير جهاز تنفس صناعي متطور (ICU Ventilator) لتجهيز وحدة العناية المركزة بمستشفيات جامعة كفر الشيخ، لخدمة المرضى ذوي الحالات الحرجة ومصابي الطوارئ مجانًا.'
-                  : 'Equipping the ICU at Kafr El-Sheikh University Hospitals with a state-of-the-art ventilator to serve critical care patients free of charge.'}
+                  ? 'دعم وتجهيز وحدة العناية المركزة (ICU) بمستشفيات جامعة كفر الشيخ بأجهزة ومستلزمات طبية، لخدمة المرضى ذوي الحالات الحرجة ومصابي الطوارئ مجانًا.'
+                  : 'Supporting and equipping the ICU at Kafr El-Sheikh University Hospitals with essential medical equipment to serve critical care patients free of charge.'}
               </p>
             </div>
 
@@ -140,8 +140,8 @@ export default function AboutPage() {
             </h3>
             <p className="text-xs sm:text-sm text-[#E2F3EE]/80 dark:text-[#A7B4B0] max-w-lg mx-auto">
               {language === 'ar'
-                ? 'كل مساهمة، مهما كانت بسيطة، تقربنا من شراء الجهاز وإنقاذ الأرواح في العناية المركزة.'
-                : 'Every contribution brings us closer to securing the ventilator and saving lives.'}
+                ? 'كل مساهمة، مهما كانت بسيطة، تسهم في تجهيز العناية المركزة وإنقاذ الأرواح.'
+                : 'Every contribution brings us closer to equipping the ICU and saving lives.'}
             </p>
             <div className="pt-2">
               <Link
