@@ -321,7 +321,7 @@ export default function PublicDonationPage({ initialCampaignId }: { initialCampa
         target,
         isUnlimited,
         remaining: isUnlimited ? 0 : (Number(summaryData.remaining) ?? Math.max(0, target - (Number(summaryData.totalCollected) || 0))),
-        progressPercent: isUnlimited ? 100 : (Number(summaryData.progressPercent) || 0),
+        progressPercent: isUnlimited ? 0 : (Number(summaryData.progressPercent) || 0),
         verifiedDonorsCount: Number(summaryData.verifiedDonorsCount) || 0,
         totalDonationsCount: Number(summaryData.totalDonationsCount) || 0,
         maxDonation: Number(summaryData.maxDonation) || 0,
@@ -1076,10 +1076,21 @@ export default function PublicDonationPage({ initialCampaignId }: { initialCampa
                 </div>
 
                 <div className="text-center p-3 rounded-xl bg-white dark:bg-[#111C2D] border border-[#EAE8DE] dark:border-[#283849]">
-                  <span className="block text-xs text-[#738079] dark:text-[#A7B4B0] mb-1">{language === 'ar' ? 'الهدف المالي' : 'Goal Status'}</span>
-                  <span className="text-lg font-bold text-[#217A61] dark:text-[#24B58A]">
-                    {aggregates.progressPercent >= 100 ? (language === 'ar' ? 'اكتمل بنجاح' : 'Achieved') : (language === 'ar' ? 'حملة جارية' : 'In Progress')}
+                  <span className="block text-xs text-[#738079] dark:text-[#A7B4B0] mb-1">
+                    {aggregates.isUnlimited ? (language === 'ar' ? 'حالة الحملة' : 'Campaign Status') : (language === 'ar' ? 'الهدف المالي' : 'Goal Status')}
                   </span>
+                  {aggregates.isUnlimited ? (
+                    <div className="inline-flex items-center justify-center gap-1.5 text-base sm:text-lg font-bold text-[#217A61] dark:text-[#24B58A]">
+                      <span className="w-2 h-2 rounded-full bg-[#24B58A] animate-pulse" />
+                      <span>{language === 'ar' ? 'جارية ومستمرة' : 'Active & Ongoing'}</span>
+                    </div>
+                  ) : (
+                    <span className="text-lg font-bold text-[#217A61] dark:text-[#24B58A]">
+                      {aggregates.progressPercent >= 100 
+                        ? (language === 'ar' ? 'اكتمل بنجاح' : 'Achieved') 
+                        : `${aggregates.progressPercent}% (${language === 'ar' ? 'قيد الجمع' : 'In Progress'})`}
+                    </span>
+                  )}
                 </div>
               </div>
 

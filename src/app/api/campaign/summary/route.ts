@@ -93,7 +93,7 @@ export async function GET(req: NextRequest) {
 
     const remaining = isUnlimited ? 0 : Math.max(0, target - totalCollected);
     const progressPercent = isUnlimited 
-      ? 100 
+      ? 0 
       : Math.min(100, Math.round((totalCollected / (target || 1)) * 100));
 
     const result = {
